@@ -18,6 +18,8 @@ final class Player {
     var audioTracks: [TrackInfo] = []
     var subtitleTracks: [TrackInfo] = []
     var videoSize = CGSize.zero
+    /// Confirmed by the engine that a picture reached the screen (not just decoded).
+    var rendered = false
 
     private var bag = Set<AnyCancellable>()
     private var retunes = 0
@@ -28,7 +30,19 @@ final class Player {
             self?.state = s
             if case .error(let message) = s { self?.error = message }
         }.store(in: &bag)
-        engine.$hasFirstFrameReadyForDisplay.receive(on: DispatchQueue.main).sink { [weak self] in self?.firstFrame = $0 }.store(in: &bag)
+        engine.$hasFirstFrameReadyForDisplay.receive(on: DispatchQueue.main).sink { [weak self] ready in
+            guard let self else { return }
+            firstFrame = ready
+            rendered = false
+            if ready {
+                Task {
+                    for _ in 0..<20 where !self.rendered && self.firstFrame {
+                        self.rendered = await self.engine.hasRenderedVideoFrame()
+                        if !self.rendered { try? await Task.sleep(for: .milliseconds(500)) }
+                    }
+                }
+            }
+        }.store(in: &bag)
         engine.clock.$currentTime.receive(on: DispatchQueue.main).sink { [weak self] in self?.time = $0 }.store(in: &bag)
         engine.$duration.receive(on: DispatchQueue.main).sink { [weak self] in self?.duration = $0 }.store(in: &bag)
         engine.$audioTracks.receive(on: DispatchQueue.main).sink { [weak self] in self?.audioTracks = $0 }.store(in: &bag)

@@ -161,6 +161,7 @@ struct ChannelRow: View {
         .onHover { hover = $0; if $0 { flicks += 1 } }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier("channel-" + ch.name)
     }
 }
 

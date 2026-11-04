@@ -40,6 +40,11 @@ struct RootView: View {
         .background(NG.ink)
         #if DEBUG
         .task { await DebugAutomation.run(store: store, player: player, nav: nav) }
+        .overlay(alignment: .bottomTrailing) {
+            // Read by the UI tests.
+            Text("state=\(String(describing: player.state)) firstFrame=\(player.firstFrame) rendered=\(player.rendered) video=\(Int(player.videoSize.width))x\(Int(player.videoSize.height)) channels=\(store.channels.count) guide=\(store.guide.count)")
+                .font(.system(size: 1)).opacity(0.01).accessibilityIdentifier("ng-status")
+        }
         #endif
     }
 

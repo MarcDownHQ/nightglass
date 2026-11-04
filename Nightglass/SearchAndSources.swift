@@ -207,6 +207,7 @@ struct AddSourcePanel: View {
             Group {
                 if secure { SecureField("", text: value, prompt: Text(prompt)) } else { TextField("", text: value, prompt: Text(prompt)) }
             }
+            .accessibilityIdentifier(label)
             .textFieldStyle(.plain).font(NG.mono(13)).padding(9)
             .background(NG.ink.opacity(0.6)).overlay(Rectangle().stroke(NG.cyan.opacity(0.25)))
         }

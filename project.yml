@@ -36,3 +36,27 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
         GENERATE_INFOPLIST_FILE: YES
+  NightglassUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [NightglassUITests]
+    dependencies:
+      - target: Nightglass
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.marcdownhq.nightglass.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        SWIFT_VERSION: "6.0"
+        TEST_TARGET_NAME: Nightglass
+schemes:
+  Nightglass:
+    build:
+      targets:
+        Nightglass: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [NightglassUITests]

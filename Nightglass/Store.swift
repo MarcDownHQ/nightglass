@@ -135,9 +135,10 @@ extension Array {
 
 /// Sources hold provider passwords: the whole list lives in one Keychain item, never in a plain file.
 enum Keychain {
+    // UI tests pass their own account so they start empty and never touch the user's sources.
     nonisolated(unsafe) static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                        kSecAttrService as String: "com.marcdownhq.nightglass",
-                                       kSecAttrAccount as String: "sources"]
+                                       kSecAttrAccount as String: ProcessInfo.processInfo.environment["NG_KEYCHAIN_ACCOUNT"] ?? "sources"]
 
     static func loadSources() -> [Source] {
         var q = query; q[kSecReturnData as String] = true

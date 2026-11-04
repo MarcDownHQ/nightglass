@@ -33,6 +33,7 @@ Hors MVP : enregistrement, catch-up, multi-écran, AirPlay, version Windows.
 ```
 NightglassCore/   # Swift package sans UI : clients m3u, xtream, stalker, xmltv + modèles communs
 Nightglass/       # app macOS SwiftUI : écrans, lecteur AetherEngine
+NightglassUITests/ # test d'interface de bout en bout
 Scripts/          # mock-xtream.py : faux serveur Xtream (films Blender) pour tester Films / Séries
 project.yml       # projet Xcode, généré par XcodeGen
 ```
@@ -61,6 +62,12 @@ Tests d'intégration (facultatifs, contre de vrais serveurs) :
 ```bash
 NG_M3U=https://iptv-org.github.io/iptv/countries/fr.m3u \
 NG_XTREAM=http://127.0.0.1:9191 NG_XTREAM_USER=… NG_XTREAM_PASS=… swift test
+```
+
+Test d'interface (XCUITest) : il ajoute les sources au clic depuis l'écran Sources, attend le guide, clique sur Arte et vérifie que le moteur a bien affiché une image, en aperçu puis en plein écran. Il utilise un compte de trousseau à part et ne touche pas à tes sources.
+
+```bash
+TEST_RUNNER_NG_XC_PASS=<mot de passe XC Dispatcharr> xcodebuild -project Nightglass.xcodeproj -scheme Nightglass -derivedDataPath build test
 ```
 
 En Debug, l'app accepte des variables d'environnement de test (`NG_SEED`, `NG_PLAY`, `NG_PLAY_MOVIE`, `NG_SHOTS`…), décrites dans `Nightglass/DebugAutomation.swift`.
