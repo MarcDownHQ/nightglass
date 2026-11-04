@@ -1,0 +1,38 @@
+name: Nightglass
+options:
+  bundleIdPrefix: com.marcdownhq
+  deploymentTarget:
+    macOS: "26.0"
+packages:
+  NightglassCore:
+    path: NightglassCore
+  AetherEngine:
+    url: https://github.com/superuser404notfound/AetherEngine
+    from: 7.56.0
+targets:
+  Nightglass:
+    type: application
+    platform: macOS
+    sources: [Nightglass]
+    dependencies:
+      - package: NightglassCore
+      - package: AetherEngine
+    info:
+      path: Nightglass/Info.plist
+      properties:
+        CFBundleDisplayName: Nightglass
+        LSApplicationCategoryType: public.app-category.entertainment
+        NSHumanReadableCopyright: MarcDownHQ
+        # IPTV providers commonly serve plain http.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.marcdownhq.nightglass
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: YES

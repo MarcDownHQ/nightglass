@@ -7,7 +7,7 @@ Lecteur IPTV natif pour macOS. Windows viendra plus tard.
 - **SwiftUI** (macOS 26+) pour l'UI : Liquid Glass, materials, animations et `matchedGeometryEffect`, 100 % natif.
 - **[AetherEngine](https://github.com/superuser404notfound/AetherEngine)** pour la lecture : FFmpeg lit le flux, VideoToolbox décode sur le GPU, AVPlayer affiche. Lit MPEG-TS, HLS, MKV, HEVC, AC3/EAC3, HDR et Dolby Vision, avec timeshift pour le live. Fournit une vue SwiftUI (`AetherPlayerSurface`) sans contrôles imposés. Licence LGPL-3.0 avec exception App Store.
 - **URLSession** pour les appels aux fournisseurs.
-- **SwiftData** pour le cache local des chaînes, du VOD et de l'EPG.
+- **Keychain** pour les sources (elles contiennent des mots de passe). Catalogues et guide sont rechargés au lancement.
 
 ## Sources supportées
 
@@ -32,10 +32,38 @@ Hors MVP : enregistrement, catch-up, multi-écran, AirPlay, version Windows.
 
 ```
 NightglassCore/   # Swift package sans UI : clients m3u, xtream, stalker, xmltv + modèles communs
-Nightglass/       # app macOS SwiftUI : écrans, lecteur, cache SwiftData
+Nightglass/       # app macOS SwiftUI : écrans, lecteur AetherEngine
+Scripts/          # mock-xtream.py : faux serveur Xtream (films Blender) pour tester Films / Séries
+project.yml       # projet Xcode, généré par XcodeGen
 ```
 
 Chaque client de `NightglassCore` transforme son protocole en modèles communs (`Channel`, `Movie`, `Series`, `Programme`) : l'UI ne sait pas d'où viennent les chaînes. `NightglassCore` ne dépend que de Foundation : il est testable en ligne de commande et réutilisable pour une future version Windows.
+
+## Compiler et lancer
+
+```bash
+brew install xcodegen
+xcodegen generate
+xcodebuild -project Nightglass.xcodeproj -scheme Nightglass -derivedDataPath build build
+open build/Build/Products/Debug/Nightglass.app
+```
+
+Il faut macOS 26 et Xcode 26 ou plus récent. Ou bien ouvrir `Nightglass.xcodeproj` dans Xcode après `xcodegen generate`.
+
+## Tests
+
+```bash
+cd NightglassCore && swift test
+```
+
+Tests d'intégration (facultatifs, contre de vrais serveurs) :
+
+```bash
+NG_M3U=https://iptv-org.github.io/iptv/countries/fr.m3u \
+NG_XTREAM=http://127.0.0.1:9191 NG_XTREAM_USER=… NG_XTREAM_PASS=… swift test
+```
+
+En Debug, l'app accepte des variables d'environnement de test (`NG_SEED`, `NG_PLAY`, `NG_PLAY_MOVIE`, `NG_SHOTS`…), décrites dans `Nightglass/DebugAutomation.swift`.
 
 ## Design
 
@@ -44,8 +72,9 @@ Voir [DESIGN.md](DESIGN.md). La maquette [design/mockup-live.html](design/mockup
 ## Sources de test
 
 - M3U : playlists publiques de [iptv-org/iptv](https://github.com/iptv-org/iptv), par exemple `https://iptv-org.github.io/iptv/index.m3u` (toutes les chaînes) ou `https://iptv-org.github.io/iptv/countries/fr.m3u` (France).
-- EPG : [iptv-org/epg](https://github.com/iptv-org/epg).
-- Xtream : [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) en Docker, alimenté avec la playlist et l'EPG iptv-org, expose une vraie API Xtream Codes (`player_api.php`, `get.php`, `xmltv.php`) en local.
+- EPG : `https://xmltvfr.fr/xmltv/xmltv.xml` (identifiants compatibles avec iptv-org). Le préréglage « iptv-org · France » de l'écran Sources remplit les deux URL.
+- Xtream (direct) : [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) en Docker (`docker run -d -p 127.0.0.1:9191:9191 --name dispatcharr -v dispatcharr_data:/data ghcr.io/dispatcharr/dispatcharr:latest`). Dans son interface : ajouter la playlist iptv-org France comme compte M3U, `https://xmltvfr.fr/xmltv/xmltv.xml` comme source EPG, créer les chaînes à partir des flux, puis un utilisateur avec un mot de passe XC. Il expose alors une vraie API Xtream Codes en local.
+- Xtream (films, séries) : `python3 Scripts/mock-xtream.py` sert les films libres de la Blender Foundation sur `http://127.0.0.1:9292`, avec l'identifiant `demo` / `demo`.
 - Stalker : pas de serveur open source. Les tests du client s'appuient sur des réponses enregistrées (fixtures) servies par un mini serveur local.
 
 ## Ce qui existe déjà
