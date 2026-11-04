@@ -1,5 +1,7 @@
 # Nightglass
 
+<img src="Nightglass/Assets.xcassets/AppIcon.appiconset/icon_256@2x.png" width="128" alt="Icône Nightglass">
+
 Lecteur IPTV natif pour macOS. Windows viendra plus tard.
 
 ## Stack
@@ -34,7 +36,7 @@ Hors MVP : enregistrement, catch-up, multi-écran, AirPlay, version Windows.
 NightglassCore/   # Swift package sans UI : clients m3u, xtream, stalker, xmltv + modèles communs
 Nightglass/       # app macOS SwiftUI : écrans, lecteur AetherEngine
 NightglassUITests/ # test d'interface de bout en bout
-Scripts/          # mock-xtream.py : faux serveur Xtream (films Blender) pour tester Films / Séries
+Scripts/          # mock-xtream.py : faux serveur Xtream (films Blender) ; make-icon.swift : génère l'icône
 project.yml       # projet Xcode, généré par XcodeGen
 ```
 

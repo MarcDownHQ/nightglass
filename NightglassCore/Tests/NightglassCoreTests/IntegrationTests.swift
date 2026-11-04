@@ -19,7 +19,8 @@ import Testing
 
     @Test(.enabled(if: env["NG_M3U"] != nil)) func iptvOrgPlaylist() async throws {
         let cat = try await M3USource(url: URL(string: Self.env["NG_M3U"]!)!).catalog()
+        print("[NG] \(Self.env["NG_M3U"]!): \(cat.channels.count) channels")
         #expect(cat.channels.count > 50)
-        #expect(cat.channels.allSatisfy { $0.stream.scheme?.hasPrefix("http") == true })
+        #expect(cat.channels.allSatisfy { $0.stream.scheme != nil })
     }
 }

@@ -6,10 +6,22 @@ final class NightglassUITests: XCTestCase {
     var app: XCUIApplication!
 
     override func setUp() {
-        continueAfterFailure = false
+        continueAfterFailure = true
         app = XCUIApplication()
         app.launchEnvironment["NG_KEYCHAIN_ACCOUNT"] = "uitest-\(UUID().uuidString)"
-        app.launch()
+        // A freshly signed build sometimes misses XCTest's launch deadline ("does not have a process ID"):
+        // the first attempt may fail without failing the test, the second one may not.
+        app.terminate()
+        let lenient = XCTExpectedFailure.Options()
+        lenient.isStrict = false
+        XCTExpectFailure("first launch of a fresh build can time out", options: lenient) { app.launch() }
+        if !app.wait(for: .runningForeground, timeout: 20) {
+            print("[NG] first launch failed, retrying")
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "app did not start")
+        continueAfterFailure = false
     }
 
     override func tearDown() { app.terminate() }
