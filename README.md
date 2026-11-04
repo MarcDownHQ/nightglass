@@ -39,13 +39,14 @@ Chaque client de `NightglassCore` transforme son protocole en modèles communs (
 
 ## Design
 
-Voir [DESIGN.md](DESIGN.md) et la maquette [design/mockup-live.html](design/mockup-live.html) (à ouvrir dans un navigateur).
+Voir [DESIGN.md](DESIGN.md). La maquette [design/mockup-live.html](design/mockup-live.html) sert de référence pour l'ambiance, les couleurs et les composants. Sa ville en fond n'est pas reprise dans l'app.
 
 ## Sources de test
 
 - M3U : playlists publiques de [iptv-org/iptv](https://github.com/iptv-org/iptv), par exemple `https://iptv-org.github.io/iptv/index.m3u` (toutes les chaînes) ou `https://iptv-org.github.io/iptv/countries/fr.m3u` (France).
 - EPG : [iptv-org/epg](https://github.com/iptv-org/epg).
-- Xtream / Stalker : pas de source publique, il faut des identifiants de test.
+- Xtream : [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) en Docker, alimenté avec la playlist et l'EPG iptv-org, expose une vraie API Xtream Codes (`player_api.php`, `get.php`, `xmltv.php`) en local.
+- Stalker : pas de serveur open source. Les tests du client s'appuient sur des réponses enregistrées (fixtures) servies par un mini serveur local.
 
 ## Ce qui existe déjà
 
