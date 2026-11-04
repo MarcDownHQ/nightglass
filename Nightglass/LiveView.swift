@@ -59,10 +59,11 @@ struct LiveView: View {
                 Preview()
                     .overlay(alignment: .topTrailing) { DialOverlay(dial: dial).padding(20) }
                     .onTapGesture(count: 2) { if player.current != nil { player.expanded = true } }
+                    .layoutPriority(1)  // take the full column width first, so its edges line up with the panel below
                 NowNextPanel(item: player.current?.live).padding(.top, 24)
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 820)
         }
         .padding(.horizontal, 28).padding(.top, 4).padding(.bottom, 16)
         .focusable().focusEffectDisabled().focused($focused)
@@ -212,12 +213,12 @@ struct Preview: View {
             }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
-        .frame(maxWidth: 820)
         .clipShape(.rect(cornerRadius: 14))
         // Glow on the frame only: a shadow on the video itself would force an offscreen pass every frame.
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(NG.cyan.opacity(0.7), lineWidth: 1.5).neonGlow(NG.cyan, radius: 12))
         .overlay(alignment: .topTrailing) {
-            if player.current != nil && !player.expanded { StopButton().padding(12) }
+            // Same inset on both sides of the corner so the capsule sits concentric with the frame.
+            if player.current != nil && !player.expanded { StopButton().padding(10) }
         }
     }
 }
@@ -229,10 +230,14 @@ struct StopButton: View {
 
     var body: some View {
         Button { player.stop() } label: {
-            Label("Stop", systemImage: "stop.fill")
-                .font(NG.title(14, .semibold)).foregroundStyle(.white)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(NG.ink.opacity(hover ? 0.85 : 0.6), in: .capsule)
+            // Small glyph centred on the text: Label puts a body-sized symbol on the baseline, off-centre.
+            HStack(spacing: 6) {
+                Image(systemName: "stop.fill").font(.system(size: 9, weight: .bold))
+                Text("Stop").font(NG.title(14, .semibold))
+            }
+                .foregroundStyle(.white)
+                .frame(height: 28).padding(.horizontal, 12)
+                .background(NG.ink.opacity(hover ? 0.95 : 0.85), in: .capsule)
                 .overlay(Capsule().strokeBorder(NG.magenta.opacity(hover ? 1 : 0.6), lineWidth: 1.5))
                 .shadow(color: hover ? NG.magenta.opacity(0.6) : .clear, radius: 8)
                 .contentShape(.capsule)
