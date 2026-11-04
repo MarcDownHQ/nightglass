@@ -37,6 +37,16 @@ Nightglass/       # app macOS SwiftUI : écrans, lecteur, cache SwiftData
 
 Chaque client de `NightglassCore` transforme son protocole en modèles communs (`Channel`, `Movie`, `Series`, `Programme`) : l'UI ne sait pas d'où viennent les chaînes. `NightglassCore` ne dépend que de Foundation : il est testable en ligne de commande et réutilisable pour une future version Windows.
 
+## Design
+
+Voir [DESIGN.md](DESIGN.md) et la maquette [design/mockup-live.html](design/mockup-live.html) (à ouvrir dans un navigateur).
+
+## Sources de test
+
+- M3U : playlists publiques de [iptv-org/iptv](https://github.com/iptv-org/iptv), par exemple `https://iptv-org.github.io/iptv/index.m3u` (toutes les chaînes) ou `https://iptv-org.github.io/iptv/countries/fr.m3u` (France).
+- EPG : [iptv-org/epg](https://github.com/iptv-org/epg).
+- Xtream / Stalker : pas de source publique, il faut des identifiants de test.
+
 ## Ce qui existe déjà
 
 - [IPTVnator](https://github.com/4gray/iptvnator) : Electron + Angular, M3U/Xtream/Stalker, lecture web ou mpv/VLC externe.
