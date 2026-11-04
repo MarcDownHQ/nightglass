@@ -15,9 +15,8 @@ struct PlayerScreen: View {
             Color.black.ignoresSafeArea()
             AetherPlayerSurface(engine: player.engine).ignoresSafeArea()
             if !player.firstFrame || player.error != nil {
-                NoSignal(message: player.error ?? "TUNING · \(player.current.map { displayName($0.title) } ?? "")")
+                StatusText(text: player.error ?? "Loading \(player.current.map { displayName($0.title) } ?? "")…", isError: player.error != nil)
             }
-            GlitchOverlay(trigger: player.zapTick)
             VStack(spacing: 0) {
                 top
                 Spacer()
@@ -49,15 +48,15 @@ struct PlayerScreen: View {
 
     var top: some View {
         HStack(spacing: 20) {
-            if let n = player.current?.live?.channel.number { ChromaText(text: String(format: "%03d", n), size: 34) }
-            Text(player.current.map { displayName($0.title).uppercased() } ?? "").font(NG.title(34, .heavy)).kerning(2)
+            if let n = player.current?.live?.channel.number { NeonText(text: String(n), size: 30) }
+            Text(player.current.map { displayName($0.title) } ?? "").font(NG.title(30, .bold))
             Spacer()
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in Text(ctx.date.formatted(date: .omitted, time: .standard)) }
-            HStack(spacing: 6) { Text("SIGNAL"); SignalBars(level: player.signal) }
+            SignalBars(level: player.signal)
             trackMenus
-            Button { exit() } label: { Tag(text: "ESC", color: NG.cyan) }.buttonStyle(.plain)
+            Button { exit() } label: { Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).padding(8).contentShape(.rect) }
+                .buttonStyle(.plain).help("Close (Esc)")
         }
-        .font(NG.mono(12)).kerning(2).foregroundStyle(NG.text)
+        .font(NG.title(15, .medium)).foregroundStyle(NG.text)
         .padding(.horizontal, 34).padding(.top, 34).padding(.bottom, 40)
         .background(LinearGradient(colors: [NG.ink.opacity(0.85), .clear], startPoint: .top, endPoint: .bottom))
     }
@@ -68,21 +67,21 @@ struct PlayerScreen: View {
                 let np = store.nowNext(for: live.channel)
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("● NOW").font(NG.mono(10)).kerning(3).foregroundStyle(NG.acid)
-                        Text((np.now?.title ?? displayName(live.channel.name)).uppercased()).font(NG.title(34, .heavy)).kerning(1)
+                        Text("Now").font(NG.mono(11, .medium)).foregroundStyle(NG.acid)
+                        Text(np.now?.title ?? displayName(live.channel.name)).font(NG.title(30, .bold))
                         if let now = np.now { ProgressLine(value: progress(now), height: 3).frame(width: 420) }
                     }
                     Spacer()
                     if let next = np.next {
                         VStack(alignment: .trailing, spacing: 6) {
-                            Text("NEXT").font(NG.mono(10)).kerning(3).foregroundStyle(NG.cyan)
-                            Text("\(hm(next.start)) · \(next.title.uppercased())").font(NG.mono(14))
+                            Text("Next").font(NG.mono(11, .medium)).foregroundStyle(NG.cyan)
+                            Text("\(hm(next.start)) · \(next.title)").font(NG.title(17, .medium))
                         }
                     }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(player.current?.subtitle.uppercased() ?? "").font(NG.mono(11)).kerning(3).foregroundStyle(NG.acid)
+                    Text(player.current?.subtitle ?? "").font(NG.title(15, .medium)).foregroundStyle(NG.dim)
                     HStack(spacing: 14) {
                         Button { player.togglePlayPause() } label: {
                             Image(systemName: player.state == .playing ? "pause.fill" : "play.fill").font(.system(size: 20))
@@ -111,13 +110,13 @@ struct PlayerScreen: View {
 
     @ViewBuilder var trackMenus: some View {
         if player.audioTracks.count > 1 {
-            Menu("AUDIO") {
+            Menu("Audio") {
                 ForEach(player.audioTracks) { t in Button(trackName(t)) { player.engine.selectAudioTrack(index: t.id) } }
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
         if !player.subtitleTracks.isEmpty {
-            Menu("SUBS") {
+            Menu("Subtitles") {
                 Button("Off") { player.engine.selectSubtitleTrack(index: -1) }
                 ForEach(player.subtitleTracks) { t in Button(trackName(t)) { player.engine.selectSubtitleTrack(index: t.id) } }
             }

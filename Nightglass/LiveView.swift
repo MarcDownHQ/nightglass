@@ -6,15 +6,15 @@ struct LiveView: View {
     @Environment(Store.self) private var store
     @Environment(Player.self) private var player
     @Environment(Nav.self) private var nav
-    @State private var category = "ALL"
+    @State private var category = "All"
     @State private var selected: String?
     @State private var dial = Dial()
     @FocusState private var focused: Bool
 
-    static let favorites = "★ FAVORITES"
+    static let favorites = "★ Favorites"
 
     var categories: [String] {
-        var seen = Set<String>(), out = ["ALL"]
+        var seen = Set<String>(), out = ["All"]
         if !store.favorites.isEmpty { out.insert(Self.favorites, at: 0) }
         for c in store.channels { if let g = c.channel.group, seen.insert(g).inserted { out.append(g) } }
         return out
@@ -22,7 +22,7 @@ struct LiveView: View {
 
     var list: [LiveItem] {
         switch category {
-        case "ALL": store.channels
+        case "All": store.channels
         case Self.favorites: store.channels.filter { store.favorites.contains($0.id) }
         default: store.channels.filter { $0.channel.group == category }
         }
@@ -32,18 +32,8 @@ struct LiveView: View {
         let list = list
         HStack(alignment: .top, spacing: 32) {
             VStack(spacing: 14) {
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(Array(categories.enumerated()), id: \.element) { i, c in
-                            NeonSign(title: c, selected: c == category, color: c == Self.favorites ? NG.acid : nil) { category = c }
-                                .padding(.top, CGFloat([0, 26, 8, 40, 14, 32, 4, 22][i % 8]))
-                        }
-                    }
-                    .padding(.horizontal, 4).padding(.bottom, 14)
-                }
-                .scrollIndicators(.hidden)
-                .frame(height: 236)
-                HUDPanel(caption: "CHANNELS · \(category.uppercased())", trailing: "\(list.count) LIVE") {
+                TabRow(items: categories, selection: $category)
+                HUDPanel(caption: category == "All" ? "All channels" : category, trailing: "\(list.count)") {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(spacing: 0) {
@@ -62,7 +52,6 @@ struct LiveView: View {
                         .scrollIndicators(.never)
                         .onChange(of: selected) { _, id in withAnimation(.spring(duration: 0.25)) { proxy.scrollTo(id) } }
                     }
-                    KeyHints(hints: [("↑↓", "CHANNEL"), ("←→", "DISTRICT"), ("↵", "WATCH"), ("0-9", "DIAL"), ("S", "FAVORITE"), ("⌘K", "SEARCH")])
                 }
             }
             .frame(minWidth: 440)
@@ -70,7 +59,7 @@ struct LiveView: View {
                 Preview()
                     .overlay(alignment: .topTrailing) { DialOverlay(dial: dial).padding(20) }
                     .onTapGesture(count: 2) { if player.current != nil { player.expanded = true } }
-                NowNextPanel(item: player.current?.live).padding(.top, 70)
+                NowNextPanel(item: player.current?.live).padding(.top, 24)
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity)
@@ -86,7 +75,7 @@ struct LiveView: View {
         .onKeyPress(.return) { if player.current != nil { player.expanded = true }; return .handled }
         .onKeyPress(characters: .decimalDigits) { press in
             dial.type(press.characters) { n in
-                if let item = store.channels.first(where: { $0.channel.number == n }) { category = "ALL"; select(item) }
+                if let item = store.channels.first(where: { $0.channel.number == n }) { category = "All"; select(item) }
             }
             return .handled
         }
@@ -116,7 +105,7 @@ struct LiveView: View {
     func consumeFocus() {
         guard let id = nav.focusChannel, let item = store.channels.first(where: { $0.id == id }) else { return }
         nav.focusChannel = nil
-        category = "ALL"
+        category = "All"
         select(item)
     }
 }
@@ -126,20 +115,19 @@ struct ChannelRow: View {
     let item: LiveItem
     let selected: Bool
     @State private var hover = false
-    @State private var flicks = 0
 
     var body: some View {
         let ch = item.channel
         let c = NG.neon(for: ch.name)
         let np = store.nowNext(for: ch)
         HStack(spacing: 14) {
-            Text(ch.number.map { String(format: "%03d", $0) } ?? "---")
-                .font(NG.mono(12)).foregroundStyle(selected ? NG.magenta : NG.cyan.opacity(0.6)).frame(width: 36, alignment: .leading)
-            ChannelLogo(channel: ch, color: c).modifier(NeonFlicker(trigger: flicks))
+            Text(ch.number.map(String.init) ?? "")
+                .font(NG.mono(12)).foregroundStyle(NG.dim).frame(width: 32, alignment: .leading)
+            ChannelLogo(channel: ch, color: c)
             VStack(alignment: .leading, spacing: 3) {
-                if selected { ChromaText(text: displayName(ch.name).uppercased(), size: 19, weight: .bold).fixedSize() }
-                else { Text(displayName(ch.name).uppercased()).font(NG.title(19)).kerning(1).foregroundStyle(NG.text) }
-                Text((np.now?.title ?? ch.group ?? "—").uppercased()).font(NG.mono(11)).kerning(0.6).foregroundStyle(NG.dim).lineLimit(1)
+                Text(displayName(ch.name)).font(NG.title(18, .semibold)).foregroundStyle(selected ? .white : NG.text)
+                    .neonGlow(selected ? c : .clear, radius: 6).lineLimit(1)
+                Text(np.now?.title ?? ch.group ?? "").font(NG.title(14, .regular)).foregroundStyle(NG.dim).lineLimit(1)
                 ProgressLine(value: np.now.map(progress) ?? 0, color: c).padding(.top, 4)
             }
             Spacer(minLength: 8)
@@ -149,16 +137,16 @@ struct ChannelRow: View {
         .padding(.horizontal, 16).padding(.vertical, 9)
         .background {
             if selected {
-                LinearGradient(colors: [NG.magenta.opacity(0.24), NG.magenta.opacity(0.02)], startPoint: .leading, endPoint: .trailing)
+                c.opacity(0.14)
             } else if hover {
-                LinearGradient(colors: [NG.cyan.opacity(0.09), .clear], startPoint: .leading, endPoint: .trailing)
+                NG.text.opacity(0.04)
             }
         }
         .overlay(alignment: .leading) {
-            if selected { Rectangle().fill(NG.magenta).frame(width: 3).padding(.vertical, 7).neonGlow(NG.magenta, radius: 8) }
+            if selected { Capsule().fill(c).frame(width: 3).padding(.vertical, 10).neonGlow(c, radius: 6) }
         }
         .contentShape(.rect)
-        .onHover { hover = $0; if $0 { flicks += 1 } }
+        .onHover { hover = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("channel-" + ch.name)
@@ -205,25 +193,6 @@ struct ChannelLogo: View {
     }
 }
 
-struct KeyHints: View {
-    let hints: [(String, String)]
-    var body: some View {
-        HStack(spacing: 14) {
-            ForEach(hints, id: \.1) { k, label in
-                HStack(spacing: 5) {
-                    Text(k).foregroundStyle(NG.ink).padding(.horizontal, 5).background(NG.text.opacity(0.85))
-                    Text(label)
-                }
-                .lineLimit(1).fixedSize()
-            }
-            Spacer()
-        }
-        .font(NG.mono(10)).kerning(1.5).foregroundStyle(NG.dim)
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .overlay(alignment: .top) { Rectangle().fill(NG.cyan.opacity(0.14)).frame(height: 1) }
-    }
-}
-
 /// The live preview, with its floor reflection and the corner brackets.
 struct Preview: View {
     @Environment(Player.self) private var player
@@ -234,89 +203,26 @@ struct Preview: View {
             if let current = player.current, !player.expanded {
                 AetherPlayerSurface(engine: player.engine)
                 if !player.firstFrame || player.error != nil {
-                    NoSignal(message: player.error ?? "TUNING · \(displayName(current.title).uppercased())")
+                    StatusText(text: player.error ?? "Loading \(displayName(current.title))…", isError: player.error != nil)
                 }
-                GlitchOverlay(trigger: player.zapTick)
-                liveBug.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(14)
             } else {
-                NoSignal(message: "SELECT A CHANNEL")
+                StatusText(text: "Select a channel")
             }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
         .frame(maxWidth: 820)
-        .overlay(Rectangle().stroke(NG.cyan.opacity(0.5), lineWidth: 1))
-        .overlay(alignment: .topLeading) { Bracket().stroke(NG.magenta, lineWidth: 2).frame(width: 18, height: 18).offset(x: -7, y: -7).neonGlow(NG.magenta, radius: 4) }
-        .overlay(alignment: .bottomTrailing) { Bracket().stroke(NG.magenta, lineWidth: 2).frame(width: 18, height: 18).rotationEffect(.degrees(180)).offset(x: 7, y: 7).neonGlow(NG.magenta, radius: 4) }
-        .shadow(color: NG.cyan.opacity(0.16), radius: 40)
-        .background(alignment: .bottom) {
-            // Wet-floor reflection: a tinted, fading glow under the screen.
-            LinearGradient(colors: [NG.cyan.opacity(0.22), NG.magenta.opacity(0.08), .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: 70).offset(y: 74).blur(radius: 8)
-        }
-    }
-
-    var liveBug: some View {
-        HStack(spacing: 6) {
-            TimelineView(.periodic(from: .now, by: 0.6)) { ctx in
-                Circle().fill(NG.magenta).frame(width: 8).opacity(Int(ctx.date.timeIntervalSinceReferenceDate / 0.6) % 2 == 0 ? 1 : 0.35)
-            }
-            Text("LIVE").font(NG.mono(11, .semibold)).kerning(2)
-        }
-        .padding(.horizontal, 8).padding(.vertical, 4).background(NG.ink.opacity(0.7))
-        .opacity(player.current?.isLive == true ? 1 : 0)
+        .clipShape(.rect(cornerRadius: 14))
+        // Glow on the frame only: a shadow on the video itself would force an offscreen pass every frame.
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(NG.cyan.opacity(0.7), lineWidth: 1.5).neonGlow(NG.cyan, radius: 12))
     }
 }
 
-struct Bracket: Shape {
-    func path(in r: CGRect) -> Path { Path { p in p.move(to: CGPoint(x: 0, y: r.maxY)); p.addLine(to: .zero); p.addLine(to: CGPoint(x: r.maxX, y: 0)) } }
-}
-
-struct NoSignal: View {
-    let message: String
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+struct StatusText: View {
+    let text: String
+    var isError = false
     var body: some View {
-        ZStack {
-            TimelineView(.animation(minimumInterval: 1 / 15, paused: reduceMotion)) { _ in
-                Canvas { g, size in
-                    for _ in 0..<500 {
-                        let r = CGRect(x: .random(in: 0...size.width), y: .random(in: 0...size.height), width: 3, height: 2)
-                        g.fill(Path(r), with: .color(.white.opacity(.random(in: 0.02...0.12))))
-                    }
-                }
-            }
-            Text(message.uppercased()).font(NG.mono(12)).kerning(3).foregroundStyle(NG.dim).multilineTextAlignment(.center).padding()
-        }
-    }
-}
-
-/// 190 ms of CRT failure on every zap.
-struct GlitchOverlay: View {
-    let trigger: Int
-    @State private var until = Date.distantPast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(paused: until < .now)) { ctx in
-            if ctx.date < until {
-                Canvas { g, size in
-                    for _ in 0..<1600 {
-                        let r = CGRect(x: .random(in: 0...size.width), y: .random(in: 0...size.height), width: 4, height: 3)
-                        g.fill(Path(r), with: .color(.white.opacity(.random(in: 0...0.55))))
-                    }
-                    for _ in 0..<7 {
-                        let y = CGFloat.random(in: 0...size.height)
-                        g.fill(Path(CGRect(x: .random(in: -40...40), y: y, width: size.width, height: .random(in: 3...24))),
-                               with: .color(.white.opacity(0.08)))
-                    }
-                    g.blendMode = .plusLighter
-                    g.fill(Path(CGRect(x: .random(in: 0...size.width), y: 0, width: .random(in: 10...60), height: size.height)), with: .color(NG.magenta.opacity(0.35)))
-                    g.fill(Path(CGRect(x: .random(in: 0...size.width), y: 0, width: .random(in: 10...60), height: size.height)), with: .color(NG.cyan.opacity(0.35)))
-                }
-            }
-        }
-        .allowsHitTesting(false)
-        .onChange(of: trigger) { if !reduceMotion { until = .now.addingTimeInterval(0.19) } }
+        Text(text).font(NG.title(16, .medium)).foregroundStyle(isError ? NG.magenta : NG.dim)
+            .multilineTextAlignment(.center).padding()
     }
 }
 
@@ -330,31 +236,31 @@ struct NowNextPanel: View {
         HUDPanel {
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("● NOW" + (np.now.map { " · \(hm($0.start))–\(hm($0.end))" } ?? "")).font(NG.mono(10)).kerning(3).foregroundStyle(NG.acid)
-                    ChromaText(text: (np.now?.title ?? item.map { displayName($0.channel.name) } ?? "—").uppercased(), size: 30)
+                    Text("Now" + (np.now.map { " · \(hm($0.start))–\(hm($0.end))" } ?? "")).font(NG.mono(11, .medium)).foregroundStyle(NG.acid)
+                    NeonText(text: np.now?.title ?? item.map { displayName($0.channel.name) } ?? "—", size: 28, weight: .bold)
                         .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(np.now?.desc ?? (item == nil ? "Choisis une chaîne." : "Pas de guide des programmes pour cette chaîne."))
-                        .font(NG.mono(12)).foregroundStyle(NG.dim).lineLimit(3).lineSpacing(3)
+                    if let desc = np.now?.desc {
+                        Text(desc).font(NG.title(15, .regular)).foregroundStyle(NG.dim).lineLimit(3).lineSpacing(2)
+                    }
                     ProgressLine(value: np.now.map(progress) ?? 0, height: 3).padding(.top, 6)
                 }
                 .padding(18).frame(maxWidth: .infinity, alignment: .leading)
                 Rectangle().fill(NG.cyan.opacity(0.14)).frame(width: 1)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("NEXT" + (np.next.map { " · \(hm($0.start))" } ?? "")).font(NG.mono(10)).kerning(3).foregroundStyle(NG.cyan)
-                    Text((np.next?.title ?? "—").uppercased()).font(NG.title(20)).kerning(1).foregroundStyle(NG.dim).lineLimit(2)
-                    if let now = np.now { Text("DANS \(max(1, Int(now.end.timeIntervalSinceNow / 60))) MIN").font(NG.mono(11)).foregroundStyle(NG.dim) }
+                    Text("Next" + (np.next.map { " · \(hm($0.start))" } ?? "")).font(NG.mono(11, .medium)).foregroundStyle(NG.cyan)
+                    Text(np.next?.title ?? "—").font(NG.title(19, .semibold)).foregroundStyle(NG.text).lineLimit(2)
                 }
                 .padding(18).frame(width: 240, alignment: .leading)
             }
             Rectangle().fill(NG.cyan.opacity(0.14)).frame(height: 1)
-            HStack(spacing: 18) {
-                Text("CH ") + Text(item?.channel.number.map { String(format: "%03d", $0) } ?? "---").foregroundStyle(NG.text)
-                Text(player.videoSize.height > 0 ? String(Int(player.videoSize.height)) + "P" : "—").foregroundStyle(NG.text)
-                Text(item?.source.name.uppercased() ?? "")
+            HStack(spacing: 14) {
+                if let n = item?.channel.number { Text("Ch \(n)") }
+                if player.videoSize.height > 0 { Text(String(Int(player.videoSize.height)) + "p") }
+                Text(item?.source.name ?? "")
                 Spacer()
-                Text("LINK"); SignalBars(level: item == nil ? 0 : player.signal)
+                if item != nil { SignalBars(level: player.signal) }
             }
-            .font(NG.mono(10)).kerning(2).foregroundStyle(NG.dim).padding(.horizontal, 18).padding(.vertical, 10)
+            .font(NG.mono(11)).foregroundStyle(NG.dim).padding(.horizontal, 18).padding(.vertical, 10)
         }
         .frame(maxWidth: 820)
     }
@@ -383,6 +289,6 @@ final class Dial {
 struct DialOverlay: View {
     let dial: Dial
     var body: some View {
-        if !dial.digits.isEmpty { ChromaText(text: dial.digits, size: 90).transition(.opacity) }
+        if !dial.digits.isEmpty { NeonText(text: dial.digits, size: 90).transition(.opacity) }
     }
 }

@@ -74,7 +74,7 @@ En Debug, l'app accepte des variables d'environnement de test (`NG_SEED`, `NG_PL
 
 ## Design
 
-Voir [DESIGN.md](DESIGN.md). La maquette [design/mockup-live.html](design/mockup-live.html) sert de référence pour l'ambiance, les couleurs et les composants. Sa ville en fond n'est pas reprise dans l'app.
+Voir [DESIGN.md](DESIGN.md) : un style néon sobre, sans décoration.
 
 ## Sources de test
 

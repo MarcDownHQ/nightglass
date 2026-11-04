@@ -3,6 +3,7 @@ import SwiftUI
 enum Section: String, CaseIterable, Identifiable {
     case live = "LIVE", guide = "GUIDE", movies = "MOVIES", series = "SERIES", sources = "SOURCES"
     var id: String { rawValue }
+    var title: String { rawValue.capitalized }
 }
 
 @MainActor @Observable
@@ -31,7 +32,7 @@ struct NightglassApp: App {
         .commands {
             CommandMenu("Navigate") {
                 ForEach(Array(Section.allCases.prefix(4).enumerated()), id: \.offset) { i, s in
-                    Button(s.rawValue.capitalized) { nav.section = s; player.expanded = false }
+                    Button(s.title) { nav.section = s; player.expanded = false }
                         .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
                 }
                 Button("Sources") { nav.section = .sources; player.expanded = false }.keyboardShortcut("5", modifiers: .command)

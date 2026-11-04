@@ -38,23 +38,24 @@ final class NightglassUITests: XCTestCase {
     }
 
     func testAddSourcesBrowseGuideAndWatch() throws {
-        // Empty keychain account: the app greets with NO UPLINK.
-        app.buttons["JACK IN  →"].click()
+        // Empty keychain account: the app starts on "No source yet".
+        app.buttons["Add a source"].click()
 
         // M3U via the preset (iptv-org France + xmltvfr guide).
-        app.buttons["PRESET · IPTV-ORG FRANCE"].click()
-        app.buttons["CONNECT →"].click()
-        XCTAssertTrue(app.staticTexts["● LINK STABLE"].waitForExistence(timeout: 90), "M3U source did not connect")
+        app.buttons["Use iptv-org France"].click()
+        app.buttons["Connect"].click()
+        let added = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Added' OR value BEGINSWITH 'Added'")).firstMatch
+        XCTAssertTrue(added.waitForExistence(timeout: 90), "M3U source did not connect")
         shot("sources-m3u")
 
         // Local Xtream (Dispatcharr), typed into the form.
         if let pass = ProcessInfo.processInfo.environment["NG_XC_PASS"] {
-            app.buttons["XTREAM"].click()
-            type("NAME", "Dispatcharr")
-            type("SERVER", "http://127.0.0.1:9191")
-            type("USERNAME", "nightglass")
-            type("PASSWORD", pass)
-            app.buttons["CONNECT →"].click()
+            app.buttons["Xtream"].click()
+            type("Name", "Dispatcharr")
+            type("Server", "http://127.0.0.1:9191")
+            type("Username", "nightglass")
+            type("Password", pass)
+            app.buttons["Connect"].click()
             XCTAssertTrue(waitStatus("channels=400", timeout: 90), "Xtream source did not add its channels: \(status())")
             shot("sources-both")
         }
@@ -70,12 +71,12 @@ final class NightglassUITests: XCTestCase {
             return false
         }()
         XCTAssertTrue(guideLoaded, "guide never loaded: \(status())")
-        app.buttons["GUIDE"].click()
+        app.buttons["Guide"].click()
         sleep(2)
         shot("guide")
 
         // Live: click a channel, wait for a picture the engine confirms on screen.
-        app.buttons["LIVE"].click()
+        app.buttons["Live"].click()
         let row = app.descendants(matching: .any)["channel-arte (France) (1080p)"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.click()

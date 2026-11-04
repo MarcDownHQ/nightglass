@@ -13,10 +13,10 @@ struct GuideView: View {
     var body: some View {
         let start = Self.gridStart()
         let rows = store.channels.filter { !store.programmes(for: $0.channel).isEmpty }
-        HUDPanel(caption: "GUIDE · \(rows.count) CHANNELS", trailing: Date.now.formatted(date: .abbreviated, time: .omitted).uppercased()) {
+        HUDPanel(caption: "Guide", trailing: Date.now.formatted(date: .abbreviated, time: .omitted)) {
             if rows.isEmpty {
-                Text("Aucun guide des programmes pour l'instant. Ajoute une URL XMLTV à ta source, ou attends la fin de la synchronisation.")
-                    .font(NG.mono(12)).foregroundStyle(NG.dim).padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("No programme guide yet. Add an XMLTV URL to a source, or wait for it to load.")
+                    .font(NG.title(16, .regular)).foregroundStyle(NG.dim).padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.vertical) {
                     HStack(alignment: .top, spacing: 0) {
@@ -25,7 +25,7 @@ struct GuideView: View {
                             ForEach(rows) { item in
                                 HStack(spacing: 10) {
                                     ChannelLogo(channel: item.channel, color: NG.neon(for: item.channel.name), size: 34)
-                                    Text(displayName(item.channel.name).uppercased()).font(NG.title(16)).kerning(1).lineLimit(1)
+                                    Text(displayName(item.channel.name)).font(NG.title(16, .semibold)).lineLimit(1)
                                 }
                                 .padding(.horizontal, 14).frame(width: 220, height: Self.rowHeight, alignment: .leading)
                                 .overlay(alignment: .bottom) { Rectangle().fill(NG.cyan.opacity(0.08)).frame(height: 1) }
@@ -63,7 +63,7 @@ struct TimeRuler: View {
         ZStack(alignment: .leading) {
             ForEach(0..<Int(GuideView.span / 1800), id: \.self) { i in
                 let d = start.addingTimeInterval(Double(i) * 1800)
-                Text(hm(d)).font(NG.mono(10)).kerning(2).foregroundStyle(NG.cyan.opacity(0.7))
+                Text(hm(d)).font(NG.mono(11)).foregroundStyle(NG.dim)
                     .offset(x: GuideView.x(d, from: start) + 6)
             }
         }
@@ -86,7 +86,7 @@ struct GuideRow: View {
                 let live = p.start <= .now && p.end > .now
                 Button { nav.focusChannel = item.id; nav.section = .live } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(p.title.uppercased()).font(NG.title(14, .semibold)).kerning(0.5).lineLimit(1)
+                        Text(p.title).font(NG.title(14, .semibold)).lineLimit(1)
                         Text("\(hm(p.start))–\(hm(p.end))").font(NG.mono(9)).foregroundStyle(NG.dim)
                     }
                     .padding(.horizontal, 10).frame(width: max(x1 - x0 - 4, 4), height: GuideView.rowHeight - 12, alignment: .leading)

@@ -1,5 +1,4 @@
 import AetherEngine
-import AVFoundation
 import Combine
 import SwiftUI
 
@@ -11,8 +10,6 @@ final class Player {
     var firstFrame = false
     var expanded = false
     var error: String?
-    /// Bumped on every zap; drives the CRT glitch.
-    var zapTick = 0
     var time: Double = 0
     var duration: Double = 0
     var audioTracks: [TrackInfo] = []
@@ -69,8 +66,7 @@ final class Player {
 
     func play(_ p: Playable) {
         guard p.id != current?.id || state == .idle || error != nil else { return }
-        current = p; error = nil; retunes = 0; zapTick += 1
-        Sound.tick()
+        current = p; error = nil; retunes = 0
         Task { await load(p) }
     }
 
@@ -94,39 +90,5 @@ final class Player {
         guard current?.isLive == false else { return }
         let target = max(0, min(duration, time + seconds))
         Task { await engine.seek(to: target) }
-    }
-}
-
-/// Neon hum and selection tick. Off by default, never during fullscreen playback.
-@MainActor
-enum Sound {
-    static var enabled = false
-    private static let engine = AVAudioEngine()
-    private static var started = false
-
-    static func tick() { tone(from: 2200, to: 500, duration: 0.05, volume: 0.05) }
-    static func buzz() { tone(from: 120, to: 110, duration: 0.18, volume: 0.04) }
-
-    private static func tone(from f0: Double, to f1: Double, duration: Double, volume: Float) {
-        guard enabled else { return }
-        let format = engine.outputNode.inputFormat(forBus: 0)
-        let rate = format.sampleRate > 0 ? format.sampleRate : 44_100
-        let frames = AVAudioFrameCount(rate * duration)
-        guard let mono = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 1),
-              let buffer = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: frames) else { return }
-        buffer.frameLength = frames
-        var phase = 0.0
-        for i in 0..<Int(frames) {
-            let p = Double(i) / Double(frames)
-            phase += (f0 * pow(f1 / f0, p)) / rate
-            let saw = Float(2 * (phase - floor(phase)) - 1)
-            buffer.floatChannelData![0][i] = saw * volume * Float(1 - p)
-        }
-        let node = AVAudioPlayerNode()
-        engine.attach(node)
-        engine.connect(node, to: engine.mainMixerNode, format: mono)
-        if !started { try? engine.start(); started = true }
-        node.scheduleBuffer(buffer) { DispatchQueue.main.async { engine.detach(node) } }
-        node.play()
     }
 }

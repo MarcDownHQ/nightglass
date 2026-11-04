@@ -34,7 +34,11 @@ enum DebugAutomation {
                 player.stop()
             }
         }
-        guard let name = env["NG_PLAY"] else { return }
+        if let name = env["NG_PLAY"] { await play(name, store: store, player: player, nav: nav) }
+        if let dir = env["NG_SHOTS"] { await tour(dir, player: player, nav: nav) }
+    }
+
+    static func play(_ name: String, store: Store, player: Player, nav: Nav) async {
         for _ in 0..<60 where !store.channels.contains(where: { $0.channel.name.localizedStandardContains(name) }) {
             try? await Task.sleep(for: .seconds(1))
         }
@@ -47,7 +51,9 @@ enum DebugAutomation {
             log("play \(item.channel.name) state=\(player.state) firstFrame=\(player.firstFrame) video=\(Int(player.videoSize.width))x\(Int(player.videoSize.height)) epgNow=\(store.nowNext(for: item.channel).now?.title ?? "-")")
             if player.firstFrame { break }
         }
-        guard let dir = env["NG_SHOTS"] else { return }
+    }
+
+    static func tour(_ dir: String, player: Player, nav: Nav) async {
         try? await Task.sleep(for: .seconds(4))
         for section in Section.allCases {
             nav.section = section
@@ -58,10 +64,12 @@ enum DebugAutomation {
         try? await Task.sleep(for: .seconds(2))
         snapshot("\(dir)/search.png")
         nav.searching = false
-        player.expanded = true
-        try? await Task.sleep(for: .seconds(2))
-        snapshot("\(dir)/player.png")
-        player.expanded = false
+        if player.current != nil {
+            player.expanded = true
+            try? await Task.sleep(for: .seconds(2))
+            snapshot("\(dir)/player.png")
+            player.expanded = false
+        }
         log("shots done")
     }
 
