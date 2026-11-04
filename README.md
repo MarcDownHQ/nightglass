@@ -1,4 +1,4 @@
-# Lumière
+# Nightglass
 
 Lecteur IPTV natif pour macOS. Windows viendra plus tard.
 
@@ -31,11 +31,11 @@ Hors MVP : enregistrement, catch-up, multi-écran, AirPlay, version Windows.
 ## Architecture
 
 ```
-LumiereCore/   # Swift package sans UI : clients m3u, xtream, stalker, xmltv + modèles communs
-Lumiere/       # app macOS SwiftUI : écrans, lecteur, cache SwiftData
+NightglassCore/   # Swift package sans UI : clients m3u, xtream, stalker, xmltv + modèles communs
+Nightglass/       # app macOS SwiftUI : écrans, lecteur, cache SwiftData
 ```
 
-Chaque client de `LumiereCore` transforme son protocole en modèles communs (`Channel`, `Movie`, `Series`, `Programme`) : l'UI ne sait pas d'où viennent les chaînes. `LumiereCore` ne dépend que de Foundation : il est testable en ligne de commande et réutilisable pour une future version Windows.
+Chaque client de `NightglassCore` transforme son protocole en modèles communs (`Channel`, `Movie`, `Series`, `Programme`) : l'UI ne sait pas d'où viennent les chaînes. `NightglassCore` ne dépend que de Foundation : il est testable en ligne de commande et réutilisable pour une future version Windows.
 
 ## Ce qui existe déjà
 
