@@ -33,6 +33,15 @@ final class Store {
     /// Programmes per normalised EPG id, sorted by start.
     var guide: [String: [Programme]] = [:]
     var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "favorites") ?? [])
+    /// Source the screens show; nil means every source.
+    var activeSource: UUID? = UserDefaults.standard.string(forKey: "activeSource").flatMap(UUID.init) {
+        didSet { UserDefaults.standard.set(activeSource?.uuidString, forKey: "activeSource"); rebuild() }
+    }
+
+    var visibleSources: [Source] {
+        guard let id = activeSource, sources.contains(where: { $0.id == id }) else { return sources }
+        return sources.filter { $0.id == id }
+    }
 
     var channels: [LiveItem] = []
     var movies: [MovieItem] = []
@@ -64,16 +73,21 @@ final class Store {
 
     func loadGuide(_ url: URL) async {
         let now = Date.now
-        let programmes = (try? await Task.detached {
-            try await XMLTVParser.load(url, window: now.addingTimeInterval(-3 * 3600)...now.addingTimeInterval(24 * 3600))
-        }.value) ?? []
-        for (key, list) in Dictionary(grouping: programmes, by: { Self.epgKey($0.channel) }) {
-            guide[key] = ((guide[key] ?? []) + list).sorted { $0.start < $1.start }
+        // Parse and group off the main thread.
+        guard let incoming = try? await Task.detached(operation: { () async throws -> [String: [Programme]] in
+            let programmes = try await XMLTVParser.load(url, window: now.addingTimeInterval(-3 * 3600)...now.addingTimeInterval(24 * 3600))
+            return Dictionary(grouping: programmes, by: { Store.epgKey($0.channel) }).mapValues { $0.sorted { $0.start < $1.start } }
+        }).value else { return }
+        // Merge into the current guide, not a snapshot: several guides load at once.
+        var merged = guide
+        for (key, list) in incoming {
+            merged[key] = merged[key].map { ($0 + list).sorted { $0.start < $1.start } } ?? list
         }
+        guide = merged
     }
 
     /// iptv-org ids carry a feed suffix (`6ter.fr@SD`) that guides don't.
-    static func epgKey(_ id: String) -> String { (id.split(separator: "@").first.map(String.init) ?? id).lowercased() }
+    nonisolated static func epgKey(_ id: String) -> String { (id.split(separator: "@").first.map(String.init) ?? id).lowercased() }
 
     func programmes(for channel: Channel) -> [Programme] {
         channel.epgID.flatMap { guide[Self.epgKey($0)] } ?? []
@@ -89,7 +103,7 @@ final class Store {
     private func rebuild() {
         // Playlists without tvg-chno get their position as number, so every channel can be dialled.
         var n = 0
-        channels = sources.flatMap { s in
+        channels = visibleSources.flatMap { s in
             (catalogs[s.id]?.channels ?? []).map { ch in
                 n += 1
                 var ch = ch
@@ -97,8 +111,8 @@ final class Store {
                 return LiveItem(source: s, channel: ch)
             }
         }
-        movies = sources.flatMap { s in (catalogs[s.id]?.movies ?? []).map { MovieItem(source: s, movie: $0) } }
-        series = sources.flatMap { s in (catalogs[s.id]?.series ?? []).map { SeriesItem(source: s, series: $0) } }
+        movies = visibleSources.flatMap { s in (catalogs[s.id]?.movies ?? []).map { MovieItem(source: s, movie: $0) } }
+        series = visibleSources.flatMap { s in (catalogs[s.id]?.series ?? []).map { SeriesItem(source: s, series: $0) } }
     }
 
     func add(_ source: Source, catalog: Catalog) {
@@ -112,6 +126,7 @@ final class Store {
     func remove(_ source: Source) {
         sources.removeAll { $0.id == source.id }
         catalogs[source.id] = nil
+        if activeSource == source.id { activeSource = nil }
         Keychain.saveSources(sources)
         rebuild()
     }

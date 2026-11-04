@@ -131,7 +131,14 @@ struct SourceRow: View {
             Button { store.remove(source) } label: { Image(systemName: "trash") }.buttonStyle(.plain).foregroundStyle(NG.magenta).help("Supprimer")
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
+        .background(store.activeSource == source.id ? NG.magenta.opacity(0.12) : .clear)
+        .overlay(alignment: .leading) {
+            if store.activeSource == source.id { Capsule().fill(NG.magenta).frame(width: 3).padding(.vertical, 10).neonGlow(NG.magenta, radius: 6) }
+        }
         .overlay(alignment: .bottom) { Rectangle().fill(NG.cyan.opacity(0.08)).frame(height: 1) }
+        .contentShape(.rect)
+        .onTapGesture { store.activeSource = store.activeSource == source.id ? nil : source.id }
+        .help("Click to show only this source")
     }
 
     var kind: String {

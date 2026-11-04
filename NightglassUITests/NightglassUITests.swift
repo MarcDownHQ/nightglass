@@ -72,8 +72,16 @@ final class NightglassUITests: XCTestCase {
         }()
         XCTAssertTrue(guideLoaded, "guide never loaded: \(status())")
         app.buttons["Guide"].click()
-        sleep(2)
+        XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 5))
         shot("guide")
+
+        // Switch source from the header: only the M3U playlist's 200 channels remain.
+        if ProcessInfo.processInfo.environment["NG_XC_PASS"] != nil {
+            app.descendants(matching: .any)["source-picker"].firstMatch.click()
+            app.menuItems["iptv-org · France"].click()
+            XCTAssertTrue(waitStatus("channels=200", timeout: 5), "source switch: \(status())")
+            shot("source-switched")
+        }
 
         // Live: click a channel, wait for a picture the engine confirms on screen.
         app.buttons["Live"].click()

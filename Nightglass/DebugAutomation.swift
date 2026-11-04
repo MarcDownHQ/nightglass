@@ -8,12 +8,14 @@ import NightglassCore
 /// - `NG_SECTION`: LIVE / GUIDE / MOVIES / SERIES / SOURCES.
 /// - `NG_PLAY`: substring of a channel name to tune; `NG_EXPAND=1` opens it fullscreen.
 /// - `NG_PLAY_MOVIE`: substring of a movie name to play fullscreen (checked before `NG_PLAY`).
+/// - `NG_ACTIVE`: name of the source to show (the header source picker).
 /// - `NG_SHOTS`: directory; the app then tours every screen and snapshots its own window there.
 @MainActor
 enum DebugAutomation {
     static let env = ProcessInfo.processInfo.environment
 
     static func run(store: Store, player: Player, nav: Nav) async {
+        Stall.shared.start()
         if let section = env["NG_SECTION"].flatMap(Section.init(rawValue:)) { nav.section = section }
         if let json = env["NG_SEED"], let sources = try? JSONDecoder().decode([Source].self, from: Data(json.utf8)) {
             for s in sources where !store.sources.contains(where: { $0.name == s.name }) {
@@ -34,6 +36,7 @@ enum DebugAutomation {
                 player.stop()
             }
         }
+        if let name = env["NG_ACTIVE"] { store.activeSource = store.sources.first { $0.name == name }?.id }
         if let name = env["NG_PLAY"] { await play(name, store: store, player: player, nav: nav) }
         if let dir = env["NG_SHOTS"] { await tour(dir, player: player, nav: nav) }
     }
@@ -54,10 +57,13 @@ enum DebugAutomation {
     }
 
     static func tour(_ dir: String, player: Player, nav: Nav) async {
-        try? await Task.sleep(for: .seconds(4))
+        // Let catalogs and guides finish loading so the stalls measured below belong to the screens.
+        try? await Task.sleep(for: .seconds(Double(env["NG_SETTLE"] ?? "4") ?? 4))
         for section in Section.allCases {
+            Stall.shared.reset()
             nav.section = section
             try? await Task.sleep(for: .seconds(section == .live ? 2 : 4))
+            log("stall \(section.rawValue): \(Int(Stall.shared.max)) ms")
             snapshot("\(dir)/\(section.rawValue.lowercased()).png")
         }
         nav.section = .live; nav.searching = true
@@ -83,5 +89,26 @@ enum DebugAutomation {
     }
 
     static func log(_ s: String) { print("[NG] \(s)"); fflush(stdout) }
+}
+/// Longest main-thread stall (ms) since the last reset: what a user feels as "it lags".
+@MainActor @Observable
+final class Stall {
+    static let shared = Stall()
+    var max = 0.0
+    @ObservationIgnored private var last = CFAbsoluteTimeGetCurrent()
+
+    func start() {
+        let timer = Timer(timeInterval: 0.005, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                let now = CFAbsoluteTimeGetCurrent()
+                let gap = (now - self.last) * 1000 - 5
+                if gap > self.max { self.max = gap }
+                self.last = now
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func reset() { max = 0; last = CFAbsoluteTimeGetCurrent() }
 }
 #endif

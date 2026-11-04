@@ -57,6 +57,7 @@ struct Header: View {
             }
             Spacer()
             if !store.loading.isEmpty { ProgressView().controlSize(.small) }
+            if store.sources.count > 1 { SourcePicker() }
             Button { nav.searching = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
@@ -84,6 +85,37 @@ struct Header: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Which source the screens show. One click to switch, no trip to the Sources screen.
+struct SourcePicker: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        @Bindable var store = store
+        let current = store.visibleSources.count == 1 ? store.visibleSources[0].name : "All sources"
+        Menu {
+            Picker("Source", selection: $store.activeSource) {
+                Text("All sources").tag(UUID?.none)
+                Divider()
+                ForEach(store.sources) { s in Text(s.name).tag(Optional(s.id)) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(NG.magenta).frame(width: 6, height: 6).neonGlow(NG.magenta, radius: 4)
+                Text(current).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(NG.dim)
+            }
+            .font(NG.title(15, .medium)).foregroundStyle(NG.text)
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .overlay(Capsule().strokeBorder(NG.magenta.opacity(0.5)))
+            .contentShape(.capsule)
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        .help("Choose the source to show")
+        .accessibilityIdentifier("source-picker")
     }
 }
 
