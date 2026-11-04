@@ -52,4 +52,4 @@ Chaque chaîne reçoit toujours la même couleur néon parmi les trois, dérivé
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie · `↵` plein écran · `0–9` numéro de chaîne · `S` favori · `⌘K` recherche · `⌘1…5` écrans · `Espace` lecture / pause · `Échap` quitter le plein écran.
+`↑↓` chaîne · `←→` catégorie · `↵` plein écran · `0–9` numéro de chaîne · `S` favori · `⌘K` recherche · `⌘1…5` écrans · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter la lecture) · `⌘.` arrêter la lecture partout.

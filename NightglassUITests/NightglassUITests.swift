@@ -96,11 +96,18 @@ final class NightglassUITests: XCTestCase {
         }
 
         // Live: click a channel, wait for a picture the engine confirms on screen.
+        // Public streams go down now and then, so try a few before calling it a failure.
         app.buttons["Live"].click()
-        let row = app.descendants(matching: .any)["channel-arte (France) (1080p)"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        row.click()
-        XCTAssertTrue(waitStatus("rendered=true", timeout: 45), "no rendered frame: \(status())")
+        var row = app.descendants(matching: .any)["channel-arte (France) (1080p)"].firstMatch
+        var playing = false
+        for name in ["arte (France) (1080p)", "BFM TV (1080p)", "20 Minutes TV (1080p)"] {
+            row = app.descendants(matching: .any)["channel-" + name].firstMatch
+            guard row.waitForExistence(timeout: 10) else { continue }
+            row.click()
+            if waitStatus("rendered=true", timeout: 30) { playing = true; break }
+            print("[NG] \(name) did not play: \(status())")
+        }
+        XCTAssertTrue(playing, "no channel rendered a frame: \(status())")
         sleep(2)
         shot("live-preview")
 
@@ -109,5 +116,22 @@ final class NightglassUITests: XCTestCase {
         sleep(3)
         XCTAssertTrue(status().contains("rendered=true"), status())
         shot("player-fullscreen")
+
+        // Stop from fullscreen: move the pointer to reveal the controls, like a person would.
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)).hover()
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).hover()
+        XCTAssertTrue(app.buttons["stop-playback"].firstMatch.waitForExistence(timeout: 3), "fullscreen controls did not appear")
+        app.buttons["stop-playback"].firstMatch.click()
+        XCTAssertTrue(waitStatus("state=idle", timeout: 5), "stop: \(status())")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+
+        // Play again, then stop from the preview's button.
+        row.click()
+        XCTAssertTrue(waitStatus("rendered=true", timeout: 45), "replay: \(status())")
+        shot("live-with-stop")
+        app.buttons["stop-playback"].firstMatch.click()
+        XCTAssertTrue(waitStatus("state=idle", timeout: 5), "stop from preview: \(status())")
+        shot("stopped")
     }
 }

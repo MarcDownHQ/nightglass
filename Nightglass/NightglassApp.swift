@@ -38,6 +38,7 @@ struct NightglassApp: App {
                 Button("Sources") { nav.section = .sources; player.expanded = false }.keyboardShortcut("5", modifiers: .command)
                 Divider()
                 Button("Search") { nav.searching = true }.keyboardShortcut("k", modifiers: .command)
+                Button("Stop Playback") { player.stop() }.keyboardShortcut(".", modifiers: .command).disabled(player.current == nil)
             }
         }
     }

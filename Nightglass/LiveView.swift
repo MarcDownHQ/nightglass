@@ -73,6 +73,8 @@ struct LiveView: View {
         .onKeyPress(.rightArrow) { shiftCategory(1); return .handled }
         .onKeyPress(.leftArrow) { shiftCategory(-1); return .handled }
         .onKeyPress(.return) { if player.current != nil { player.expanded = true }; return .handled }
+        .onKeyPress(.escape) { player.stop(); return .handled }
+        .onChange(of: player.current == nil) { _, stopped in if stopped { selected = nil } }
         .onKeyPress(characters: .decimalDigits) { press in
             dial.type(press.characters) { n in
                 if let item = store.channels.first(where: { $0.channel.number == n }) { category = "All"; select(item) }
@@ -193,7 +195,7 @@ struct ChannelLogo: View {
     }
 }
 
-/// The live preview, with its floor reflection and the corner brackets.
+/// The live preview, with a stop button while something plays.
 struct Preview: View {
     @Environment(Player.self) private var player
 
@@ -214,6 +216,31 @@ struct Preview: View {
         .clipShape(.rect(cornerRadius: 14))
         // Glow on the frame only: a shadow on the video itself would force an offscreen pass every frame.
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(NG.cyan.opacity(0.7), lineWidth: 1.5).neonGlow(NG.cyan, radius: 12))
+        .overlay(alignment: .topTrailing) {
+            if player.current != nil && !player.expanded { StopButton().padding(12) }
+        }
+    }
+}
+
+/// Stops playback entirely (Esc in Live, ⌘. anywhere).
+struct StopButton: View {
+    @Environment(Player.self) private var player
+    @State private var hover = false
+
+    var body: some View {
+        Button { player.stop() } label: {
+            Label("Stop", systemImage: "stop.fill")
+                .font(NG.title(14, .semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(NG.ink.opacity(hover ? 0.85 : 0.6), in: .capsule)
+                .overlay(Capsule().strokeBorder(NG.magenta.opacity(hover ? 1 : 0.6), lineWidth: 1.5))
+                .shadow(color: hover ? NG.magenta.opacity(0.6) : .clear, radius: 8)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help("Stop playback (⌘.)")
+        .accessibilityIdentifier("stop-playback")
     }
 }
 

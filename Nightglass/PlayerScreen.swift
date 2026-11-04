@@ -7,6 +7,7 @@ struct PlayerScreen: View {
     @Environment(Player.self) private var player
     @State private var idle = false
     @State private var idleTask: Task<Void, Never>?
+    @State private var mouseMonitor: Any?
     @State private var dial = Dial()
     @FocusState private var focused: Bool
 
@@ -26,10 +27,20 @@ struct PlayerScreen: View {
             .animation(.easeOut(duration: 0.4), value: idle)
             DialOverlay(dial: dial).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(.top, 90).padding(.trailing, 40)
         }
-        .onContinuousHover { _ in poke() }
         .onTapGesture(count: 2) { exit() }
-        .onAppear { focused = true; poke() }
-        .onDisappear { idleTask?.cancel(); NSCursor.unhide() }
+        .onAppear {
+            focused = true; poke()
+            // The video is an AppKit layer that swallows SwiftUI hover, so watch the window's own mouse events.
+            NSApp.windows.forEach { $0.acceptsMouseMovedEvents = true }
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .scrollWheel]) { event in
+                poke()
+                return event
+            }
+        }
+        .onDisappear {
+            idleTask?.cancel(); NSCursor.unhide()
+            if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
+        }
         .focusable().focusEffectDisabled().focused($focused)
         .onKeyPress(.escape) { exit(); return .handled }
         .onKeyPress("f") { exit(); return .handled }
@@ -53,8 +64,9 @@ struct PlayerScreen: View {
             Spacer()
             SignalBars(level: player.signal)
             trackMenus
+            StopButton()
             Button { exit() } label: { Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).padding(8).contentShape(.rect) }
-                .buttonStyle(.plain).help("Close (Esc)")
+                .buttonStyle(.plain).help("Back to the list (Esc), playback continues")
         }
         .font(NG.title(15, .medium)).foregroundStyle(NG.text)
         .padding(.horizontal, 34).padding(.top, 34).padding(.bottom, 40)
