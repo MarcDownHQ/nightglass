@@ -46,6 +46,16 @@ npm run tauri dev
 
 `npm run tauri build` produit l'installeur dans `target/release/bundle/nsis/`. Il installe pour l'utilisateur courant, dans `%LOCALAPPDATA%\Nightglass`, sans droits administrateur.
 
+## Publier une version
+
+Le workflow [Windows](../.github/workflows/windows.yml) vérifie et construit l'app à chaque PR et à chaque push sur `master` ; l'installeur est dans les artefacts du run. Pour une version :
+
+1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
+2. Pousser un tag `windows-v<version>` (par exemple `windows-v0.2.0`).
+3. Le workflow crée une release **brouillon** avec l'installeur : la relire sur GitHub, puis la publier.
+
+L'exe n'est pas signé : Windows affiche l'avertissement SmartScreen à l'installation tant qu'il n'est pas signé avec un certificat de signature de code.
+
 ## Tests
 
 ```powershell
