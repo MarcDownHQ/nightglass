@@ -4,8 +4,12 @@ Portage Windows de Nightglass : **Tauri 2** (Rust) pour l'app, **Svelte 5** pour
 
 ## État
 
-- **Fait** : sources M3U (URL ou fichier local), Xtream Codes et Stalker ; guide XMLTV (now / next) ; écrans Live et Sources ; lecteur avec aperçu, plein écran, pistes audio et sous-titres ; sources chiffrées.
-- **À faire** : écrans Guide, Movies, Series et Search (le Core fournit déjà films, séries et épisodes), installeur à essayer.
+Même périmètre que la version macOS :
+
+- sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque ;
+- écrans **Live** (liste, aperçu, now / next), **Guide** (grille sur 3 h, paginée), **Movies** et **Series** (affiches, saisons, épisodes), **Search** (Ctrl+K) et **Sources** ;
+- lecteur plein écran : pistes audio et sous-titres, avance / retour pour les films, zapping en direct ;
+- installeur NSIS avec les licences de libmpv, FFmpeg et des crates Rust.
 
 ## Architecture
 
@@ -40,7 +44,7 @@ npm run fetch-libmpv   # libmpv-2.dll, variante LGPL (zhongfly/mpv-winbuild), da
 npm run tauri dev
 ```
 
-`npm run tauri build` produit un installeur NSIS (pas encore essayé).
+`npm run tauri build` produit l'installeur dans `target/release/bundle/nsis/`. Il installe pour l'utilisateur courant, dans `%LOCALAPPDATA%\Nightglass`, sans droits administrateur.
 
 ## Tests
 
@@ -62,10 +66,18 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1` Live · `Ctrl+5` Sources · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre.
+`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre.
 
 ## Licence
 
 MIT, comme le reste du dépôt : voir [LICENSE](../LICENSE). `fetch-libmpv` télécharge volontairement la variante LGPL de libmpv : la version par défaut de mpv-winbuild est sous GPL, et imposerait la GPL à tout installeur qui l'embarque.
 
-Pas encore fait : l'installeur ne joint pas encore les licences de libmpv et des bibliothèques qu'elle inclut (FFmpeg, libplacebo, libass…), à ajouter avant toute diffusion.
+L'installeur embarque dans `licenses/` :
+
+- la licence de Nightglass ;
+- les textes LGPL-2.1, LGPL-3.0 et GPL-3.0 (libmpv et FFmpeg) ;
+- la version exacte de libmpv (`libmpv-version.txt`, écrit par `fetch-libmpv`) ;
+- les notices des crates Rust (`rust-crates.html`) ;
+- [THIRD-PARTY-NOTICES.txt](licenses/THIRD-PARTY-NOTICES.txt).
+
+Quand les dépendances Rust changent, régénérer les notices avec `npm run licenses` (il faut `cargo install cargo-about --features cli`).

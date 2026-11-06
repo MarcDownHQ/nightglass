@@ -1,0 +1,53 @@
+Nightglass for Windows - third-party notices
+=============================================
+
+Nightglass itself is under the MIT licence (Nightglass-LICENSE.txt).
+It ships with, or is built from, the following software.
+
+
+libmpv (libmpv-2.dll)
+---------------------
+
+libmpv-2.dll is mpv's player library, built by the mpv-winbuild project
+(https://github.com/zhongfly/mpv-winbuild) in its "lgpl" variant:
+
+- mpv is licensed under the GNU Lesser General Public License, version 2.1 or later
+  (LGPL-2.1.txt). Source: https://github.com/mpv-player/mpv
+- FFmpeg is linked into the same DLL and licensed under the GNU Lesser General Public
+  License, version 3 or later (LGPL-3.0.txt, which adds permissions to GPL-3.0.txt).
+  Source: https://git.ffmpeg.org/ffmpeg.git
+- The DLL also contains libraries that mpv and FFmpeg use (for example libass, FreeType,
+  HarfBuzz, FriBidi, dav1d, libplacebo, Little CMS, zlib), each under its own
+  LGPL-compatible free licence. Their list and versions are in the build scripts:
+  https://github.com/zhongfly/mpv-winbuild
+
+The exact build is named in libmpv-version.txt, next to this file. The build scripts
+at that address reproduce it from source; the corresponding source code is also
+available on request from the Nightglass maintainers
+(https://github.com/MarcDownHQ/nightglass/issues).
+
+Nightglass loads libmpv-2.dll at run time and does not modify it. You may replace
+libmpv-2.dll in the installation folder with your own build of libmpv (same API,
+version 2) and Nightglass will use it.
+
+
+Rust crates
+-----------
+
+The Nightglass executable is compiled from Rust crates (Tauri, reqwest, quick-xml and
+others). Their licences and copyright notices are in rust-crates.html, next to this file.
+
+
+Web interface
+-------------
+
+The interface is built with Svelte (MIT, Copyright (c) 2016-2026 Svelte Contributors)
+and @tauri-apps/api (MIT or Apache-2.0, Copyright (c) 2017-2026 Tauri Programme within
+The Commons Conservancy).
+
+
+Fonts and icons
+---------------
+
+Nightglass uses fonts installed with Windows (Bahnschrift, Cascadia Mono, Segoe Fluent
+Icons); none are shipped with it.
