@@ -36,7 +36,7 @@ winget install OpenJS.NodeJS.LTS
 ```powershell
 cd windows
 npm install
-npm run fetch-libmpv   # libmpv-2.dll (zhongfly/mpv-winbuild) dans src-tauri/lib
+npm run fetch-libmpv   # libmpv-2.dll, variante LGPL (zhongfly/mpv-winbuild), dans src-tauri/lib
 npm run tauri dev
 ```
 
@@ -63,3 +63,9 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 ## Clavier
 
 `↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1` Live · `Ctrl+5` Sources · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre.
+
+## Licence
+
+MIT, comme le reste du dépôt : voir [LICENSE](../LICENSE). `fetch-libmpv` télécharge volontairement la variante LGPL de libmpv : la version par défaut de mpv-winbuild est sous GPL, et imposerait la GPL à tout installeur qui l'embarque.
+
+Pas encore fait : l'installeur ne joint pas encore les licences de libmpv et des bibliothèques qu'elle inclut (FFmpeg, libplacebo, libass…), à ajouter avant toute diffusion.

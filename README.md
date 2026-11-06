@@ -91,3 +91,12 @@ Voir [DESIGN.md](DESIGN.md) : un style néon sobre, sans décoration.
 - [IPTVnator](https://github.com/4gray/iptvnator) : Electron + Angular, M3U/Xtream/Stalker, lecture web ou mpv/VLC externe.
 - [Movena](https://github.com/movena-app/movena) : Tauri + libmpv intégré, Xtream/M3U.
 - Plusieurs apps IPTV Apple (KIPTV, Snappier, LillyPlayer…) tournent sur AetherEngine.
+
+## Licence
+
+Le code de Nightglass est sous licence MIT : voir [LICENSE](LICENSE).
+
+Les moteurs de lecture gardent leur propre licence :
+
+- **AetherEngine** (macOS) : LGPL-3.0, avec une exception pour l'App Store.
+- **libmpv** (Windows) : la variante LGPL de [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild), soit mpv sous LGPL-2.1+ et FFmpeg sous LGPL-3.0+. Elle est chargée à l'exécution et n'est pas versionnée ici. Un installeur qui embarque `libmpv-2.dll` doit joindre ces licences et indiquer où obtenir leurs sources.
