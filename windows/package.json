@@ -13,7 +13,8 @@
     "licenses": "cargo about generate -m src-tauri/Cargo.toml about.hbs -o licenses/rust-crates.html"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.4"
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-updater": "^2.14.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

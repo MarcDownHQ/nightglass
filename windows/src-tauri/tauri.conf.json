@@ -27,6 +27,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxMTFCQjc3REQ0NEQwQkYKUldTLzBFVGRkN3NSd1FDMDRMMUp1Vzl5MUs5R0VteC9XQnNhdVM1dUF0QlFRaVdJYTJiVjdLL00K",
+      "endpoints": ["https://github.com/MarcDownHQ/nightglass/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
