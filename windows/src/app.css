@@ -1,0 +1,67 @@
+/* Nightglass tokens: see DESIGN.md at the repository root. */
+:root {
+  --ink: #05010f;
+  --night: #1a0433;
+  --magenta: #ff2a6d;
+  --cyan: #05d9e8;
+  --acid: #f9f002;
+  --text: #f3eeff;
+  --dim: rgb(243 238 255 / 0.55);
+  --line: rgb(243 238 255 / 0.12);
+  --panel: rgb(5 1 15 / 0.72);
+
+  /* Bahnschrift ships with Windows and has condensed widths, like SF Pro Condensed on macOS. */
+  --title: 'Bahnschrift Condensed', 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
+  --mono: 'Cascadia Mono', 'Consolas', monospace;
+  --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* The video window sits under the page: anything not painted shows the video. */
+  background: transparent;
+}
+
+body {
+  color: var(--text);
+  font-family: var(--title);
+  font-stretch: condensed;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 1.5px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-stretch: normal;
+}
+
+.icon {
+  font-family: var(--icons);
+  font-style: normal;
+  font-stretch: normal;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --panel: var(--ink);
+  }
+}

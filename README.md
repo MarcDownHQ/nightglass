@@ -2,7 +2,7 @@
 
 <img src="Nightglass/Assets.xcassets/AppIcon.appiconset/icon_256@2x.png" width="128" alt="Icône Nightglass">
 
-Lecteur IPTV natif pour macOS. Windows viendra plus tard.
+Lecteur IPTV natif pour macOS. Le portage Windows (Tauri + libmpv) est en cours dans [windows/](windows/README.md).
 
 ## Stack
 
