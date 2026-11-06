@@ -30,6 +30,15 @@ export interface Series {
   plot: string | null;
 }
 
+export interface Episode {
+  id: string;
+  title: string;
+  season: number;
+  number: number;
+  stream: string;
+  plot: string | null;
+}
+
 /** Times are Unix seconds. */
 export interface Programme {
   channel: string;
@@ -66,6 +75,18 @@ export interface LiveItem {
   id: string;
   source: Source;
   channel: Channel;
+}
+
+export interface MovieItem {
+  id: string;
+  source: Source;
+  movie: Movie;
+}
+
+export interface SeriesItem {
+  id: string;
+  source: Source;
+  series: Series;
 }
 
 /** Same rule as `xmltv::epg_key`: iptv-org ids carry a feed suffix (`6ter.fr@SD`) that guides don't. */

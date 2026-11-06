@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Http, Programme, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Series, Source, xmltv};
 use tauri::{AppHandle, Manager, State, WindowEvent};
 use url::Url;
 
@@ -59,6 +59,12 @@ async fn catalog(http: State<'_, Http>, source: Source) -> Result<Catalog, Strin
 #[tauri::command]
 async fn stream_url(http: State<'_, Http>, source: Source, channel: Channel) -> Result<Url, String> {
     source.client(&http).stream_url(&channel).await.map_err(|e| e.to_string())
+}
+
+/// A series' episodes, asked for when its page opens (Xtream only; other sources have none).
+#[tauri::command]
+async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
+    source.client(&http).episodes(&series).await.map_err(|e| e.to_string())
 }
 
 /// Programmes from 3 h ago to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
@@ -140,6 +146,7 @@ pub fn run() {
             sources_save,
             catalog,
             stream_url,
+            episodes,
             guide,
             parse_location,
             automation

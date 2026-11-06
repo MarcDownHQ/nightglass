@@ -2,7 +2,7 @@
   import ChannelLogo from './ChannelLogo.svelte';
   import HudPanel from './HudPanel.svelte';
   import type { LiveItem } from './models';
-  import { dial, typing } from './nav.svelte';
+  import { dial, nav, typing } from './nav.svelte';
   import NeonTab from './NeonTab.svelte';
   import NeonText from './NeonText.svelte';
   import NowNextPanel from './NowNextPanel.svelte';
@@ -57,6 +57,15 @@
     tabs?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 
+  // A channel picked in the guide or the search: show it in All and tune it.
+  $effect(() => {
+    const item = nav.focusChannel && store.channels.find((c) => c.id === nav.focusChannel);
+    if (!item) return;
+    nav.focusChannel = null;
+    category = 'All';
+    void store.tune(item);
+  });
+
   function move(delta: number) {
     if (!list.length) return;
     const i = list.findIndex((c) => c.id === selected);
@@ -69,7 +78,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    if (player.expanded || typing(e) || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.key === 'ArrowDown') move(1);
     else if (e.key === 'ArrowUp') move(-1);
     else if (e.key === 'ArrowRight') shiftCategory(1);

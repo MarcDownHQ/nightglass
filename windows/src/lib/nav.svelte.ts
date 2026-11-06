@@ -1,7 +1,24 @@
-export type Section = 'live' | 'sources';
+import type { SeriesItem } from './models';
+
+export type Section = 'live' | 'guide' | 'movies' | 'series' | 'sources';
+
+/** The screens of the title bar, in order: Ctrl+1…5 picks them. */
+export const SECTIONS: { id: Section; title: string }[] = [
+  { id: 'live', title: 'Live' },
+  { id: 'guide', title: 'Guide' },
+  { id: 'movies', title: 'Movies' },
+  { id: 'series', title: 'Series' },
+  { id: 'sources', title: 'Sources' },
+];
 
 class Nav {
   section = $state<Section>('live');
+  /** The search palette is open. */
+  searching = $state(false);
+  /** A channel picked in the guide or the search, for the Live screen to select and tune. */
+  focusChannel = $state<string | null>(null);
+  /** The series whose page is open in the Series screen. */
+  openSeries = $state<SeriesItem | null>(null);
 }
 
 export const nav = new Nav();

@@ -1,6 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
-import { epgKey, type Catalog, type Channel, type LiveItem, type Programme, type Source } from './models';
+import {
+  epgKey,
+  type Catalog,
+  type Channel,
+  type Episode,
+  type LiveItem,
+  type MovieItem,
+  type Programme,
+  type SeriesItem,
+  type Source,
+} from './models';
 import { player, type Playable } from './player.svelte';
 
 /** Settings without secrets live in the webview's storage; sources (passwords) go through DPAPI. */
@@ -49,6 +59,18 @@ class Store {
       }),
     );
   });
+
+  movies = $derived(
+    this.visibleSources.flatMap((source) =>
+      (this.catalogs[source.id]?.movies ?? []).map((movie): MovieItem => ({ id: source.id + movie.id, source, movie })),
+    ),
+  );
+
+  series = $derived(
+    this.visibleSources.flatMap((source) =>
+      (this.catalogs[source.id]?.series ?? []).map((series): SeriesItem => ({ id: source.id + series.id, source, series })),
+    ),
+  );
 
   async init() {
     setInterval(() => (this.now = Date.now() / 1000), 30_000);
@@ -100,6 +122,7 @@ class Store {
     const { [source.id]: _, ...rest } = this.catalogs;
     this.catalogs = rest;
     if (this.activeSource === source.id) this.setActive(null);
+    if (player.current?.item?.source.id === source.id) player.stop();
     void this.save();
   }
 
@@ -145,6 +168,20 @@ class Store {
       number: channel.number ?? undefined,
       item,
     };
+  }
+
+  playMovie({ id, movie }: MovieItem) {
+    player.play({ id, title: movie.name, subtitle: movie.group ?? '', url: movie.stream, live: false });
+    void player.expand();
+  }
+
+  playEpisode({ series }: SeriesItem, e: Episode) {
+    player.play({ id: e.id, title: e.title, subtitle: `${series.name} · S${e.season}E${e.number}`, url: e.stream, live: false });
+    void player.expand();
+  }
+
+  episodes({ source, series }: SeriesItem): Promise<Episode[]> {
+    return invoke<Episode[]>('episodes', { source, series });
   }
 
   async tune(item: LiveItem) {

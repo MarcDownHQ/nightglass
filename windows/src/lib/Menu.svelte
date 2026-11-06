@@ -1,7 +1,21 @@
 <script lang="ts" generics="T">
-  /** A label that opens a short list; used for audio and subtitle tracks. */
-  let { label, items, onpick }: { label: string; items: { id: T; name: string; selected: boolean }[]; onpick: (id: T) => void } =
-    $props();
+  import type { Snippet } from 'svelte';
+
+  /** A label that opens a short list: audio and subtitle tracks, the source picker. */
+  let {
+    label,
+    items,
+    onpick,
+    trigger,
+    title,
+  }: {
+    label: string;
+    items: { id: T; name: string; selected: boolean }[];
+    onpick: (id: T) => void;
+    /** Replaces the plain label. */
+    trigger?: Snippet;
+    title?: string;
+  } = $props();
   let open = $state(false);
   let root: HTMLElement;
 </script>
@@ -9,9 +23,11 @@
 <svelte:window onmousedown={(e) => open && !root.contains(e.target as Node) && (open = false)} />
 
 <div class="menu" bind:this={root}>
-  <button class="trigger" aria-expanded={open} onclick={() => (open = !open)}>{label}</button>
+  <button class="trigger" class:custom={trigger} aria-expanded={open} {title} onclick={() => (open = !open)}>
+    {#if trigger}{@render trigger()}{:else}{label}{/if}
+  </button>
   {#if open}
-    <ul role="menu">
+    <ul role="menu" aria-label={label}>
       {#each items as item (item.id)}
         <li>
           <button role="menuitemradio" aria-checked={item.selected} class:on={item.selected} onclick={() => ((open = false), onpick(item.id))}>
@@ -32,8 +48,11 @@
     font-weight: 500;
     padding: 6px 4px;
   }
-  .trigger:hover,
-  .trigger[aria-expanded='true'] {
+  .trigger.custom {
+    padding: 0;
+  }
+  .trigger:not(.custom):hover,
+  .trigger:not(.custom)[aria-expanded='true'] {
     color: var(--cyan);
   }
   ul {
@@ -42,6 +61,8 @@
     right: 0;
     z-index: 10;
     min-width: 200px;
+    max-height: 60vh;
+    overflow-y: auto;
     margin: 0;
     padding: 6px;
     list-style: none;
@@ -57,6 +78,7 @@
     border-radius: 6px;
     font-size: 15px;
     color: var(--dim);
+    white-space: nowrap;
   }
   li button:hover {
     background: rgb(243 238 255 / 0.07);

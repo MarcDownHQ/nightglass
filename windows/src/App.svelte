@@ -2,11 +2,15 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
+  import GuideView from './lib/GuideView.svelte';
   import LiveView from './lib/LiveView.svelte';
-  import { nav, type Section } from './lib/nav.svelte';
+  import MoviesView from './lib/MoviesView.svelte';
+  import { nav, SECTIONS } from './lib/nav.svelte';
   import NeonText from './lib/NeonText.svelte';
   import { player } from './lib/player.svelte';
   import PlayerScreen from './lib/PlayerScreen.svelte';
+  import SearchPalette from './lib/SearchPalette.svelte';
+  import SeriesView from './lib/SeriesView.svelte';
   import SourcesView from './lib/SourcesView.svelte';
   import { store } from './lib/store.svelte';
   import TitleBar from './lib/TitleBar.svelte';
@@ -17,15 +21,14 @@
   let H = $state(innerHeight);
   let ready = $state(false);
 
-  function show(section: Section) {
-    nav.section = section;
-    void player.collapse();
-  }
-
   async function onkeydown(e: KeyboardEvent) {
+    const n = Number(e.key);
     if (e.ctrlKey && e.key === '.') player.stop();
-    else if (e.ctrlKey && e.key === '1') show('live');
-    else if (e.ctrlKey && e.key === '5') show('sources');
+    else if (e.ctrlKey && n >= 1 && n <= SECTIONS.length) {
+      nav.searching = false;
+      nav.section = SECTIONS[n - 1].id;
+      void player.collapse();
+    } else if (e.ctrlKey && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
     else if (e.key === 'F11') await win.setFullscreen(!(await win.isFullscreen()));
     else return;
     e.preventDefault();
@@ -42,7 +45,7 @@
 
 <div class="backdrop" style:clip-path={backdropClip(W, H, hole.rect)}></div>
 
-<!-- Stays mounted under the fullscreen player, so the list keeps its category and scroll. -->
+<!-- Stays mounted under the fullscreen player, so the screens keep their category and scroll. -->
 <div class="app" class:hidden={player.expanded}>
   <TitleBar />
   {#if nav.section === 'sources'}
@@ -54,12 +57,24 @@
       <button class="primary" onclick={() => (nav.section = 'sources')}>Add a source</button>
     </div>
   {:else if ready}
-    <LiveView />
+    {#if nav.section === 'live'}
+      <LiveView />
+    {:else if nav.section === 'guide'}
+      <GuideView />
+    {:else if nav.section === 'movies'}
+      <MoviesView />
+    {:else}
+      <SeriesView />
+    {/if}
   {/if}
 </div>
 
 {#if player.expanded}
   <PlayerScreen />
+{/if}
+
+{#if nav.searching}
+  <SearchPalette />
 {/if}
 
 <style>
