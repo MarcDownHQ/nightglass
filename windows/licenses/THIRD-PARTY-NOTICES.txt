@@ -41,8 +41,8 @@ Web interface
 -------------
 
 The interface is built with Svelte (MIT, Copyright (c) 2016-2026 Svelte Contributors)
-and @tauri-apps/api (MIT or Apache-2.0, Copyright (c) 2017-2026 Tauri Programme within
-The Commons Conservancy).
+and @tauri-apps/api and @tauri-apps/plugin-updater (MIT or Apache-2.0, Copyright (c)
+2017-2026 Tauri Programme within The Commons Conservancy).
 
 
 Fonts and icons
