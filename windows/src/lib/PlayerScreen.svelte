@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dial } from './nav.svelte';
+  import { dial, nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
   import ProgressLine from './ProgressLine.svelte';
@@ -36,7 +36,7 @@
 
   function onkeydown(e: KeyboardEvent) {
     poke();
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (nav.searching || e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.key === 'Escape' || e.key.toLowerCase() === 'f') void player.collapse();
     else if (e.key === ' ') player.togglePause();
     else if (e.key === 'ArrowLeft') player.seek(-10);

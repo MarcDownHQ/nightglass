@@ -1,21 +1,45 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { nav, type Section } from './nav.svelte';
+  import Menu from './Menu.svelte';
+  import { nav, SECTIONS, type Section } from './nav.svelte';
   import NeonText from './NeonText.svelte';
+  import { player } from './player.svelte';
   import { store } from './store.svelte';
 
   const win = getCurrentWindow();
+  const ALL = '';
+
+  const current = $derived(store.visibleSources.length === 1 ? store.visibleSources[0].name : 'All sources');
+  const choices = $derived([
+    { id: ALL, name: 'All sources', selected: store.visibleSources.length !== 1 },
+    ...store.sources.map((s) => ({ id: s.id, name: s.name, selected: store.activeSource === s.id })),
+  ]);
+
+  function show(section: Section) {
+    nav.section = section;
+    void player.collapse();
+  }
 </script>
 
 {#snippet tab(section: Section, title: string)}
-  <button class="nav" class:on={nav.section === section} onclick={() => (nav.section = section)}>{title}</button>
+  <button class="nav" class:on={nav.section === section} onclick={() => show(section)}>{title}</button>
 {/snippet}
 
 <header data-tauri-drag-region>
   <div class="brand"><NeonText text="NIGHTGLASS" size={26} /></div>
-  {@render tab('live', 'Live')}
+  {#each SECTIONS.slice(0, 4) as s (s.id)}{@render tab(s.id, s.title)}{/each}
   <div class="spacer" data-tauri-drag-region></div>
   {#if store.loading.size}<span class="loading mono">Loading…</span>{/if}
+  {#if store.sources.length > 1}
+    <Menu label="Source" items={choices} onpick={(id) => store.setActive(id || null)} title="Choose the source to show">
+      {#snippet trigger()}
+        <span class="pill picker"><span class="dot"></span><span class="name">{current}</span><span class="icon chevron">&#xE70D;</span></span>
+      {/snippet}
+    </Menu>
+  {/if}
+  <button class="pill" onclick={() => (nav.searching = true)}>
+    <span class="icon">&#xE721;</span> Search <span class="dim mono">Ctrl K</span>
+  </button>
   {@render tab('sources', 'Sources')}
   <div class="controls">
     <button class="icon" aria-label="Minimize" onclick={() => win.minimize()}>&#xE921;</button>
@@ -30,13 +54,13 @@
     height: 64px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 4px;
     padding-left: 28px;
   }
   /* Clicks fall through to the drag region. */
   .brand {
     pointer-events: none;
-    margin-right: 12px;
+    margin-right: 24px;
   }
   .spacer {
     flex: 1;
@@ -47,6 +71,7 @@
     font-size: 18px;
     font-weight: 600;
     color: var(--dim);
+    white-space: nowrap;
     transition: color 0.15s, text-shadow 0.3s;
   }
   .nav:hover {
@@ -59,6 +84,7 @@
       0 0 10px var(--magenta);
   }
   .loading {
+    margin-right: 12px;
     font-size: 11px;
     color: var(--acid);
     animation: pulse 1.2s ease-in-out infinite alternate;
@@ -67,6 +93,52 @@
     to {
       opacity: 0.35;
     }
+  }
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 12px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid rgb(243 238 255 / 0.15);
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: border-color 0.15s;
+  }
+  .pill:hover {
+    border-color: rgb(243 238 255 / 0.35);
+  }
+  .pill .icon {
+    font-size: 13px;
+  }
+  .pill .dim {
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .picker {
+    gap: 6px;
+    border-color: rgb(255 42 109 / 0.5);
+  }
+  .picker:hover {
+    border-color: var(--magenta);
+  }
+  .picker .name {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--magenta);
+    box-shadow: 0 0 4px var(--magenta);
+  }
+  .chevron {
+    font-size: 9px;
+    color: var(--dim);
   }
   .controls {
     display: flex;

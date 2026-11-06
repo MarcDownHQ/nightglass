@@ -1,0 +1,249 @@
+<script lang="ts">
+  import { fade } from 'svelte/transition';
+  import HudPanel from './HudPanel.svelte';
+  import type { Episode, SeriesItem } from './models';
+  import { nav } from './nav.svelte';
+  import NeonText from './NeonText.svelte';
+  import { player } from './player.svelte';
+  import { store } from './store.svelte';
+
+  let { item, close }: { item: SeriesItem; close: () => void } = $props();
+
+  let episodes = $state.raw<Episode[]>([]);
+  let season = $state(1);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+
+  const seasons = $derived([...new Set(episodes.map((e) => e.season))].sort((a, b) => a - b));
+  const list = $derived(episodes.filter((e) => e.season === season));
+
+  $effect(() => {
+    const current = item;
+    loading = true;
+    error = null;
+    store
+      .episodes(current)
+      .then((list) => {
+        if (current !== item) return;
+        episodes = list;
+        season = list.length ? Math.min(...list.map((e) => e.season)) : 1;
+      })
+      .catch((e) => (error = String(e)))
+      .finally(() => (loading = false));
+  });
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !e.defaultPrevented && !player.expanded && !nav.searching) {
+      e.preventDefault();
+      close();
+    }
+  }
+</script>
+
+<svelte:window {onkeydown} />
+
+<div class="detail" transition:fade={{ duration: 200 }}>
+  {#if item.series.poster}<img class="blur" src={item.series.poster} alt="" referrerpolicy="no-referrer" />{/if}
+  <div class="body">
+    <div class="cover">
+      {#if item.series.poster}<img src={item.series.poster} alt="" referrerpolicy="no-referrer" />{/if}
+    </div>
+    <div class="info">
+      <button class="back" onclick={close}><span class="icon">&#xE76B;</span> Back</button>
+      <NeonText text={item.series.name} size={48} lines={2} />
+      {#if item.series.plot}<p class="plot">{item.series.plot}</p>{/if}
+      {#if seasons.length > 1}
+        <div class="seasons">
+          {#each seasons as s (s)}
+            <button class:on={s === season} onclick={() => (season = s)}>Season {s}</button>
+          {/each}
+        </div>
+      {/if}
+      <HudPanel caption="Episodes" trailing={loading ? '' : String(list.length)} class="episodes">
+        <div class="list">
+          {#if loading}
+            <p class="note mono">Loading…</p>
+          {:else if error}
+            <p class="note mono error">{error}</p>
+          {:else if !episodes.length}
+            <p class="note">No episodes.</p>
+          {/if}
+          {#each list as e (e.id)}
+            <button class="episode" onclick={() => store.playEpisode(item, e)}>
+              <span class="num mono">{e.number}</span>
+              <span class="text">
+                <b>{e.title}</b>
+                {#if e.plot}<small>{e.plot}</small>{/if}
+              </span>
+              <span class="icon play">&#xE768;</span>
+            </button>
+          {/each}
+        </div>
+      </HudPanel>
+    </div>
+  </div>
+</div>
+
+<style>
+  .detail {
+    position: absolute;
+    inset: 64px 0 0;
+    overflow: hidden;
+  }
+  .blur {
+    position: absolute;
+    inset: -60px;
+    width: calc(100% + 120px);
+    height: calc(100% + 120px);
+    object-fit: cover;
+    filter: blur(40px);
+    opacity: 0.45;
+  }
+  .detail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgb(5 1 15 / 0.55);
+  }
+  .body {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+    padding: 24px 40px 32px;
+  }
+  .cover {
+    flex: none;
+    width: 260px;
+    aspect-ratio: 2 / 3;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--night);
+    box-shadow: 0 0 30px rgb(255 42 109 / 0.3);
+  }
+  .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .info {
+    flex: 1;
+    min-width: 0;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .back {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--cyan);
+  }
+  .back .icon {
+    font-size: 12px;
+  }
+  .plot {
+    margin: 0;
+    max-width: 700px;
+    font-size: 16px;
+    line-height: 1.45;
+    color: var(--dim);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+  }
+  .seasons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .seasons button {
+    padding: 4px 12px;
+    border-radius: 5px;
+    border: 1.5px solid rgb(243 238 255 / 0.2);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--dim);
+  }
+  .seasons button:hover {
+    color: var(--text);
+  }
+  .seasons button.on {
+    color: #fff;
+    border-color: var(--magenta);
+    box-shadow: 0 0 6px var(--magenta);
+  }
+  .info :global(.episodes) {
+    flex: 0 1 auto;
+    max-width: 900px;
+  }
+  .list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+  }
+  .note {
+    margin: 0;
+    padding: 16px;
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .note.error {
+    color: var(--magenta);
+  }
+  .episode {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    text-align: left;
+  }
+  .episode:hover,
+  .episode:focus-visible {
+    background: rgb(243 238 255 / 0.05);
+  }
+  .num {
+    flex: none;
+    width: 24px;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  .text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .text b,
+  .text small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .text b {
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .text small {
+    font-size: 14px;
+    color: var(--dim);
+  }
+  .play {
+    color: var(--magenta);
+    font-size: 14px;
+  }
+</style>
