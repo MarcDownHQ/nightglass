@@ -37,7 +37,20 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "lib/libmpv-2.dll": "libmpv-2.dll"
+      "lib/libmpv-2.dll": "libmpv-2.dll",
+      "lib/libmpv-version.txt": "licenses/libmpv-version.txt",
+      "../licenses/": "licenses/",
+      "../../LICENSE": "licenses/Nightglass-LICENSE.txt"
+    },
+    "publisher": "MarcDownHQ",
+    "copyright": "Copyright (c) 2026 MarcDownHQ",
+    "category": "Video",
+    "shortDescription": "Neon IPTV player",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
     }
   }
 }

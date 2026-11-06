@@ -18,6 +18,14 @@ try {
     & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $tmp libmpv-2.dll
     New-Item -ItemType Directory -Force $lib | Out-Null
     Copy-Item (Join-Path $tmp 'libmpv-2.dll') $lib
+    # Shipped with the installer, next to the licences: which build this is and where its sources are.
+    @(
+        "libmpv-2.dll: $($asset.name)",
+        "Build: https://github.com/zhongfly/mpv-winbuild/releases/tag/$($release.tag_name)",
+        "Build scripts and package versions: https://github.com/zhongfly/mpv-winbuild",
+        "mpv sources: https://github.com/mpv-player/mpv",
+        "FFmpeg sources: https://git.ffmpeg.org/ffmpeg.git"
+    ) | Set-Content -Encoding utf8 (Join-Path $lib 'libmpv-version.txt')
     # tauri-build keeps an older copy next to the exe: drop it and rerun the build script so the next build copies this one.
     Remove-Item (Join-Path $PSScriptRoot '..\target\*\libmpv-2.dll') -ErrorAction SilentlyContinue
     (Get-Item (Join-Path $PSScriptRoot '..\src-tauri\build.rs')).LastWriteTime = Get-Date

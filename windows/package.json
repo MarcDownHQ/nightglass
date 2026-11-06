@@ -9,7 +9,8 @@
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
-    "fetch-libmpv": "powershell -ExecutionPolicy Bypass -File scripts/fetch-libmpv.ps1"
+    "fetch-libmpv": "powershell -ExecutionPolicy Bypass -File scripts/fetch-libmpv.ps1",
+    "licenses": "cargo about generate -m src-tauri/Cargo.toml about.hbs -o licenses/rust-crates.html"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4"

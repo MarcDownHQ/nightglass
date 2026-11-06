@@ -2,7 +2,7 @@
 
 <img src="Nightglass/Assets.xcassets/AppIcon.appiconset/icon_256@2x.png" width="128" alt="Icône Nightglass">
 
-Lecteur IPTV natif pour macOS. Le portage Windows (Tauri + libmpv) est en cours dans [windows/](windows/README.md).
+Lecteur IPTV natif pour macOS. Une version Windows (Tauri + libmpv), avec les mêmes écrans, est dans [windows/](windows/README.md).
 
 ## Stack
 
@@ -28,7 +28,7 @@ Lecteur IPTV natif pour macOS. Le portage Windows (Tauri + libmpv) est en cours 
 4. EPG : maintenant / ensuite + grille.
 5. Lecteur : plein écran, pistes audio et sous-titres, raccourcis clavier.
 
-Hors MVP : enregistrement, catch-up, multi-écran, AirPlay, version Windows.
+Hors MVP : enregistrement, catch-up, multi-écran, AirPlay.
 
 ## Architecture
 
@@ -99,4 +99,4 @@ Le code de Nightglass est sous licence MIT : voir [LICENSE](LICENSE).
 Les moteurs de lecture gardent leur propre licence :
 
 - **AetherEngine** (macOS) : LGPL-3.0, avec une exception pour l'App Store.
-- **libmpv** (Windows) : la variante LGPL de [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild), soit mpv sous LGPL-2.1+ et FFmpeg sous LGPL-3.0+. Elle est chargée à l'exécution et n'est pas versionnée ici. Un installeur qui embarque `libmpv-2.dll` doit joindre ces licences et indiquer où obtenir leurs sources.
+- **libmpv** (Windows) : la variante LGPL de [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild), soit mpv sous LGPL-2.1+ et FFmpeg sous LGPL-3.0+. Elle est chargée à l'exécution et n'est pas versionnée ici. L'installeur Windows joint ces licences et indique où obtenir leurs sources ([windows/licenses/](windows/licenses/THIRD-PARTY-NOTICES.txt)).
