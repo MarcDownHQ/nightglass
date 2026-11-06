@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "IPTV clients without UI: M3U, Xtream Codes, Stalker, XMLTV, and their common models"
 edition = "2024"
 rust-version = "1.90"
+license = "MIT"
 
 [dependencies]
 flate2 = "1.1.10"
