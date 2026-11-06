@@ -5,6 +5,7 @@
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
   import { store } from './store.svelte';
+  import { updater } from './updater.svelte';
 
   const win = getCurrentWindow();
   const ALL = '';
@@ -30,6 +31,16 @@
   {#each SECTIONS.slice(0, 4) as s (s.id)}{@render tab(s.id, s.title)}{/each}
   <div class="spacer" data-tauri-drag-region></div>
   {#if store.loading.size}<span class="loading mono">Loading…</span>{/if}
+  {#if updater.available}
+    <button
+      class="pill update"
+      title={updater.error ?? `Install version ${updater.available.version}; Nightglass restarts`}
+      onclick={() => updater.install()}
+    >
+      <span class="icon">&#xE896;</span>
+      {updater.progress === null ? `Update ${updater.available.version}` : `Updating ${Math.round(updater.progress * 100)}%`}
+    </button>
+  {/if}
   {#if store.sources.length > 1}
     <Menu label="Source" items={choices} onpick={(id) => store.setActive(id || null)} title="Choose the source to show">
       {#snippet trigger()}
@@ -116,6 +127,13 @@
   .pill .dim {
     font-size: 11px;
     color: var(--dim);
+  }
+  .update {
+    color: var(--acid);
+    border-color: rgb(249 240 2 / 0.5);
+  }
+  .update:hover {
+    border-color: var(--acid);
   }
   .picker {
     gap: 6px;

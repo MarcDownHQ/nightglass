@@ -14,6 +14,7 @@
   import SourcesView from './lib/SourcesView.svelte';
   import { store } from './lib/store.svelte';
   import TitleBar from './lib/TitleBar.svelte';
+  import { updater } from './lib/updater.svelte';
   import { backdropClip, hole } from './lib/video.svelte';
 
   const win = getCurrentWindow();
@@ -35,6 +36,7 @@
   }
 
   onMount(async () => {
+    void updater.check();
     await store.init();
     ready = true;
     await runAutomation();

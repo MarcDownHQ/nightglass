@@ -9,7 +9,8 @@ Même périmètre que la version macOS :
 - sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque ;
 - écrans **Live** (liste, aperçu, now / next), **Guide** (grille sur 3 h, paginée), **Movies** et **Series** (affiches, saisons, épisodes), **Search** (Ctrl+K) et **Sources** ;
 - lecteur plein écran : pistes audio et sous-titres, avance / retour pour les films, zapping en direct ;
-- installeur NSIS avec les licences de libmpv, FFmpeg et des crates Rust.
+- installeur NSIS avec les licences de libmpv, FFmpeg et des crates Rust ;
+- mises à jour signées, proposées dans l'app.
 
 ## Architecture
 
@@ -52,7 +53,16 @@ Le workflow [Windows](../.github/workflows/windows.yml) vérifie et construit l'
 
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
 2. Pousser un tag `windows-v<version>` (par exemple `windows-v0.2.0`).
-3. Le workflow crée une release **brouillon** avec l'installeur : la relire sur GitHub, puis la publier.
+3. Le workflow crée une release **brouillon** avec l'installeur et `latest.json` : la relire sur GitHub, puis la publier.
+
+Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur, vérifie sa signature et s'installe, puis redémarre.
+
+La signature des mises à jour utilise une paire de clés Tauri :
+
+- la clé publique est dans `src-tauri/tauri.conf.json` ;
+- la clé privée et son mot de passe sont dans les secrets du dépôt (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), avec une copie hors du dépôt.
+
+**Perdre la clé privée empêche toute mise à jour** des copies déjà installées : il faudrait réinstaller à la main. Une build locale n'a pas besoin de la clé ; pour produire aussi le `.sig`, ajouter `--config src-tauri/tauri.updater.conf.json` avec la clé dans `TAURI_SIGNING_PRIVATE_KEY`.
 
 L'exe n'est pas signé : Windows affiche l'avertissement SmartScreen à l'installation tant qu'il n'est pas signé avec un certificat de signature de code.
 
