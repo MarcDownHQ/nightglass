@@ -1,6 +1,8 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
+  import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
+  import { episodeKey, library } from './library.svelte';
   import type { Episode, SeriesItem } from './models';
   import { nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
@@ -31,6 +33,30 @@
       .catch((e) => (error = String(e)))
       .finally(() => (loading = false));
   });
+
+  function toggleWatched(e: Episode) {
+    const key = episodeKey(item.id, e);
+    library.setWatched(key, { kind: "episode", series: item.id, episode: e }, !library.progress[key]?.watched);
+  }
+
+  function menu(ev: MouseEvent, e: Episode) {
+    const key = episodeKey(item.id, e);
+    const started = library.startAt(key) > 0;
+    contextMenu.open(ev, [
+      { label: started ? "Resume" : "Play", icon: "", action: () => void store.playEpisode(item, e, episodes) },
+      ...(started ? [{ label: "Play from the start", icon: "", action: () => void store.playEpisode(item, e, episodes, true) }] : []),
+      library.progress[key]?.watched
+        ? { label: "Mark as unwatched", icon: "", action: () => toggleWatched(e) }
+        : { label: "Mark as watched", icon: "", action: () => toggleWatched(e) },
+      { label: "Mark the season as watched", icon: "", action: () => markSeason(e.season) },
+    ]);
+  }
+
+  function markSeason(s: number) {
+    for (const e of episodes.filter((x) => x.season === s)) {
+      library.setWatched(episodeKey(item.id, e), { kind: "episode", series: item.id, episode: e }, true);
+    }
+  }
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && !e.defaultPrevented && !player.expanded && !nav.searching) {
@@ -69,14 +95,19 @@
             <p class="note">No episodes.</p>
           {/if}
           {#each list as e (e.id)}
-            <button class="episode" onclick={() => store.playEpisode(item, e)}>
-              <span class="num mono">{e.number}</span>
-              <span class="text">
-                <b>{e.title}</b>
-                {#if e.plot}<small>{e.plot}</small>{/if}
-              </span>
-              <span class="icon play">&#xE768;</span>
-            </button>
+            {@const p = library.progress[episodeKey(item.id, e)]}
+            <div class="episode" class:watched={p?.watched}>
+              <button class="main" onclick={() => store.playEpisode(item, e, episodes)} oncontextmenu={(ev) => menu(ev, e)}>
+                <span class="num mono">{e.number}</span>
+                <span class="text">
+                  <b>{e.title}</b>
+                  {#if e.plot}<small>{e.plot}</small>{/if}
+                  {#if p && !p.watched && p.position > 30}<span class="bar"><span style:width="{(p.position / p.duration) * 100}%"></span></span>{/if}
+                </span>
+                <span class="icon play">&#xE768;</span>
+              </button>
+              <button class="icon seen" title={p?.watched ? "Mark as unwatched" : "Mark as watched"} onclick={() => toggleWatched(e)}>&#xE73E;</button>
+            </div>
           {/each}
         </div>
       </HudPanel>
@@ -204,7 +235,12 @@
     color: var(--magenta);
   }
   .episode {
-    width: 100%;
+    display: flex;
+    align-items: center;
+  }
+  .episode .main {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 14px;
@@ -212,8 +248,39 @@
     text-align: left;
   }
   .episode:hover,
-  .episode:focus-visible {
+  .episode:focus-within {
     background: rgb(243 238 255 / 0.05);
+  }
+  .episode.watched .text {
+    opacity: 0.55;
+  }
+  .seen {
+    flex: none;
+    margin-right: 10px;
+    padding: 6px;
+    border-radius: 50%;
+    font-size: 13px;
+    color: rgb(243 238 255 / 0.25);
+  }
+  .seen:hover {
+    color: var(--text);
+  }
+  .watched .seen {
+    color: var(--acid);
+  }
+  .bar {
+    display: block;
+    height: 3px;
+    margin-top: 4px;
+    max-width: 320px;
+    background: rgb(243 238 255 / 0.12);
+    border-radius: 2px;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--magenta);
   }
   .num {
     flex: none;

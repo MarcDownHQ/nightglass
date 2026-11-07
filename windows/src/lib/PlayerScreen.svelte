@@ -9,6 +9,8 @@
   import { clock, displayName, hm, progress } from './theme';
   import TrackMenus from './TrackMenus.svelte';
   import { videoHole } from './video.svelte';
+  import Volume from './Volume.svelte';
+  import { library } from './library.svelte';
 
   /** Fullscreen playback: nothing on the picture but a thin HUD that fades when the pointer rests. */
   let idle = $state(false);
@@ -43,13 +45,19 @@
     else if (e.key === 'ArrowRight') player.seek(10);
     else if (e.key === 'ArrowUp') zap(-1);
     else if (e.key === 'ArrowDown') zap(1);
+    else if (e.key.toLowerCase() === 'n' && player.current?.next) player.current.next.play();
     else if (/^[0-9]$/.test(e.key)) {
       dial.type(e.key, (n) => {
-        const found = store.channels.find((c) => c.channel.number === n);
+        const found = store.byNumber(n);
         if (found) void store.tune(found);
       });
     } else return;
     e.preventDefault();
+  }
+
+  function onwheel(e: WheelEvent) {
+    poke();
+    player.setVolume(library.volume + (e.deltaY < 0 ? 5 : -5));
   }
 
   function seekAt(e: MouseEvent) {
@@ -60,7 +68,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="screen" class:idle use:videoHole={0} onmousemove={poke} onmousedown={poke} ondblclick={() => player.collapse()} role="presentation">
+<div class="screen" class:idle use:videoHole={0} onmousemove={poke} onmousedown={poke} ondblclick={() => player.collapse()} {onwheel} role="presentation">
   {#if player.loading || player.error}
     <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current?.title ?? '')}…`}</p>
   {/if}
@@ -72,6 +80,7 @@
       <h1>{displayName(player.current?.title ?? '')}</h1>
       <span class="spacer"></span>
       <SignalBars level={player.signal} />
+      <Volume />
       <TrackMenus />
       <StopButton />
       <button class="icon back" onclick={() => player.collapse()} title="Back to the list (Esc), playback continues">&#xE73F;</button>
@@ -104,6 +113,12 @@
             <span>{clock(player.duration)}</span>
           </div>
         </div>
+        {#if player.current?.next}
+          <button class="next-episode" onclick={() => player.current?.next?.play()} title="Next episode (N)">
+            <span class="label mono">Next episode</span>
+            <span>{player.current.next.title} <span class="icon">&#xE893;</span></span>
+          </button>
+        {/if}
       {/if}
     </footer>
   </div>
@@ -223,6 +238,29 @@
   .fill {
     background: var(--cyan);
     box-shadow: 0 0 8px var(--cyan);
+  }
+  .next-episode {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgb(5 217 232 / 0.4);
+    background: rgb(5 1 15 / 0.6);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .next-episode:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgb(5 217 232 / 0.35);
+  }
+  .next-episode .label {
+    color: var(--cyan);
+  }
+  .next-episode .icon {
+    font-size: 12px;
   }
   .status {
     position: absolute;

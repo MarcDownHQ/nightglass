@@ -1,10 +1,15 @@
 <script lang="ts">
   /** Filter capsule: a neon outline that lights up when selected. */
-  let { title, selected, color = 'var(--magenta)', onclick }: { title: string; selected: boolean; color?: string; onclick: () => void } =
-    $props();
+  let {
+    title,
+    selected,
+    color = 'var(--magenta)',
+    onclick,
+    oncontextmenu,
+  }: { title: string; selected: boolean; color?: string; onclick: () => void; oncontextmenu?: (e: MouseEvent) => void } = $props();
 </script>
 
-<button class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick}>{title}</button>
+<button class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
 
 <style>
   .tab {

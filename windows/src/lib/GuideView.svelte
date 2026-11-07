@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChannelLogo from './ChannelLogo.svelte';
+  import { openChannelMenu } from './channelMenu';
   import HudPanel from './HudPanel.svelte';
   import type { LiveItem } from './models';
   import { nav, typing } from './nav.svelte';
@@ -26,6 +27,22 @@
   const perSecond = $derived(Math.max(0, width - LABEL) / WINDOW);
   const rows = $derived(store.channels.filter((c) => store.programmes(c.channel).length));
   const day = $derived(new Date(start * 1000).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }));
+
+  let listView: { reveal: (index: number) => void } | undefined = $state();
+  /** The channel asked for from a right-click elsewhere, marked for a moment. */
+  let marked = $state<string | null>(null);
+
+  $effect(() => {
+    const id = nav.guideChannel;
+    if (!id || !listView) return;
+    nav.guideChannel = null;
+    const i = rows.findIndex((c) => c.id === id);
+    if (i < 0) return player.notify("No programme guide for this channel");
+    shift = 0;
+    listView.reveal(i);
+    marked = id;
+    setTimeout(() => marked === id && (marked = null), 2500);
+  });
 
   function open(item: LiveItem) {
     nav.focusChannel = item.id;
@@ -63,7 +80,7 @@
             {/each}
           </div>
         </div>
-        <VirtualList items={rows} rowHeight={ROW} key={(c) => c.id} row={guideRow} />
+        <VirtualList items={rows} rowHeight={ROW} key={(c) => c.id} row={guideRow} bind:this={listView} />
       </div>
     {/if}
   </HudPanel>
@@ -72,8 +89,8 @@
 {#snippet guideRow(item: LiveItem)}
   {@const color = neon(item.channel.name)}
   {@const now = store.now}
-  <div class="row" style:--c={color}>
-    <div class="label" style:width="{LABEL}px">
+  <div class="row" class:marked={marked === item.id} style:--c={color}>
+    <div class="label" style:width="{LABEL}px" oncontextmenu={(e) => openChannelMenu(e, item)} role="presentation">
       <ChannelLogo channel={item.channel} {color} size={34} />
       <b>{displayName(item.channel.name)}</b>
     </div>
@@ -166,6 +183,10 @@
     display: flex;
     border-bottom: 1px solid rgb(5 217 232 / 0.08);
     box-sizing: border-box;
+  }
+  .row.marked {
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    box-shadow: inset 3px 0 0 var(--c);
   }
   .label {
     flex: none;

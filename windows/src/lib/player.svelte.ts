@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { library } from './library.svelte';
 import type { LiveItem } from './models';
 
 /** What the player is showing. */
@@ -14,6 +15,12 @@ export interface Playable {
   number?: number;
   /** The channel, for live TV: zapping and now/next. */
   item?: LiveItem;
+  /** Seconds to start at: where a film was left. */
+  start?: number;
+  /** Films and episodes: the position as it plays, then once more at the end or on stop. */
+  onprogress?: (time: number, duration: number, final: boolean) => void;
+  /** The next episode, offered in the HUD and played when this one ends. */
+  next?: { title: string; play: () => void };
 }
 
 /** One entry of mpv's `track-list`. */
@@ -48,6 +55,9 @@ class Player {
   height = $state(0);
   tracks = $state<Track[]>([]);
   error = $state<string | null>(null);
+  /** A short message over the picture: the volume as it changes. */
+  osd = $state<string | null>(null);
+  private osdTimer: ReturnType<typeof setTimeout> | undefined;
   private started = false;
   private retunes = 0;
   private wasFullscreen = false;
@@ -56,6 +66,8 @@ class Player {
     void listen<MpvEvent>('mpv', ({ payload }) => this.handle(payload));
     // mpv outlives the page: after a reload, start from silence rather than an orphan stream.
     void invoke('mpv_command', { args: ['stop'] });
+    void this.applyVolume();
+    void this.applyLanguages();
   }
 
   get signal(): number {
@@ -75,6 +87,7 @@ class Player {
 
   play(p: Playable) {
     if (p.id === this.current?.id && !this.error) return;
+    this.report(true);
     this.current = p;
     this.retunes = 0;
     this.load(p);
@@ -86,10 +99,19 @@ class Player {
     this.started = false;
     this.time = 0;
     this.duration = 0;
-    invoke('mpv_play', { url: p.url, headers: p.headers ?? {} }).catch((e) => (this.error = String(e)));
+    // Per-file options: the start position and the subtitle choice must not carry over to the next file.
+    const options = [p.start ? `start=${Math.floor(p.start)}` : '', 'aid=auto', `sid=${library.subOff ? 'no' : 'auto'}`].filter(Boolean).join(',');
+    invoke('mpv_play', { url: p.url, headers: p.headers ?? {}, options }).catch((e) => (this.error = String(e)));
+  }
+
+  /** Tells the film or episode where it is; `final` when it stops being played. */
+  private report(final: boolean) {
+    const p = this.current;
+    if (p?.onprogress && this.started && this.duration > 0) p.onprogress(this.time, this.duration, final);
   }
 
   stop() {
+    this.report(true);
     void invoke('mpv_command', { args: ['stop'] });
     this.current = null;
     this.loading = false;
@@ -131,8 +153,44 @@ class Player {
     void invoke('mpv_command', { args: ['seek', String(seconds), 'absolute'] });
   }
 
+  /** The language of the track picked becomes the preferred one, for every next file. */
   selectTrack(type: 'audio' | 'sub', id: number | 'no') {
     void invoke('mpv_set', { name: type === 'audio' ? 'aid' : 'sid', value: String(id) });
+    const lang = id === 'no' ? null : (this.tracks.find((t) => t.type === type && t.id === id)?.lang ?? null);
+    if (type === 'audio') {
+      if (lang) library.setAudioLang(lang);
+    } else library.setSubtitles(lang ?? library.subLang, id === 'no');
+    void this.applyLanguages();
+  }
+
+  private async applyLanguages() {
+    const list = (lang: string | null) => (lang ? lang : '');
+    await invoke('mpv_set', { name: 'alang', value: list(library.audioLang) }).catch(() => {});
+    await invoke('mpv_set', { name: 'slang', value: list(library.subLang) }).catch(() => {});
+  }
+
+  setVolume(volume: number) {
+    library.setVolume(volume, false);
+    void this.applyVolume();
+    this.notify(`Volume ${library.volume}%`);
+  }
+
+  toggleMute() {
+    library.setVolume(library.volume, !library.muted);
+    void this.applyVolume();
+    this.notify(library.muted ? 'Muted' : `Volume ${library.volume}%`);
+  }
+
+  private async applyVolume() {
+    await invoke('mpv_set', { name: 'volume', value: String(library.volume) }).catch(() => {});
+    await invoke('mpv_set', { name: 'mute', value: library.muted ? 'yes' : 'no' }).catch(() => {});
+  }
+
+  /** A short message at the bottom of the window. */
+  notify(text: string) {
+    this.osd = text;
+    clearTimeout(this.osdTimer);
+    this.osdTimer = setTimeout(() => (this.osd = null), 1200);
   }
 
   private handle(e: MpvEvent) {
@@ -152,7 +210,11 @@ class Player {
           this.loading = false;
           this.error = e.error ?? 'Stream ended.';
         } else {
-          this.stop();
+          // Watched to the end: tell it so, then the next episode if there is one.
+          if (p.onprogress && this.duration > 0) p.onprogress(this.duration, this.duration, true);
+          this.started = false;
+          if (p.next) p.next.play();
+          else this.stop();
         }
         break;
       }
@@ -173,6 +235,7 @@ class Player {
         break;
       case 'time-pos':
         this.time = n;
+        this.report(false);
         break;
       case 'duration':
         this.duration = n;
