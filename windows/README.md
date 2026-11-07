@@ -89,6 +89,7 @@ Le workflow [Windows](../.github/workflows/windows.yml) vérifie et construit l'
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
 2. Pousser un tag `windows-v<version>` (par exemple `windows-v0.2.0`).
 3. Le workflow crée une release **brouillon** avec l'installeur et `latest.json` : la relire sur GitHub, puis la publier.
+4. Déclarer l'installeur publié à Microsoft (voir [Faux positif Defender](#faux-positif-defender-à-faire-à-chaque-version)).
 
 Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur, vérifie sa signature et s'installe, puis redémarre.
 
@@ -100,6 +101,22 @@ La signature des mises à jour utilise une paire de clés Tauri :
 **Perdre la clé privée empêche toute mise à jour** des copies déjà installées : il faudrait réinstaller à la main. Une build locale n'a pas besoin de la clé ; pour produire aussi le `.sig`, ajouter `--config src-tauri/tauri.updater.conf.json` avec la clé dans `TAURI_SIGNING_PRIVATE_KEY`.
 
 L'exe n'est pas signé : Windows affiche l'avertissement SmartScreen à l'installation tant qu'il n'est pas signé avec un certificat de signature de code.
+
+### Faux positif Defender, à faire à chaque version
+
+Un exe non signé et tout neuf peut être bloqué au lancement par Defender (par exemple `Trojan:Win32/Bearfoos.A!ml` : `!ml` = verdict du modèle automatique dans le cloud, pas un vrai virus). Chaque version a une nouvelle empreinte, donc il faut la déclarer à Microsoft après chaque publication. C'est gratuit.
+
+1. Télécharger l'installeur **publié** (`Nightglass_<version>_x64-setup.exe` sur la release GitHub), pas une build locale : l'empreinte n'est pas la même.
+2. Sur <https://www.microsoft.com/wdsi/filesubmission>, se connecter et choisir **Software developer** (traité en priorité, en quelques heures à 2 jours).
+   - Product : Microsoft Defender Antivirus (Windows 10/11)
+   - Company name : MarcDownHQ
+   - File : l'installeur (et `nightglass.exe` installé s'il a été détecté)
+   - Detection name : celui affiché dans Sécurité Windows → Historique de protection (s'il y en a un)
+   - What do you believe this file is? : Incorrectly detected as malware/malicious
+   - Additional information :
+     > Nightglass is an open-source IPTV player (MIT license) built with Tauri. Source and CI builds: https://github.com/MarcDownHQ/nightglass. It loads libmpv for video playback, stores source credentials with DPAPI and uses the Tauri updater.
+3. Une fois le verdict « Not malware » reçu, mettre les définitions à jour (PowerShell admin) : `& "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -SignatureUpdate`.
+4. Si l'app a été mise en quarantaine : la réinstaller, ou la restaurer depuis l'Historique de protection. Éviter « Autoriser sur l'appareil », qui autorise ce nom de menace partout.
 
 ## Tests
 
