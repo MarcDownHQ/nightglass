@@ -11,6 +11,7 @@
   import { videoHole } from './video.svelte';
   import Volume from './Volume.svelte';
   import { library } from './library.svelte';
+  import { friendly } from './errors';
 
   /** Fullscreen playback: nothing on the picture but a thin HUD that fades when the pointer rests. */
   let idle = $state(false);
@@ -87,7 +88,10 @@
     <div class="drag" data-tauri-drag-region></div>
   {/if}
   {#if player.loading || player.error}
-    <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current?.title ?? '')}…`}</p>
+    <div class="status" class:error={player.error}>
+      {player.error ? friendly(player.error) : `Loading ${displayName(player.current?.title ?? '')}…`}
+      {#if player.error}<button class="retry" onclick={() => player.retry()}>Retry</button>{/if}
+    </div>
   {/if}
   {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
 
@@ -213,6 +217,20 @@
     50% {
       opacity: 0.4;
     }
+  }
+  .retry {
+    display: block;
+    margin: 10px auto 0;
+    padding: 5px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .status {
+    max-width: 60%;
+    text-align: center;
   }
   .live-edge {
     flex: none;

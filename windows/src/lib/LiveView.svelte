@@ -3,6 +3,7 @@
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
   import { organizer } from './dialogs.svelte';
   import HudPanel from './HudPanel.svelte';
+  import { friendly } from './errors';
   import { library } from './library.svelte';
   import { multiview } from './tilesState.svelte';
   import { categoryKey, categoryLabel, type SortMode } from './lineup';
@@ -179,7 +180,7 @@
     else if (e.key === 'ArrowUp') move(-1);
     else if (e.key === 'ArrowRight') shiftTab(1);
     else if (e.key === 'ArrowLeft') shiftTab(-1);
-    else if (e.key === 'Enter') void player.expand();
+    else if (e.key === 'Enter' || e.key.toLowerCase() === 'f') void player.expand();
     else if (e.key === 'Escape') player.stop();
     else if (e.key === ' ') player.togglePause();
     else if (e.key.toLowerCase() === 's') toggleFavorite();
@@ -234,7 +235,10 @@
     {#if player.current && !player.expanded}
       <div class="preview" use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
         {#if player.loading || player.error}
-          <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current.title)}…`}</p>
+          <div class="status" class:error={player.error}>
+            {player.error ? friendly(player.error) : `Loading ${displayName(player.current.title)}…`}
+            {#if player.error}<button class="retry" onclick={() => player.retry()}>Retry</button>{/if}
+          </div>
         {/if}
         <div class="corner">
           {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
@@ -244,7 +248,7 @@
       </div>
     {:else}
       <div class="preview empty">
-        <p class="status" class:error={player.error}>{player.error ?? 'Select a channel'}</p>
+        <p class="status" class:error={player.error}>{player.error ? friendly(player.error) : 'Select a channel'}</p>
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
       </div>
     {/if}
@@ -469,6 +473,16 @@
   }
   .feeds:hover :global(*) {
     filter: brightness(1.4);
+  }
+  .retry {
+    display: block;
+    margin: 10px auto 0;
+    padding: 5px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-size: 14px;
+    font-weight: 600;
   }
   .corner {
     display: flex;

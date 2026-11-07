@@ -39,3 +39,11 @@ class EpgMatch {
 }
 
 export const epgMatch = new EpgMatch();
+
+/** The Settings and keyboard-help windows. */
+class Panels {
+  settings = $state(false);
+  help = $state(false);
+}
+
+export const panels = new Panels();

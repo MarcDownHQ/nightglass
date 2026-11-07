@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::http::{double, int, objects, str, url};
 use crate::xmltv::{civil_from_days, days_from_civil};
-use crate::{Catalog, Channel, Episode, Http, IptvError, Movie, Result, Series};
+use crate::{Account, Catalog, Channel, Episode, Http, IptvError, Movie, Result, Series};
 
 /// Xtream Codes `player_api.php`.
 pub struct XtreamClient {
@@ -68,15 +68,29 @@ impl XtreamClient {
     }
 
     pub async fn authenticate(&self) -> Result<()> {
+        self.account().await.map(|_| ())
+    }
+
+    /// Checks the credentials and reads the subscription: status, expiry, connections.
+    pub async fn account(&self) -> Result<Account> {
         let root = self.get(None, &[]).await?;
-        match int(root.get("user_info").and_then(|u| u.get("auth"))) {
-            Some(1) => Ok(()),
-            _ => Err(IptvError::AuthFailed),
+        let info = root.get("user_info");
+        if int(info.and_then(|u| u.get("auth"))) != Some(1) {
+            return Err(IptvError::AuthFailed);
         }
+        let field = |name: &str| info.and_then(|u| u.get(name));
+        Ok(Account {
+            status: str(field("status")),
+            // "0", "" or null: never expires.
+            expires: int(field("exp_date")).filter(|&t| t > 0),
+            max_connections: int(field("max_connections")),
+            active_connections: int(field("active_cons")),
+            trial: int(field("is_trial")) == Some(1),
+        })
     }
 
     pub async fn catalog(&self) -> Result<Catalog> {
-        self.authenticate().await?;
+        let account = self.account().await?;
         let (lc, vc, sc, live, vod, series) = tokio::try_join!(
             self.categories("get_live_categories"),
             self.categories("get_vod_categories"),
@@ -135,7 +149,7 @@ impl XtreamClient {
                 })
             })
             .collect();
-        Ok(Catalog { channels, movies, series: shows, epg_url: Some(self.with_credentials("xmltv.php")) })
+        Ok(Catalog { channels, movies, series: shows, epg_url: Some(self.with_credentials("xmltv.php")), account: Some(account) })
     }
 
     /// `timeshift/<user>/<pass>/<minutes>/<YYYY-MM-DD:HH-MM>/<id>.ts`, with the start in the server's
@@ -211,7 +225,7 @@ mod tests {
     async fn server(auth: i32) -> MockServer {
         let s = MockServer::start().await;
         let routes = [
-            (None, format!(r#"{{"user_info":{{"auth":{auth},"status":"Active"}},"server_info":{{}}}}"#)),
+            (None, format!(r#"{{"user_info":{{"auth":{auth},"status":"Active","exp_date":"1798761600","max_connections":"2","active_cons":"1","is_trial":"0"}},"server_info":{{}}}}"#)),
             (Some("get_live_categories"), r#"[{"category_id":"1","category_name":"News"}]"#.into()),
             (
                 Some("get_live_streams"),
@@ -258,6 +272,8 @@ mod tests {
         assert_eq!(movie.poster, None);
         assert!(cat.series.is_empty());
         assert_eq!(cat.epg_url.unwrap().as_str(), format!("{}/xmltv.php?username=u&password=p", s.uri()));
+        let account = cat.account.unwrap();
+        assert_eq!((account.status.as_deref(), account.expires, account.max_connections, account.active_connections), (Some("Active"), Some(1_798_761_600), Some(2), Some(1)));
     }
 
     #[tokio::test]

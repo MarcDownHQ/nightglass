@@ -55,6 +55,16 @@ export interface Catalog {
   movies: Movie[];
   series: Series[];
   epgUrl: string | null;
+  account?: Account | null;
+}
+
+/** An IPTV subscription as the server describes it (Xtream). Times are Unix seconds. */
+export interface Account {
+  status: string | null;
+  expires: number | null;
+  maxConnections: number | null;
+  activeConnections: number | null;
+  trial: boolean;
 }
 
 export type SourceKind =

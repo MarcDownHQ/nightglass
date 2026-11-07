@@ -1,0 +1,151 @@
+<script lang="ts">
+  import { getVersion } from '@tauri-apps/api/app';
+  import { organizer, panels } from './dialogs.svelte';
+  import Modal from './Modal.svelte';
+  import { options, type StartScreen } from './options.svelte';
+  import { exportSettings, importSettings } from './settings';
+  import { updater } from './updater.svelte';
+
+  let version = $state('');
+  $effect(() => void getVersion().then((v) => (version = v)));
+
+  const STARTS: [StartScreen, string, string][] = [
+    ['home', 'Home', 'The last channel, recents, favourites and what was left half-watched'],
+    ['live', 'Live', 'The channel list'],
+    ['last', 'Last channel', 'Live, playing the channel watched last'],
+  ];
+</script>
+
+<Modal title="Settings" close={() => (panels.settings = false)}>
+  <div class="settings">
+    <section>
+      <h3 class="mono">At launch</h3>
+      {#each STARTS as [value, label, hint] (value)}
+        <label class="choice">
+          <input type="radio" name="start" checked={options.startScreen === value} onchange={() => options.set('startScreen', value)} />
+          <span><b>{label}</b><small>{hint}</small></span>
+        </label>
+      {/each}
+      <label class="choice">
+        <input type="checkbox" checked={options.startFullscreen} onchange={(e) => options.set('startFullscreen', e.currentTarget.checked)} />
+        <span><b>Fullscreen window</b><small>F11 switches at any time</small></span>
+      </label>
+    </section>
+
+    <section>
+      <h3 class="mono">Interface size</h3>
+      <div class="zoom">
+        <button onclick={() => options.stepZoom(-0.1)} title="Smaller (Ctrl −)">−</button>
+        <span class="mono">{Math.round(options.zoom * 100)} %</span>
+        <button onclick={() => options.stepZoom(0.1)} title="Larger (Ctrl +)">+</button>
+        <button class="link" disabled={options.zoom === 1} onclick={() => options.set('zoom', 1)}>Reset (Ctrl 0)</button>
+      </div>
+      <small class="hint">Larger for a TV across the room.</small>
+    </section>
+
+    <section>
+      <h3 class="mono">Channels and parental control</h3>
+      <button
+        class="link"
+        onclick={() => {
+          panels.settings = false;
+          organizer.open = true;
+        }}>Categories, favourites lists and PIN…</button
+      >
+    </section>
+
+    <section>
+      <h3 class="mono">Settings file</h3>
+      <div class="row">
+        <button class="link" onclick={exportSettings}>Export…</button>
+        <button class="link" onclick={importSettings}>Import…</button>
+      </div>
+      <small class="hint">Sources, favourites, lists, hidden categories, progress: to move to another PC.</small>
+    </section>
+
+    <section>
+      <h3 class="mono">Nightglass {version}</h3>
+      <div class="row">
+        <button
+          class="link"
+          onclick={() => {
+            panels.settings = false;
+            panels.help = true;
+          }}>Keyboard shortcuts (?)</button
+        >
+        {#if updater.available}
+          <button class="link" onclick={() => updater.install()}>Install {updater.available.version}</button>
+        {/if}
+      </div>
+    </section>
+  </div>
+</Modal>
+
+<style>
+  .settings {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  h3 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--acid);
+  }
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+  }
+  .choice input {
+    margin-top: 4px;
+    accent-color: var(--magenta);
+  }
+  .choice span {
+    display: flex;
+    flex-direction: column;
+  }
+  .choice b {
+    font-size: 16px;
+  }
+  .choice small,
+  .hint {
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .zoom {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .zoom button:not(.link) {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgb(243 238 255 / 0.2);
+    font-size: 18px;
+  }
+  .zoom span {
+    min-width: 56px;
+    text-align: center;
+  }
+  .row {
+    display: flex;
+    gap: 20px;
+  }
+  .link {
+    align-self: flex-start;
+    color: var(--cyan);
+    font-size: 15px;
+  }
+  .link:disabled {
+    opacity: 0.4;
+  }
+</style>

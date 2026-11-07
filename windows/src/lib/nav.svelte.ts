@@ -1,9 +1,10 @@
 import type { SeriesItem } from './models';
 
-export type Section = 'live' | 'guide' | 'movies' | 'series' | 'sources';
+export type Section = 'home' | 'live' | 'guide' | 'movies' | 'series' | 'sources';
 
-/** The screens of the title bar, in order: Ctrl+1…5 picks them. */
+/** The screens of the title bar, in order: Ctrl+1…6 picks them. */
 export const SECTIONS: { id: Section; title: string }[] = [
+  { id: 'home', title: 'Home' },
   { id: 'live', title: 'Live' },
   { id: 'guide', title: 'Guide' },
   { id: 'movies', title: 'Movies' },

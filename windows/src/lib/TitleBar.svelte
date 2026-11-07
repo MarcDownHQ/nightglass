@@ -6,7 +6,7 @@
   import { player } from './player.svelte';
   import { store } from './store.svelte';
   import { updater } from './updater.svelte';
-  import { prompt } from './dialogs.svelte';
+  import { panels, prompt } from './dialogs.svelte';
   import { library } from './library.svelte';
   import { multiview } from './tilesState.svelte';
 
@@ -43,7 +43,7 @@
 
 <header data-tauri-drag-region>
   <div class="brand"><NeonText text="NIGHTGLASS" size={26} /></div>
-  {#each SECTIONS.slice(0, 4) as s (s.id)}{@render tab(s.id, s.title)}{/each}
+  {#each SECTIONS.slice(0, 5) as s (s.id)}{@render tab(s.id, s.title)}{/each}
   <div class="spacer" data-tauri-drag-region></div>
   {#if store.loading.size}<span class="loading mono">Loading…</span>{/if}
   {#if updater.available}
@@ -72,6 +72,7 @@
     <span class="icon">&#xE721;</span> Search <span class="dim mono">Ctrl K</span>
   </button>
   {@render tab('sources', 'Sources')}
+  <button class="icon gear" title="Settings" onclick={() => (panels.settings = true)}>&#xE713;</button>
   <div class="controls">
     <button class="icon" aria-label="Minimize" onclick={() => win.minimize()}>&#xE921;</button>
     <button class="icon" aria-label="Maximize" onclick={() => win.toggleMaximize()}>&#xE922;</button>
@@ -185,6 +186,15 @@
   .chevron {
     font-size: 9px;
     color: var(--dim);
+  }
+  .gear {
+    margin-left: 6px;
+    padding: 8px;
+    font-size: 16px;
+    color: var(--dim);
+  }
+  .gear:hover {
+    color: var(--text);
   }
   .controls {
     display: flex;

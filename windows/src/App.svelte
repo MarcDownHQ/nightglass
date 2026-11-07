@@ -2,9 +2,15 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
+  import { startGamepad } from './lib/gamepad';
   import ContextMenu from './lib/ContextMenu.svelte';
   import EpgMatchDialog from './lib/EpgMatchDialog.svelte';
   import GuideView from './lib/GuideView.svelte';
+  import HelpDialog from './lib/HelpDialog.svelte';
+  import HomeView from './lib/HomeView.svelte';
+  import { panels } from './lib/dialogs.svelte';
+  import { options } from './lib/options.svelte';
+  import SettingsDialog from './lib/SettingsDialog.svelte';
   import LiveView from './lib/LiveView.svelte';
   import MoviesView from './lib/MoviesView.svelte';
   import { multiview } from './lib/tilesState.svelte';
@@ -39,6 +45,10 @@
       void player.collapse();
     } else if (e.ctrlKey && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
     else if (e.key === 'F11') await win.setFullscreen(!(await win.isFullscreen()));
+    else if (e.ctrlKey && (e.key === '+' || e.key === '=')) options.stepZoom(0.1);
+    else if (e.ctrlKey && e.key === '-') options.stepZoom(-0.1);
+    else if (e.ctrlKey && e.key === '0') options.set('zoom', 1);
+    else if (e.key === 'F1' || (e.key === '?' && !typing(e) && !nav.searching)) panels.help = !panels.help;
     else if (e.ctrlKey || e.altKey || e.metaKey || nav.searching || typing(e) || e.defaultPrevented) return;
     else if (e.key === '+' || e.key === '=') player.setVolume(library.volume + 5);
     else if (e.key === '-') player.setVolume(library.volume - 5);
@@ -49,8 +59,13 @@
 
   onMount(async () => {
     void updater.check();
+    void options.applyZoom();
+    startGamepad();
+    if (options.startFullscreen) void win.setFullscreen(true);
+    nav.section = options.startScreen === 'home' ? 'home' : 'live';
     await store.init();
     ready = true;
+    if (options.startScreen === 'last' && library.recents[0]) nav.focusChannel = library.recents[0];
     await runAutomation();
   });
 </script>
@@ -78,7 +93,9 @@
       <button class="primary" onclick={() => (nav.section = 'sources')}>Add a source</button>
     </div>
   {:else if ready}
-    {#if nav.section === 'live'}
+    {#if nav.section === 'home'}
+      <HomeView />
+    {:else if nav.section === 'live'}
       <LiveView />
     {:else if nav.section === 'guide'}
       <GuideView />
@@ -99,6 +116,8 @@
 {/if}
 
 <ReminderBanner />
+{#if panels.settings}<SettingsDialog />{/if}
+{#if panels.help}<HelpDialog />{/if}
 <ContextMenu />
 <OrganizeDialog />
 <EpgMatchDialog />

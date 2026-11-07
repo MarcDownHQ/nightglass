@@ -81,10 +81,61 @@
     contextMenu.open(e, entries);
   }
 
+  /**
+   * The keyboard cursor: a row and a moment. The programme under it is the one the arrows left it on;
+   * going up or down keeps the moment, so the cursor stays in the same column.
+   */
+  let cursorRow = $state(0);
+  let cursorTime = $state(0);
+  let keyboard = $state(false);
+
+  const cursorProgramme = $derived.by(() => {
+    const row = rows[cursorRow];
+    if (!row || !keyboard) return undefined;
+    const list = store.programmes(row.channel);
+    return list.find((p) => p.start <= cursorTime && p.end > cursorTime) ?? list.find((p) => p.start > cursorTime);
+  });
+
+  /** Pages the window so the moment shows. */
+  function follow(t: number) {
+    while (t < start + HALF / 2 && shift > -200) shift -= 1;
+    while (t >= end - HALF / 2 && shift < 200) shift += 1;
+  }
+
+  function moveCursor(rowDelta: number, programmeDelta: number) {
+    if (!rows.length) return;
+    if (!keyboard) {
+      keyboard = true;
+      cursorTime = store.now;
+      // The first key shows the cursor where the eye already is: the first row, now.
+      follow(cursorTime);
+      listView?.reveal(cursorRow);
+      return;
+    }
+    cursorRow = Math.max(0, Math.min(rows.length - 1, cursorRow + rowDelta));
+    const list = store.programmes(rows[cursorRow].channel);
+    if (programmeDelta) {
+      const i = list.findIndex((p) => p.start <= cursorTime && p.end > cursorTime);
+      const next = list[Math.max(0, Math.min(list.length - 1, (i < 0 ? 0 : i) + programmeDelta))];
+      if (next) cursorTime = next.start + 1;
+    }
+    follow(cursorTime);
+    listView?.reveal(cursorRow);
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.altKey || e.metaKey) return;
-    if (e.key === 'ArrowLeft') shift -= 2;
-    else if (e.key === 'ArrowRight') shift += 2;
+    if (e.key === 'ArrowLeft') moveCursor(0, -1);
+    else if (e.key === 'ArrowRight') moveCursor(0, 1);
+    else if (e.key === 'ArrowUp') moveCursor(-1, 0);
+    else if (e.key === 'ArrowDown') moveCursor(1, 0);
+    else if (e.key === 'PageUp') shift -= 2;
+    else if (e.key === 'PageDown') shift += 2;
+    else if (e.key === 'Home') {
+      shift = 0;
+      cursorTime = store.now;
+    } else if (e.key === 'Enter' && cursorProgramme) pick(rows[cursorRow], cursorProgramme);
+    else if (e.key === 'Escape' && keyboard) keyboard = false;
     else return;
     e.preventDefault();
   }
@@ -102,9 +153,9 @@
       <div class="grid" bind:clientWidth={width}>
         <div class="ruler">
           <div class="paging" style:width="{LABEL}px">
-            <button class="icon" title="Earlier (←)" onclick={() => (shift -= 2)}>&#xE76B;</button>
+            <button class="icon" title="Earlier (Page ↑)" onclick={() => (shift -= 2)}>&#xE76B;</button>
             <button class="now" disabled={shift === 0} onclick={() => (shift = 0)}>Now</button>
-            <button class="icon" title="Later (→)" onclick={() => (shift += 2)}>&#xE76C;</button>
+            <button class="icon" title="Later (Page ↓)" onclick={() => (shift += 2)}>&#xE76C;</button>
           </div>
           <div class="times">
             {#each { length: WINDOW / HALF } as _, i (i)}
@@ -137,6 +188,7 @@
           class:live={p.start <= now && p.end > now}
           class:replay
           class:reminded
+          class:cursor={cursorProgramme === p && rows[cursorRow] === item}
           style:left="{x0 + 2}px"
           style:width="{Math.max(x1 - x0 - 4, 2)}px"
           title={(p.desc ? `${p.title}\n\n${p.desc}` : p.title) + (replay ? '\n\nClick to replay' : p.start > now ? '\n\nClick for a reminder' : '')}
@@ -220,6 +272,12 @@
     display: flex;
     border-bottom: 1px solid rgb(5 217 232 / 0.08);
     box-sizing: border-box;
+  }
+  .programme.cursor {
+    outline: 2px solid var(--acid);
+    outline-offset: -1px;
+    box-shadow: 0 0 12px rgb(249 240 2 / 0.4);
+    z-index: 1;
   }
   .programme .mark {
     margin-right: 5px;

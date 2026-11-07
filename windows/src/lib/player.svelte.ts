@@ -177,6 +177,14 @@ class Player {
     if (!this.wasFullscreen) await win.setFullscreen(false);
   }
 
+  /** Again, after an error: the same stream from the start. */
+  retry() {
+    const p = this.current;
+    if (!p) return;
+    this.retunes = 0;
+    this.load(p);
+  }
+
   togglePause() {
     if (this.current) void invoke('mpv_command', { args: ['cycle', 'pause'] });
   }

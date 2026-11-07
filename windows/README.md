@@ -33,7 +33,15 @@ En plus de la version macOS :
 - **mini-lecteur** toujours au-dessus (`P`), dans le coin de l'écran ;
 - **contrôle parental** : un PIN pour cacher des catégories (direct, films, séries), déverrouillables pour la session avec le cadenas de la barre de titre ;
 - **export / import** des sources et réglages dans un fichier JSON (écran Sources ; le fichier contient les mots de passe en clair) ;
-- **correspondance EPG à la main** (clic droit « Match the guide… ») pour une chaîne que le guide ne reconnaît pas.
+- **correspondance EPG à la main** (clic droit « Match the guide… ») pour une chaîne que le guide ne reconnaît pas ;
+- écran **Home** : retour à la dernière chaîne, récentes, favoris, reprise des films et séries, rappels à venir ;
+- **réglages** (roue dentée) : écran de démarrage (Home, Live ou la dernière chaîne), plein écran au lancement, taille de l'interface (`Ctrl +`/`Ctrl −`/`Ctrl 0`) ;
+- **guide au clavier** : flèches de programme en programme, `Entrée` pour regarder, revoir ou se faire rappeler ;
+- **recherche** dans les programmes du guide, avec « Show all » par type ;
+- **erreurs lisibles** (accès refusé, serveur injoignable, flux hors ligne…) avec un bouton Retry ;
+- **compte Xtream** dans Sources : expiration et connexions ;
+- **manette** (Xbox ou compatible) : croix et stick pour naviguer, A/B, X pause, Y plein écran, LB/RB onglets, gâchettes volume ;
+- aide des raccourcis avec `?` ou `F1`.
 
 ## Architecture
 
@@ -110,7 +118,7 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
+`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…6` Home, Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · flèches dans le Guide : de programme en programme, `Page ↑/↓` 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
 
 ## Licence
 

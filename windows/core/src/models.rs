@@ -74,6 +74,22 @@ pub struct Catalog {
     pub series: Vec<Series>,
     /// XMLTV guide advertised by the source (M3U header, Xtream `xmltv.php`).
     pub epg_url: Option<Url>,
+    /// The subscription, for sources that say (Xtream `user_info`).
+    #[serde(default)]
+    pub account: Option<Account>,
+}
+
+/// An IPTV subscription as the server describes it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    /// "Active", "Expired", "Banned", "Disabled"…
+    pub status: Option<String>,
+    /// Unix seconds; none for an account that never expires.
+    pub expires: Option<i64>,
+    pub max_connections: Option<i64>,
+    pub active_connections: Option<i64>,
+    pub trial: bool,
 }
 
 /// Same JSON shape as the macOS app's `SourceKind`: `{"m3u": {"url": …, "epg": …}}`.
