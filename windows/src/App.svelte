@@ -2,10 +2,12 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
+  import ContextMenu from './lib/ContextMenu.svelte';
   import GuideView from './lib/GuideView.svelte';
   import LiveView from './lib/LiveView.svelte';
   import MoviesView from './lib/MoviesView.svelte';
-  import { nav, SECTIONS } from './lib/nav.svelte';
+  import { library } from './lib/library.svelte';
+  import { nav, SECTIONS, typing } from './lib/nav.svelte';
   import NeonText from './lib/NeonText.svelte';
   import { player } from './lib/player.svelte';
   import PlayerScreen from './lib/PlayerScreen.svelte';
@@ -31,6 +33,10 @@
       void player.collapse();
     } else if (e.ctrlKey && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
     else if (e.key === 'F11') await win.setFullscreen(!(await win.isFullscreen()));
+    else if (e.ctrlKey || e.altKey || e.metaKey || nav.searching || typing(e) || e.defaultPrevented) return;
+    else if (e.key === '+' || e.key === '=') player.setVolume(library.volume + 5);
+    else if (e.key === '-') player.setVolume(library.volume - 5);
+    else if (e.key.toLowerCase() === 'm') player.toggleMute();
     else return;
     e.preventDefault();
   }
@@ -79,6 +85,12 @@
   <SearchPalette />
 {/if}
 
+<ContextMenu />
+
+{#if player.osd}
+  <div class="toast" role="status">{player.osd}</div>
+{/if}
+
 <style>
   .backdrop {
     position: fixed;
@@ -117,6 +129,20 @@
     font-size: 18px;
     font-weight: 700;
     box-shadow: 0 0 14px rgb(255 42 109 / 0.6);
+  }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 40px;
+    z-index: 90;
+    transform: translateX(-50%);
+    padding: 9px 18px;
+    border-radius: 999px;
+    background: rgb(5 1 15 / 0.85);
+    border: 1px solid rgb(5 217 232 / 0.4);
+    font-size: 15px;
+    font-weight: 500;
+    pointer-events: none;
   }
   .primary:hover {
     box-shadow: 0 0 24px rgb(255 42 109 / 0.85);

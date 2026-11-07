@@ -17,6 +17,8 @@ class Nav {
   searching = $state(false);
   /** A channel picked in the guide or the search, for the Live screen to select and tune. */
   focusChannel = $state<string | null>(null);
+  /** A channel to scroll to and mark in the Guide screen. */
+  guideChannel = $state<string | null>(null);
   /** The series whose page is open in the Series screen. */
   openSeries = $state<SeriesItem | null>(null);
 }

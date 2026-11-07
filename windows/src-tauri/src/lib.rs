@@ -1,3 +1,4 @@
+mod cache;
 mod mpv;
 mod sources;
 
@@ -13,11 +14,12 @@ use url::Url;
 struct VideoHost(isize);
 
 #[tauri::command]
-fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>) -> Result<(), String> {
+/// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
+fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, options: Option<String>) -> Result<(), String> {
     // M3U playlists may ask for a user agent and a referrer per channel (`#EXTVLCOPT`).
     mpv.set("user-agent", headers.get("User-Agent").map_or("libmpv", String::as_str))?;
     mpv.set("referrer", headers.get("Referer").map_or("", String::as_str))?;
-    mpv.command(&["loadfile", &url, "replace"])
+    mpv.command(&["loadfile", &url, "replace", "-1", options.as_deref().unwrap_or("")])
 }
 
 #[tauri::command]
@@ -51,9 +53,49 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
 
 // shortcut: whole catalogs cross the IPC bridge as JSON; page them from Rust if a provider's tens of thousands of entries get slow.
 #[tauri::command]
-async fn catalog(http: State<'_, Http>, source: Source) -> Result<Catalog, String> {
-    source.client(&http).catalog().await.map_err(|e| e.to_string())
+async fn catalog(app: AppHandle, http: State<'_, Http>, source: Source) -> Result<Catalog, String> {
+    let catalog = source.client(&http).catalog().await.map_err(|e| e.to_string())?;
+    let (id, copy) = (source.id.to_string(), catalog.clone());
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(e) = cache::write(&app, "catalog", &id, &copy) {
+            log::warn!("catalog cache: {e}");
+        }
+    });
+    Ok(catalog)
 }
+
+/// The catalog the source returned last time, if any.
+#[tauri::command]
+async fn catalog_cached(app: AppHandle, id: String) -> Result<Option<Catalog>, String> {
+    tauri::async_runtime::spawn_blocking(move || cache::read(&app, "catalog", &id)).await.map_err(|e| e.to_string())
+}
+
+/// The guide the source returned last time, without the programmes that have ended.
+#[tauri::command]
+async fn guide_cached(app: AppHandle, id: String) -> Result<Option<Guide>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guide: Guide = cache::read(&app, "guide", &id)?;
+        let now = unix_now();
+        guide.retain(|_, list| {
+            list.retain(|p| p.end > now - 3 * 3600);
+            !list.is_empty()
+        });
+        Some(guide)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cache_drop(app: AppHandle, id: String) {
+    cache::drop(&app, &id);
+}
+
+fn unix_now() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+}
+
+type Guide = HashMap<String, Vec<Programme>>;
 
 /// Stalker links are short-lived, so they are asked for at play time; other sources return the stream as is.
 #[tauri::command]
@@ -68,13 +110,14 @@ async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Resu
 }
 
 /// Programmes from 3 h ago to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
+/// `cache` is the source id to keep the guide under for the next launch.
 #[tauri::command]
-async fn guide(http: State<'_, Http>, url: Url, keys: Vec<String>) -> Result<HashMap<String, Vec<Programme>>, String> {
+async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String>, cache: Option<String>) -> Result<Guide, String> {
     let data = http.fetch(&url).await.map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let now = unix_now();
         let wanted: HashSet<String> = keys.into_iter().collect();
-        let mut out: HashMap<String, Vec<Programme>> = HashMap::new();
+        let mut out: Guide = HashMap::new();
         for p in xmltv::parse(&data, now - 3 * 3600..=now + 86_400, None) {
             let key = xmltv::epg_key(&p.channel);
             if wanted.is_empty() || wanted.contains(&key) {
@@ -83,6 +126,11 @@ async fn guide(http: State<'_, Http>, url: Url, keys: Vec<String>) -> Result<Has
         }
         for list in out.values_mut() {
             list.sort_by_key(|p| p.start);
+        }
+        if let Some(id) = cache
+            && let Err(e) = cache::write(&app, "guide", &id, &out)
+        {
+            log::warn!("guide cache: {e}");
         }
         out
     })
@@ -146,6 +194,9 @@ pub fn run() {
             sources_load,
             sources_save,
             catalog,
+            catalog_cached,
+            guide_cached,
+            cache_drop,
             stream_url,
             episodes,
             guide,

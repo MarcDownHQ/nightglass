@@ -42,7 +42,7 @@ pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
-fn dpapi(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
+pub fn dpapi(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
     let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
     let null = std::ptr::null();

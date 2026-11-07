@@ -1,6 +1,9 @@
 <script lang="ts">
   import ChannelLogo from './ChannelLogo.svelte';
+  import { openChannelMenu } from './channelMenu';
+  import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
+  import { library } from './library.svelte';
   import type { LiveItem } from './models';
   import { dial, nav, typing } from './nav.svelte';
   import NeonTab from './NeonTab.svelte';
@@ -16,12 +19,24 @@
   import VirtualList from './VirtualList.svelte';
 
   const FAVORITES = '★ Favorites';
+  const RECENT = '↺ Recent';
+  const HIDDEN = 'Hidden';
   let category = $state('All');
   let listView: { reveal: (index: number) => void } | undefined = $state();
   let tabs: HTMLElement;
 
+  const hidden = $derived.by(() => {
+    if (store.channels === store.allChannels) return [];
+    const shown = new Set(store.channels);
+    return store.allChannels.filter((c) => !shown.has(c));
+  });
+  const recent = $derived.by(() => {
+    const byId = new Map(store.channels.map((c) => [c.id, c]));
+    return library.recents.flatMap((id) => byId.get(id) ?? []);
+  });
+
   const categories = $derived.by(() => {
-    const out = store.favorites.size ? [FAVORITES, 'All'] : ['All'];
+    const out = [...(store.favorites.size ? [FAVORITES] : []), ...(recent.length ? [RECENT] : []), 'All'];
     const seen = new Set<string>();
     for (const { channel } of store.channels) {
       if (channel.group && !seen.has(channel.group)) {
@@ -29,6 +44,7 @@
         out.push(channel.group);
       }
     }
+    if (hidden.length) out.push(HIDDEN);
     return out;
   });
 
@@ -37,8 +53,22 @@
       ? store.channels
       : category === FAVORITES
         ? store.channels.filter((c) => store.favorites.has(c.id))
-        : store.channels.filter((c) => c.channel.group === category),
+        : category === RECENT
+          ? recent
+          : category === HIDDEN
+            ? hidden
+            : store.channels.filter((c) => c.channel.group === category),
   );
+
+  function tabMenu(e: MouseEvent, c: string) {
+    if (c === 'All' || c === FAVORITES || c === RECENT || c === HIDDEN) return;
+    contextMenu.open(e, [{ label: `Hide “${c}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, c) }]);
+  }
+
+  function onwheel(e: WheelEvent) {
+    e.preventDefault();
+    player.setVolume(library.volume + (e.deltaY < 0 ? 5 : -5));
+  }
 
   const selected = $derived(player.current?.item?.id);
 
@@ -89,7 +119,7 @@
     else if (e.key.toLowerCase() === 's' && player.current?.item) store.toggleFavorite(player.current.item);
     else if (/^[0-9]$/.test(e.key)) {
       dial.type(e.key, (n) => {
-        const item = store.channels.find((c) => c.channel.number === n);
+        const item = store.byNumber(n);
         if (item) {
           category = 'All';
           void store.tune(item);
@@ -106,7 +136,7 @@
   <div class="left">
     <div class="tabs" bind:this={tabs}>
       {#each categories as c (c)}
-        <NeonTab title={c} selected={c === category} onclick={() => (category = c)} />
+        <NeonTab title={c} selected={c === category} onclick={() => (category = c)} oncontextmenu={(e) => tabMenu(e, c)} />
       {/each}
     </div>
     <HudPanel caption={category === 'All' ? 'All channels' : category} trailing={String(list.length)} class="channels">
@@ -118,7 +148,7 @@
 
   <div class="right">
     {#if player.current && !player.expanded}
-      <div class="preview" use:videoHole={14} ondblclick={() => player.expand()} role="presentation">
+      <div class="preview" use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
         {#if player.loading || player.error}
           <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current.title)}…`}</p>
         {/if}
@@ -140,7 +170,7 @@
   {@const c = neon(ch.name)}
   {@const np = store.nowNext(ch)}
   {@const quality = qualityTag(ch.name)}
-  <button class="row" class:on={item.id === selected} style:--c={c} onclick={() => store.tune(item)} ondblclick={() => player.expand()}>
+  <button class="row" class:on={item.id === selected} style:--c={c} onclick={() => store.tune(item)} ondblclick={() => player.expand()} oncontextmenu={(e) => openChannelMenu(e, item)}>
     <span class="num mono">{ch.number ?? ''}</span>
     <ChannelLogo channel={ch} color={c} />
     <span class="text">
