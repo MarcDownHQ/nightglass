@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import HudPanel from './HudPanel.svelte';
   import type { LiveItem } from './models';
   import NeonText from './NeonText.svelte';
@@ -16,18 +17,18 @@
 <HudPanel>
   <div class="top">
     <div class="now">
-      <span class="label mono">Now{np.now ? ` · ${hm(np.now.start)}–${hm(np.now.end)}` : ''}</span>
+      <span class="label mono">{t('Now')}{np.now ? ` · ${hm(np.now.start)}–${hm(np.now.end)}` : ''}</span>
       <NeonText text={np.now?.title ?? (item ? displayName(item.channel.name) : '—')} size={28} weight={700} lines={2} />
       {#if np.now?.desc}<p class="desc">{np.now.desc}</p>{/if}
       <div class="progress"><ProgressLine value={np.now ? progress(np.now, store.now) : 0} height={3} /></div>
     </div>
     <div class="next">
-      <span class="label mono">Next{np.next ? ` · ${hm(np.next.start)}` : ''}</span>
+      <span class="label mono">{t('Next')}{np.next ? ` · ${hm(np.next.start)}` : ''}</span>
       <b>{np.next?.title ?? '—'}</b>
     </div>
   </div>
   <footer class="mono">
-    {#if item?.channel.number}<span>Ch {item.channel.number}</span>{/if}
+    {#if item?.channel.number}<span>{t('Ch {n}', { n: item.channel.number })}</span>{/if}
     {#if item && player.height > 0}<span>{player.height}p</span>{/if}
     <span>{item?.source.name ?? ''}</span>
     <span class="spacer"></span>

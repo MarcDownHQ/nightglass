@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { epgMatch } from './dialogs.svelte';
   import { library } from './library.svelte';
@@ -42,7 +43,7 @@
     if (!item) return;
     library.setEpgOverride(item.id, id);
     store.reloadGuide(item.source);
-    player.notify(id ? `Guide matched: ${id}` : 'Back to the playlist’s guide id');
+    player.notify(id ? t('Guide matched: {id}', { id }) : t('Back to the playlist’s guide id'));
     epgMatch.item = null;
   }
 
@@ -62,21 +63,21 @@
     <div class="dialog" role="dialog" aria-label="Match the guide">
       <header>
         <h2>Guide for {displayName(item.channel.name)}</h2>
-        <button class="icon close" title="Close (Esc)" onclick={() => (epgMatch.item = null)}>&#xE8BB;</button>
+        <button class="icon close" title={t('Close (Esc)')} onclick={() => (epgMatch.item = null)}>&#xE8BB;</button>
       </header>
       <p class="hint">
-        Playlist id: <span class="mono">{item.channel.epgId ?? 'none'}</span>
+        {t('Playlist id:')} <span class="mono">{item.channel.epgId ?? 'none'}</span>
         {#if current}· matched by hand: <span class="mono">{current}</span>
-          <button class="link" onclick={() => choose(null)}>Undo</button>{/if}
+          <button class="link" onclick={() => choose(null)}>{t('Undo')}</button>{/if}
       </p>
       <input bind:this={input} bind:value={query} placeholder="Search the guide's channels" spellcheck="false" />
       <div class="list">
         {#if loading}
-          <p class="note">Loading…</p>
+          <p class="note">{t('Loading…')}</p>
         {:else if !channels.length}
-          <p class="note">This source has no guide yet, or it has not loaded. Add an XMLTV URL to the source, or wait for it to load.</p>
+          <p class="note">{t('This source has no guide yet, or it has not loaded. Add an XMLTV URL to the source, or wait for it to load.')}</p>
         {:else if !hits.length}
-          <p class="note">No guide channel matches.</p>
+          <p class="note">{t('No guide channel matches.')}</p>
         {:else}
           <VirtualList items={hits} rowHeight={44} key={([id]) => id} row={hit} />
         {/if}

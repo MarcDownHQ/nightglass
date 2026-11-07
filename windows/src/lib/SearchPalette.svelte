@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { fade } from 'svelte/transition';
   import { library } from './library.svelte';
   import type { LiveItem, MovieItem, Programme, SeriesItem } from './models';
@@ -72,7 +73,7 @@
   function group<T>(kind: Kind, found: { list: T[]; count: number }, hit: (t: T) => Hit): Hit[] {
     const out = found.list.map(hit);
     if (found.count > found.list.length) {
-      out.push({ kind: 'More', key: `more-${kind}`, of: kind, count: found.count, title: `Show all ${found.count}` });
+      out.push({ kind: 'More', key: `more-${kind}`, of: kind, count: found.count, title: t('Show all {n}', { n: found.count }) });
     }
     return out;
   }
@@ -94,7 +95,7 @@
         item,
         programme: p,
         title: p.title,
-        detail: `${p.start <= now && p.end > now ? 'now' : p.end <= now ? 'replay' : new Date(p.start * 1000).toDateString() === new Date(now * 1000).toDateString() ? hm(p.start) : new Date(p.start * 1000).toLocaleDateString([], { weekday: 'short' }) + ' ' + hm(p.start)} · ${displayName(item.channel.name)}`,
+        detail: `${p.start <= now && p.end > now ? t('now') : p.end <= now ? t('replay') : new Date(p.start * 1000).toDateString() === new Date(now * 1000).toDateString() ? hm(p.start) : new Date(p.start * 1000).toLocaleDateString([], { weekday: 'short' }) + ' ' + hm(p.start)} · ${displayName(item.channel.name)}`,
       })),
       ...group('Movie', matches('Movie', store.movies, (i) => i.movie.name, q), (item) => ({ kind: 'Movie', key: item.id, item, title: item.movie.name })),
       ...group('Series', matches('Series', store.series, (i) => i.series.name, q), (item) => ({
@@ -135,7 +136,7 @@
         if (p.end <= store.now) void store.playReplay(hit.item, p);
         else if (p.start > store.now) {
           library.toggleReminder({ channel: hit.item.id, channelName: displayName(hit.item.channel.name), title: p.title, start: p.start, end: p.end });
-          player.notify(library.hasReminder(hit.item.id, p.start) ? `Reminder set for ${hm(p.start)}` : 'Reminder cancelled');
+          player.notify(library.hasReminder(hit.item.id, p.start) ? t('Reminder set for {time}', { time: hm(p.start) }) : t('Reminder cancelled'));
         } else {
           void player.collapse();
           nav.focusChannel = hit.item.id;
@@ -166,17 +167,17 @@
 </script>
 
 <div class="scrim" transition:fade={{ duration: 150 }} onmousedown={(e) => e.target === e.currentTarget && (nav.searching = false)} role="presentation">
-  <div class="palette" role="dialog" aria-label="Search">
+  <div class="palette" role="dialog" aria-label={t('Search')}>
     <label class="field">
       <span class="icon">&#xE721;</span>
-      <input bind:this={input} bind:value={query} {onkeydown} placeholder="Channels, programmes, movies, series" spellcheck="false" />
+      <input bind:this={input} bind:value={query} {onkeydown} placeholder={t('Channels, programmes, movies, series')} spellcheck="false" />
     </label>
     {#if hits.length}
       <ul bind:this={listEl} role="listbox">
         {#each hits as hit, i (hit.kind + hit.key)}
           <li role="option" aria-selected={i === index}>
             <button class:on={i === index} class:more={hit.kind === 'More'} onclick={() => open(hit)} onmousemove={() => (index = i)}>
-              <span class="kind">{#if hit.kind !== 'More'}<Tag text={hit.kind} color={COLORS[hit.kind]} />{/if}</span>
+              <span class="kind">{#if hit.kind !== 'More'}<Tag text={hit.kind === 'Live' ? t('Live') : hit.kind === 'Movie' ? t('Movie') : hit.kind === 'Series' ? t('Series') : t('TV')} color={COLORS[hit.kind]} />{/if}</span>
               <span class="title">{hit.title}</span>
               {#if hit.detail}<span class="detail mono">{hit.detail}</span>{/if}
             </button>
@@ -184,7 +185,7 @@
         {/each}
       </ul>
     {:else if query.trim()}
-      <p class="none">Nothing matches.</p>
+      <p class="none">{t('Nothing matches.')}</p>
     {/if}
   </div>
 </div>

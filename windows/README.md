@@ -41,7 +41,11 @@ En plus de la version macOS :
 - **erreurs lisibles** (accès refusé, serveur injoignable, flux hors ligne…) avec un bouton Retry ;
 - **compte Xtream** dans Sources : expiration et connexions ;
 - **manette** (Xbox ou compatible) : croix et stick pour naviguer, A/B, X pause, Y plein écran, LB/RB onglets, gâchettes volume ;
-- aide des raccourcis avec `?` ou `F1`.
+- aide des raccourcis avec `?` ou `F1` ;
+- **interface en français** quand Windows l'est (anglais sinon), au choix dans les réglages ;
+- **rechargement automatique** des catalogues et des guides (toutes les 12 h par défaut, réglable) quand l'app reste ouverte ;
+- **reconnexion automatique** d'un direct coupé ou bloqué en mise en mémoire tampon : nouvelles tentatives après 1, 2, 4… jusqu'à 30 s, pendant environ 2 min 30 ; hors ligne, elle attend le retour du réseau ;
+- **grosses playlists** : la M3U est lue pendant son téléchargement, et le guide XMLTV est écrit sur le disque puis lu en continu, sans être gardé en mémoire (50 000 chaînes en 1,2 s ; guide de 67 Mo et 291 000 programmes en 6,6 s, build de débogage).
 
 ## Architecture
 
@@ -101,7 +105,7 @@ L'exe n'est pas signé : Windows affiche l'avertissement SmartScreen à l'instal
 
 ```powershell
 cargo test --workspace
-npm test   # règles de classement (préfixes, doublons, catégories) avec Vitest
+npm test   # Vitest : règles de classement, messages d'erreur, traduction française complète
 ```
 
 Tests d'intégration (facultatifs, contre de vrais serveurs) :
@@ -119,6 +123,10 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 ## Clavier
 
 `↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…6` Home, Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · flèches dans le Guide : de programme en programme, `Page ↑/↓` 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
+
+## Traduire
+
+L'interface est écrite en anglais dans le code ; chaque texte passe par `t()` ([src/lib/i18n.svelte.ts](src/lib/i18n.svelte.ts)) et le français est dans [src/lib/fr.ts](src/lib/fr.ts). `npm test` échoue si un texte n'a pas sa traduction ou si une traduction perd un `{paramètre}`.
 
 ## Licence
 

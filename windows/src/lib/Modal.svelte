@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import type { Snippet } from 'svelte';
 
   /** A window over the app: Esc or a click outside closes it. */
@@ -19,7 +20,7 @@
   <div class="dialog" role="dialog" aria-label={title} style:width="min({width}px, calc(100vw - 80px))">
     <header>
       <h2>{title}</h2>
-      <button class="icon close" title="Close (Esc)" onclick={close}>&#xE8BB;</button>
+      <button class="icon close" title={t('Close (Esc)')} onclick={close}>&#xE8BB;</button>
     </header>
     <div class="body">{@render children()}</div>
   </div>

@@ -1,6 +1,7 @@
+import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { epgMatch, prompt } from './dialogs.svelte';
-import { library } from './library.svelte';
+import { library, listLabel } from './library.svelte';
 import { categoryKey, categoryLabel } from './lineup';
 import { contextMenu, type MenuEntry } from './menuState.svelte';
 import type { LiveItem } from './models';
@@ -12,7 +13,7 @@ import { store } from './store.svelte';
 
 /** Asks a name and makes a list; with `item`, puts it in. */
 export async function newList(item?: LiveItem) {
-  const name = await prompt.ask('New favorites list');
+  const name = await prompt.ask(t('New favorites list'));
   if (!name) return;
   const list = library.createList(name);
   if (item) library.toggleFavorite(list.id, item.id);
@@ -26,9 +27,9 @@ export function openChannelMenu(e: MouseEvent, item: LiveItem, listId?: string) 
   const groupHidden = !!key && library.hiddenGroups.has(key);
   const lists = library.favoriteLists;
   const entries: MenuEntry[] = [
-    { label: 'Play', icon: '', action: () => void store.tune(item) },
+    { label: t('Play'), icon: '', action: () => void store.tune(item) },
     {
-      label: 'Show in the guide',
+      label: t('Show in the guide'),
       icon: '',
       action: () => {
         void player.collapse();
@@ -36,43 +37,43 @@ export function openChannelMenu(e: MouseEvent, item: LiveItem, listId?: string) 
         nav.section = 'guide';
       },
     },
-    { label: 'Copy the stream URL', icon: '', action: () => void copyUrl(item) },
-    { label: 'Add to multi-view', icon: '\uF0E2', action: () => void multiview.show(item) },
-    { label: 'Match the guide…', icon: '\uE8EC', action: () => (epgMatch.item = item) },
+    { label: t('Copy the stream URL'), icon: '', action: () => void copyUrl(item) },
+    { label: t('Add to multi-view'), icon: '\uF0E2', action: () => void multiview.show(item) },
+    { label: t('Match the guide…'), icon: '\uE8EC', action: () => (epgMatch.item = item) },
   ];
   if (listId) {
     entries.push(
-      { heading: 'Order' },
-      { label: 'Move to the top', icon: '', action: () => library.moveFavorite(listId, item.id, -Infinity) },
-      { label: 'Move up', icon: '', action: () => library.moveFavorite(listId, item.id, -1) },
-      { label: 'Move down', icon: '', action: () => library.moveFavorite(listId, item.id, 1) },
+      { heading: t('Order') },
+      { label: t('Move to the top'), icon: '', action: () => library.moveFavorite(listId, item.id, -Infinity) },
+      { label: t('Move up'), icon: '', action: () => library.moveFavorite(listId, item.id, -1) },
+      { label: t('Move down'), icon: '', action: () => library.moveFavorite(listId, item.id, 1) },
     );
   }
-  entries.push({ heading: 'Favorites' });
+  entries.push({ heading: t('Favorites') });
   for (const list of lists) {
     const inside = list.items.includes(item.id);
     entries.push({
-      label: `${inside ? 'Remove from' : 'Add to'} ${list.name}`,
+      label: t(inside ? 'Remove from {list}' : 'Add to {list}', { list: listLabel(list) }),
       icon: inside ? '' : '',
       action: () => library.toggleFavorite(list.id, item.id),
     });
   }
-  entries.push({ label: 'New list…', icon: '', action: () => void newList(item) });
+  entries.push({ label: t('New list…'), icon: '', action: () => void newList(item) });
   entries.push(
-    { heading: 'Hide' },
+    { heading: t('Hide') },
     hidden
-      ? { label: 'Show this channel again', icon: '', action: () => library.toggleHidden(library.hiddenChannels, item.id) }
-      : { label: 'Hide this channel', icon: '', action: () => library.toggleHidden(library.hiddenChannels, item.id) },
+      ? { label: t('Show this channel again'), icon: '', action: () => library.toggleHidden(library.hiddenChannels, item.id) }
+      : { label: t('Hide this channel'), icon: '', action: () => library.toggleHidden(library.hiddenChannels, item.id) },
   );
   if (key) {
     const name = library.categoryNames[key] ?? categoryLabel(group);
     entries.push(
       groupHidden
-        ? { label: `Show “${name}” again`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) }
-        : { label: `Hide “${name}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
+        ? { label: t('Show “{name}” again', { name }), icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) }
+        : { label: t('Hide “{name}”', { name }), icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
     );
     entries.push({
-      label: library.lockedGroups.has(key) ? `Take “${name}” out of the PIN` : `Put “${name}” behind the PIN`,
+      label: t(library.lockedGroups.has(key) ? 'Take “{name}” out of the PIN' : 'Put “{name}” behind the PIN', { name }),
       icon: '\uE72E',
       action: () => void toggleCategoryLock(key),
     });
@@ -84,7 +85,7 @@ export function openChannelMenu(e: MouseEvent, item: LiveItem, listId?: string) 
 export function openVariantMenu(e: MouseEvent, row: LiveItem) {
   const playing = player.current?.item?.id;
   contextMenu.open(e, [
-    { heading: 'Feeds' },
+    { heading: t('Feeds') },
     ...(row.variants ?? [row]).map((v) => ({
       label: `${v.channel.name} · ${v.source.name}`,
       checked: v.id === playing,
@@ -98,8 +99,8 @@ async function copyUrl(item: LiveItem) {
   try {
     const url = 'stalker' in item.source.kind ? await invoke<string>('stream_url', { source: item.source, channel: item.channel }) : item.channel.stream;
     await navigator.clipboard.writeText(url);
-    player.notify('Stream URL copied');
+    player.notify(t('Stream URL copied'));
   } catch (e) {
-    player.notify(`Copy failed: ${e}`);
+    player.notify(t('Copy failed: {error}', { error: String(e) }));
   }
 }

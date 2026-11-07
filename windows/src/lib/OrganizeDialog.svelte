@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { organizer, prompt } from './dialogs.svelte';
   import { newList } from './channelMenu';
   import { library } from './library.svelte';
@@ -62,19 +63,19 @@
 
 {#if organizer.open}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && (organizer.open = false)}>
-    <div class="dialog" role="dialog" aria-label="Organize">
+    <div class="dialog" role="dialog" aria-label={t('Organize')}>
       <header>
-        <h2>Organize</h2>
-        <button class="icon close" title="Close (Esc)" onclick={() => (organizer.open = false)}>&#xE8BB;</button>
+        <h2>{t('Organize')}</h2>
+        <button class="icon close" title={t('Close (Esc)')} onclick={() => (organizer.open = false)}>&#xE8BB;</button>
       </header>
 
       <div class="columns">
         <section>
           <div class="title">
-            <h3 class="mono">Categories</h3>
-            <button class="link" onclick={reset}>Reset order and names</button>
+            <h3 class="mono">{t('Categories')}</h3>
+            <button class="link" onclick={reset}>{t('Reset order and names')}</button>
           </div>
-          <p class="hint">Drag to reorder. The same name in several sources, with or without a country prefix, is one category.</p>
+          <p class="hint">{t('Drag to reorder. The same name in several sources, with or without a country prefix, is one category.')}</p>
           <ul class="list">
             {#each categories as c, i (c.key)}
               {@const hidden = library.hiddenGroups.has(c.key)}
@@ -96,32 +97,32 @@
               >
                 <span class="icon grip">&#xE76F;</span>
                 <input value={c.label} aria-label="Name of {c.label}" onchange={(e) => rename(c.key, original(c.key), e.currentTarget.value)} />
-                <button class="icon" title="Up" disabled={i === 0} onclick={() => step(c.key, -1)}>&#xE70E;</button>
-                <button class="icon" title="Down" disabled={i === categories.length - 1} onclick={() => step(c.key, 1)}>&#xE70D;</button>
-                <button class="icon eye" title={hidden ? 'Show' : 'Hide'} onclick={() => library.toggleHidden(library.hiddenGroups, c.key)}>
+                <button class="icon" title={t('Up')} disabled={i === 0} onclick={() => step(c.key, -1)}>&#xE70E;</button>
+                <button class="icon" title={t('Down')} disabled={i === categories.length - 1} onclick={() => step(c.key, 1)}>&#xE70D;</button>
+                <button class="icon eye" title={hidden ? t('Show') : t('Hide')} onclick={() => library.toggleHidden(library.hiddenGroups, c.key)}>
                   {hidden ? '' : ''}
                 </button>
                 <button
                   class="icon lock"
                   class:on={library.lockedGroups.has(c.key)}
-                  title={library.lockedGroups.has(c.key) ? 'Behind the parental PIN' : 'Put behind the parental PIN'}
+                  title={library.lockedGroups.has(c.key) ? t('Behind the parental PIN') : t('Put behind the parental PIN')}
                   onclick={() => toggleCategoryLock(c.key)}
                 >
                   {library.lockedGroups.has(c.key) ? '' : ''}
                 </button>
               </li>
             {:else}
-              <li class="empty">No categories.</li>
+              <li class="empty">{t('No categories.')}</li>
             {/each}
           </ul>
         </section>
 
         <section>
           <div class="title">
-            <h3 class="mono">Favorites lists</h3>
-            <button class="link" onclick={() => newList()}>New list</button>
+            <h3 class="mono">{t('Favorites lists')}</h3>
+            <button class="link" onclick={() => newList()}>{t('New list')}</button>
           </div>
-          <p class="hint">Each list is a tab of its own, numbered from 1. Right-click a channel to add it; drag it in its tab to reorder.</p>
+          <p class="hint">{t('Each list is a tab of its own, numbered from 1. Right-click a channel to add it; drag it in its tab to reorder.')}</p>
           <ul class="list">
             {#each library.favoriteLists as l, i (l.id)}
               <li>
@@ -129,14 +130,14 @@
                 <input value={l.name} aria-label="Name of {l.name}" onchange={(e) => library.renameList(l.id, e.currentTarget.value)} />
                 <span class="count mono">{l.items.length}</span>
                 {#if i > 0}
-                  <button class="icon" title="Delete the list" onclick={() => library.deleteList(l.id)}>&#xE74D;</button>
+                  <button class="icon" title={t('Delete the list')} onclick={() => library.deleteList(l.id)}>&#xE74D;</button>
                 {/if}
               </li>
             {/each}
           </ul>
 
           <div class="title pin">
-            <h3 class="mono">Parental PIN</h3>
+            <h3 class="mono">{t('Parental PIN')}</h3>
           </div>
           <p class="hint">
             {#if library.pinHash}
@@ -153,9 +154,9 @@
                   if (!(await unlock())) return;
                   const pin = await prompt.ask('New parental PIN', '', { secret: true });
                   if (pin) await library.setPin(pin);
-                }}>Change the PIN</button
+                }}>{t('Change the PIN')}</button
               >
-              <button class="link" onclick={() => removePin()}>Remove the PIN</button>
+              <button class="link" onclick={() => removePin()}>{t('Remove the PIN')}</button>
             </div>
           {/if}
         </section>

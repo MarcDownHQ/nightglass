@@ -1,6 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import type { SortMode } from './lineup';
 import type { Episode } from './models';
+import { t } from './i18n.svelte';
 import { prefs } from './prefs';
 
 /** What a Continue card needs to play again, without the screen that started it. */
@@ -269,6 +270,11 @@ export const library = new Library();
 async function sha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`nightglass:${text}`));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** A list's name as shown: the first list keeps its default name in the user's language until renamed. */
+export function listLabel(list: FavoriteList): string {
+  return list.id === 'favorites' && list.name === 'Favorites' ? t('Favorites') : list.name;
 }
 
 export function episodeKey(series: string, episode: Episode): string {

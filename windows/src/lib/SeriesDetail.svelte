@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { fade } from 'svelte/transition';
   import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
@@ -75,24 +76,24 @@
       {#if item.series.poster}<img src={item.series.poster} alt="" referrerpolicy="no-referrer" />{/if}
     </div>
     <div class="info">
-      <button class="back" onclick={close}><span class="icon">&#xE76B;</span> Back</button>
+      <button class="back" onclick={close}><span class="icon">&#xE76B;</span> {t('Back')}</button>
       <NeonText text={item.series.name} size={48} lines={2} />
       {#if item.series.plot}<p class="plot">{item.series.plot}</p>{/if}
       {#if seasons.length > 1}
         <div class="seasons">
           {#each seasons as s (s)}
-            <button class:on={s === season} onclick={() => (season = s)}>Season {s}</button>
+            <button class:on={s === season} onclick={() => (season = s)}>{t('Season {n}', { n: s })}</button>
           {/each}
         </div>
       {/if}
-      <HudPanel caption="Episodes" trailing={loading ? '' : String(list.length)} class="episodes">
+      <HudPanel caption={t('Episodes')} trailing={loading ? '' : String(list.length)} class="episodes">
         <div class="list">
           {#if loading}
-            <p class="note mono">Loading…</p>
+            <p class="note mono">{t('Loading…')}</p>
           {:else if error}
             <p class="note mono error">{error}</p>
           {:else if !episodes.length}
-            <p class="note">No episodes.</p>
+            <p class="note">{t('No episodes.')}</p>
           {/if}
           {#each list as e (e.id)}
             {@const p = library.progress[episodeKey(item.id, e)]}

@@ -1,3 +1,4 @@
+import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
 import { episodeKey, library } from './library.svelte';
@@ -13,6 +14,7 @@ import {
   type SeriesItem,
   type Source,
 } from './models';
+import { options } from './options.svelte';
 import { player, type Playable } from './player.svelte';
 import { prefs } from './prefs';
 
@@ -129,6 +131,19 @@ class Store {
     // Last launch's catalogs and guides first, so the screens fill at once; then the network.
     await Promise.all(this.sources.map((s) => this.restore(s)));
     for (const s of this.sources) void this.refresh(s);
+    // While the app stays open (a TV left on), catalogs and guides reload on their own.
+    setInterval(() => this.refreshStale(), 10 * 60_000);
+  }
+
+  /** Unix ms of each source's last successful load. */
+  private refreshed: Record<string, number> = {};
+
+  refreshStale() {
+    if (!options.refreshHours) return;
+    const due = Date.now() - options.refreshHours * 3_600_000;
+    for (const s of this.sources) {
+      if (!this.loading.has(s.id) && (this.refreshed[s.id] ?? 0) < due) void this.refresh(s);
+    }
   }
 
   private async restore(source: Source) {
@@ -149,6 +164,7 @@ class Store {
     delete this.errors[source.id];
     try {
       this.setCatalog(source, await invoke<Catalog>('catalog', { source }));
+      this.refreshed[source.id] = Date.now();
     } catch (e) {
       this.errors[source.id] = String(e);
     } finally {
@@ -258,14 +274,14 @@ class Store {
       player.play({
         id: `replay:${item.id}:${p.start}`,
         title: p.title,
-        subtitle: `${item.channel.name} · replay`,
+        subtitle: t('{channel} · replay', { channel: item.channel.name }),
         url,
         headers: item.channel.headers,
         live: false,
       });
       void player.expand();
     } catch (e) {
-      player.notify(`Replay unavailable: ${e}`);
+      player.notify(t('Replay unavailable: {error}', { error: String(e) }));
     }
   }
 
@@ -337,7 +353,7 @@ class Store {
     const next = variants[variants.indexOf(variants.find((v) => v.id === item.id)!) + 1];
     if (!next) return undefined;
     return () => {
-      player.notify(`Feed failed: trying ${next.channel.name}`);
+      player.notify(t('Feed failed: trying {name}', { name: next.channel.name }));
       void this.tune({ ...next, variants });
     };
   }

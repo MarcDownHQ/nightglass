@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { openChannelMenu } from './channelMenu';
   import { library } from './library.svelte';
@@ -40,7 +41,7 @@
     if (!id || !listView) return;
     nav.guideChannel = null;
     const i = rows.findIndex((c) => c.id === id || c.variants?.some((v) => v.id === id));
-    if (i < 0) return player.notify("No programme guide for this channel");
+    if (i < 0) return player.notify(t('No programme guide for this channel'));
     shift = 0;
     listView.reveal(i);
     marked = id;
@@ -54,7 +55,7 @@
 
   function remind(item: LiveItem, p: Programme) {
     library.toggleReminder({ channel: item.id, channelName: displayName(item.channel.name), title: p.title, start: p.start, end: p.end });
-    if (library.hasReminder(item.id, p.start)) player.notify(`Reminder set for ${hm(p.start)}`);
+    if (library.hasReminder(item.id, p.start)) player.notify(t('Reminder set for {time}', { time: hm(p.start) }));
   }
 
   /** A click: replay a past programme when the server keeps it, a reminder for a future one, else the channel. */
@@ -67,13 +68,13 @@
   function programmeMenu(e: MouseEvent, item: LiveItem, p: Programme) {
     const now = store.now;
     const entries: MenuEntry[] = [{ heading: `${hm(p.start)}–${hm(p.end)} · ${p.title}` }];
-    if (p.start <= now && p.end > now) entries.push({ label: 'Watch live', icon: '\uE768', action: () => open(item) });
+    if (p.start <= now && p.end > now) entries.push({ label: t('Watch live'), icon: '\uE768', action: () => open(item) });
     if (store.canReplay(item, p)) {
-      entries.push({ label: p.end > now ? 'Watch from the start' : 'Replay', icon: '\uE72C', action: () => void store.playReplay(item, p) });
+      entries.push({ label: p.end > now ? t('Watch from the start') : 'Replay', icon: '\uE72C', action: () => void store.playReplay(item, p) });
     }
     if (p.start > now) {
       entries.push({
-        label: library.hasReminder(item.id, p.start) ? 'Cancel the reminder' : 'Remind me',
+        label: library.hasReminder(item.id, p.start) ? t('Cancel the reminder') : 'Remind me',
         icon: '\uEA8F',
         action: () => remind(item, p),
       });
@@ -144,18 +145,18 @@
 <svelte:window {onkeydown} />
 
 <div class="guide">
-  <HudPanel caption="Guide" trailing={day} class="panel">
+  <HudPanel caption={t('Guide')} trailing={day} class="panel">
     {#if !rows.length}
       <p class="empty">
-        {store.loading.size ? 'Loading the programme guide…' : 'No programme guide yet. Add an XMLTV URL to a source, or wait for it to load.'}
+        {store.loading.size ? t('Loading the programme guide…') : t('No programme guide yet. Add an XMLTV URL to a source, or wait for it to load.')}
       </p>
     {:else}
       <div class="grid" bind:clientWidth={width}>
         <div class="ruler">
           <div class="paging" style:width="{LABEL}px">
-            <button class="icon" title="Earlier (Page ↑)" onclick={() => (shift -= 2)}>&#xE76B;</button>
-            <button class="now" disabled={shift === 0} onclick={() => (shift = 0)}>Now</button>
-            <button class="icon" title="Later (Page ↓)" onclick={() => (shift += 2)}>&#xE76C;</button>
+            <button class="icon" title={t('Earlier (Page ↑)')} onclick={() => (shift -= 2)}>&#xE76B;</button>
+            <button class="now" disabled={shift === 0} onclick={() => (shift = 0)}>{t('Now')}</button>
+            <button class="icon" title={t('Later (Page ↓)')} onclick={() => (shift += 2)}>&#xE76C;</button>
           </div>
           <div class="times">
             {#each { length: WINDOW / HALF } as _, i (i)}
@@ -191,7 +192,7 @@
           class:cursor={cursorProgramme === p && rows[cursorRow] === item}
           style:left="{x0 + 2}px"
           style:width="{Math.max(x1 - x0 - 4, 2)}px"
-          title={(p.desc ? `${p.title}\n\n${p.desc}` : p.title) + (replay ? '\n\nClick to replay' : p.start > now ? '\n\nClick for a reminder' : '')}
+          title={(p.desc ? `${p.title}\n\n${p.desc}` : p.title) + (replay ? `\n\n${t('Click to replay')}` : p.start > now ? `\n\n${t('Click for a reminder')}` : '')}
           onclick={() => pick(item, p)}
           oncontextmenu={(e) => programmeMenu(e, item, p)}
         >

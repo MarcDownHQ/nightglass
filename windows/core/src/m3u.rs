@@ -10,45 +10,61 @@ pub struct Playlist {
 }
 
 pub fn parse(text: &str) -> Playlist {
-    let mut channels = Vec::new();
-    // The URL is the id; a playlist listing one stream twice (two categories, two names) gets `#2`, `#3`…
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let mut epg = None;
-    let mut info: Option<(HashMap<String, String>, String)> = None;
-    let mut headers = HashMap::new();
-    let mut extgrp: Option<String> = None;
+    let mut parser = Parser::default();
+    for line in text.split(['\n', '\r']) {
+        parser.line(line);
+    }
+    parser.finish()
+}
 
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    for raw in text.split(['\n', '\r']) {
-        let line = raw.trim_matches([' ', '\t']);
+/// Reads a playlist a line at a time, so a big one is parsed while it downloads instead of after.
+#[derive(Default)]
+pub struct Parser {
+    channels: Vec<Channel>,
+    /// The URL is the id; a playlist listing one stream twice (two categories, two names) gets `#2`, `#3`…
+    seen: HashMap<String, usize>,
+    epg: Option<Url>,
+    info: Option<(HashMap<String, String>, String)>,
+    headers: HashMap<String, String>,
+    extgrp: Option<String>,
+    started: bool,
+}
+
+impl Parser {
+    pub fn line(&mut self, raw: &str) {
+        let mut line = raw.trim_matches([' ', '\t', '\r']);
+        if !self.started {
+            self.started = true;
+            line = line.strip_prefix('\u{feff}').unwrap_or(line);
+        }
         if line.is_empty() {
-            continue;
+            return;
         }
         if line.starts_with("#EXTM3U") {
             let a = attributes(line);
-            epg = a
+            self.epg = a
                 .get("url-tvg")
                 .or_else(|| a.get("x-tvg-url"))
                 .and_then(|v| v.split(',').next())
                 .and_then(|v| Url::parse(v).ok());
         } else if line.starts_with("#EXTINF") {
-            info = Some((attributes(line), title(line)));
-            headers = HashMap::new();
-            extgrp = None;
+            self.info = Some((attributes(line), title(line)));
+            self.headers = HashMap::new();
+            self.extgrp = None;
         } else if let Some(opt) = line.strip_prefix("#EXTVLCOPT:") {
-            let Some((key, value)) = opt.split_once('=') else { continue };
+            let Some((key, value)) = opt.split_once('=') else { return };
             match key {
-                "http-user-agent" => headers.insert("User-Agent".to_string(), value.to_string()),
-                "http-referrer" | "http-referer" => headers.insert("Referer".to_string(), value.to_string()),
+                "http-user-agent" => self.headers.insert("User-Agent".to_string(), value.to_string()),
+                "http-referrer" | "http-referer" => self.headers.insert("Referer".to_string(), value.to_string()),
                 _ => None,
             };
         } else if let Some(group) = line.strip_prefix("#EXTGRP:") {
-            extgrp = Some(group.to_string());
+            self.extgrp = Some(group.to_string());
         } else if !line.starts_with('#')
-            && let Some((a, title)) = &info
+            && let Some((a, title)) = &self.info
             && let Ok(stream) = Url::parse(line)
         {
-            let group = a.get("group-title").or(extgrp.as_ref()).and_then(|g| g.split(';').next()).filter(|g| !g.is_empty());
+            let group = a.get("group-title").or(self.extgrp.as_ref()).and_then(|g| g.split(';').next()).filter(|g| !g.is_empty());
             let name = if title.is_empty() {
                 a.get("tvg-name")
                     .cloned()
@@ -56,25 +72,27 @@ pub fn parse(text: &str) -> Playlist {
             } else {
                 title.clone()
             };
-            channels.push(Channel {
-                id: {
-                    let n = seen.entry(stream.to_string()).or_insert(0);
-                    *n += 1;
-                    if *n == 1 { stream.to_string() } else { format!("{stream}#{n}") }
-                },
+            let n = self.seen.entry(stream.to_string()).or_insert(0);
+            *n += 1;
+            let id = if *n == 1 { stream.to_string() } else { format!("{stream}#{n}") };
+            self.channels.push(Channel {
+                id,
                 name,
                 number: a.get("tvg-chno").and_then(|n| n.parse().ok()),
                 group: group.map(str::to_string),
                 logo: a.get("tvg-logo").and_then(|l| Url::parse(l).ok()),
                 epg_id: a.get("tvg-id").filter(|id| !id.is_empty()).cloned(),
                 stream,
-                headers: std::mem::take(&mut headers),
+                headers: std::mem::take(&mut self.headers),
                 catchup_days: None,
             });
-            info = None;
+            self.info = None;
         }
     }
-    Playlist { channels, epg_url: epg }
+
+    pub fn finish(self) -> Playlist {
+        Playlist { channels: self.channels, epg_url: self.epg }
+    }
 }
 
 /// `key="value"` pairs of an `#EXTINF` / `#EXTM3U` line, keys lowercased.
@@ -120,8 +138,22 @@ impl M3uSource {
     }
 
     pub async fn catalog(&self) -> Result<Catalog> {
-        let data = self.http.fetch(&self.url).await?;
-        let playlist = parse(&String::from_utf8_lossy(&data));
+        let mut parser = Parser::default();
+        // Whole lines only: a chunk may end in the middle of one.
+        let mut pending: Vec<u8> = Vec::new();
+        self.http
+            .each_chunk(&self.url, |chunk| {
+                pending.extend_from_slice(chunk);
+                if let Some(last) = pending.iter().rposition(|&b| b == b'\n') {
+                    for line in pending[..last].split(|&b| b == b'\n') {
+                        parser.line(&String::from_utf8_lossy(line));
+                    }
+                    pending.drain(..=last);
+                }
+            })
+            .await?;
+        parser.line(&String::from_utf8_lossy(&pending));
+        let playlist = parser.finish();
         // shortcut: every M3U entry is treated as live TV; VOD inside M3U playlists is not split out.
         Ok(Catalog { channels: playlist.channels, epg_url: self.epg.clone().or(playlist.epg_url), ..Default::default() })
     }
@@ -133,13 +165,30 @@ mod tests {
 
     #[test]
     fn same_stream_twice_gets_two_ids() {
-        let p = parse("#EXTM3U
-#EXTINF:-1,A
-http://s.test/1
-#EXTINF:-1,B
-http://s.test/1
-");
+        let p = parse("#EXTM3U\n#EXTINF:-1,A\nhttp://s.test/1\n#EXTINF:-1,B\nhttp://s.test/1\n");
         assert_eq!(p.channels.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["http://s.test/1", "http://s.test/1#2"]);
+    }
+
+    /// A big playlist arrives in many pieces: lines cut between two of them must still parse.
+    #[tokio::test]
+    async fn streams_a_big_playlist() {
+        use wiremock::matchers::path;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mut body = String::from("#EXTM3U url-tvg=\"http://epg.test/g.xml\"\n");
+        for i in 0..20_000 {
+            body.push_str(&format!("#EXTINF:-1 tvg-id=\"c{i}\" group-title=\"G{}\",Channel {i}\nhttp://s.test/{i}.ts\n", i % 7));
+        }
+        // No newline after the last entry.
+        body.pop();
+        let server = MockServer::start().await;
+        Mock::given(path("/big.m3u")).respond_with(ResponseTemplate::new(200).set_body_string(body)).mount(&server).await;
+        let url = Url::parse(&format!("{}/big.m3u", server.uri())).unwrap();
+        let catalog = M3uSource::new(url, None, Http::new()).catalog().await.unwrap();
+        assert_eq!(catalog.channels.len(), 20_000);
+        let last = &catalog.channels[19_999];
+        assert_eq!((last.name.as_str(), last.epg_id.as_deref(), last.stream.as_str()), ("Channel 19999", Some("c19999"), "http://s.test/19999.ts"));
+        assert_eq!(catalog.epg_url.unwrap().as_str(), "http://epg.test/g.xml");
     }
 
     #[test]

@@ -12,6 +12,7 @@ export interface ContinueCard {
 </script>
 
 <script lang="ts" generics="T extends { id: string }">
+  import { t } from './i18n.svelte';
   import { library } from './library.svelte';
   import { categoryKey } from './lineup';
   import { contextMenu } from './menuState.svelte';
@@ -86,7 +87,7 @@ export interface ContinueCard {
     <div class="tabs" bind:this={tabs}>
       {#each categories as c (c)}
         <NeonTab
-          title={c}
+          title={c === 'All' ? t('All') : c}
           selected={c === category}
           onclick={() => (category = c)}
           oncontextmenu={(e) => {
@@ -94,7 +95,7 @@ export interface ContinueCard {
             const key = categoryKey(c);
             contextMenu.open(e, [
               {
-                label: library.lockedGroups.has(key) ? `Take “${c}” out of the PIN` : `Put “${c}” behind the PIN`,
+                label: t(library.lockedGroups.has(key) ? 'Take “{name}” out of the PIN' : 'Put “{name}” behind the PIN', { name: c }),
                 icon: '\uE72E',
                 action: () => void toggleCategoryLock(key),
               },
@@ -112,7 +113,7 @@ export interface ContinueCard {
 </div>
 
 {#snippet continueRow()}
-  <h3 class="mono">Continue watching</h3>
+  <h3 class="mono">{t('Continue watching')}</h3>
   <div class="strip" style:gap="{GAP}px" style:grid-auto-columns="{card}px">
     {#each continuing as c (c.id)}
       <Poster title={c.title} subtitle={c.subtitle} url={c.poster} rating={null} progress={c.progress} onclick={c.play} oncontextmenu={c.menu} />

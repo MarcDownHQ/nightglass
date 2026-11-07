@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { prompt } from './dialogs.svelte';
 
   let input: HTMLInputElement | undefined = $state();
@@ -23,8 +24,8 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input bind:this={input} bind:value={prompt.value} type={prompt.secret ? 'password' : 'text'} {onkeydown} autofocus spellcheck="false" />
       <div class="buttons">
-        <button onclick={() => prompt.answer(null)}>Cancel</button>
-        <button class="ok" onclick={() => prompt.answer(prompt.value)}>OK</button>
+        <button onclick={() => prompt.answer(null)}>{t('Cancel')}</button>
+        <button class="ok" onclick={() => prompt.answer(prompt.value)}>{t('OK')}</button>
       </div>
     </div>
   </div>

@@ -1,3 +1,4 @@
+import { t } from './i18n.svelte';
 import { prompt } from './dialogs.svelte';
 import { library } from './library.svelte';
 import { player } from './player.svelte';
@@ -8,11 +9,11 @@ import { player } from './player.svelte';
  */
 export async function unlock(): Promise<boolean> {
   if (!library.pinHash) {
-    const pin = await prompt.ask('Choose a parental PIN', '', { secret: true });
+    const pin = await prompt.ask(t('Choose a parental PIN'), '', { secret: true });
     if (!pin) return false;
-    const again = await prompt.ask('Type the PIN again', '', { secret: true });
+    const again = await prompt.ask(t('Type the PIN again'), '', { secret: true });
     if (again !== pin) {
-      player.notify('The two PINs differ');
+      player.notify(t('The two PINs differ'));
       return false;
     }
     await library.setPin(pin);
@@ -20,13 +21,13 @@ export async function unlock(): Promise<boolean> {
     return true;
   }
   if (library.unlocked) return true;
-  const pin = await prompt.ask('Parental PIN', '', { secret: true });
+  const pin = await prompt.ask(t('Parental PIN'), '', { secret: true });
   if (pin === null) return false;
   if (await library.checkPin(pin)) {
     library.unlocked = true;
     return true;
   }
-  player.notify('Wrong PIN');
+  player.notify(t('Wrong PIN'));
   return false;
 }
 
@@ -34,7 +35,7 @@ export async function unlock(): Promise<boolean> {
 export async function toggleCategoryLock(key: string) {
   if (!(await unlock())) return;
   library.toggleLock(key);
-  player.notify(library.lockedGroups.has(key) ? 'Locked: hidden until the PIN is typed' : 'Unlocked');
+  player.notify(library.lockedGroups.has(key) ? t('Locked: hidden until the PIN is typed') : t('Unlocked'));
 }
 
 /** Removes the PIN and every lock. */
@@ -43,5 +44,5 @@ export async function removePin() {
   for (const key of [...library.lockedGroups]) library.toggleLock(key);
   await library.setPin(null);
   library.unlocked = false;
-  player.notify('PIN removed');
+  player.notify(t('PIN removed'));
 }

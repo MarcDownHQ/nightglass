@@ -165,15 +165,15 @@ impl Client {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum IptvError {
-    #[error("Le serveur a répondu {0}.")]
+    #[error("The server answered {0}.")]
     Http(u16),
-    #[error("Identifiants refusés par le serveur.")]
+    #[error("The server refused the credentials.")]
     AuthFailed,
-    #[error("Réponse inattendue : {0}.")]
+    #[error("Unexpected answer: {0}.")]
     BadResponse(String),
-    #[error("Connexion impossible : {0}")]
+    #[error("Connection failed: {0}")]
     Network(String),
-    #[error("Fichier illisible : {0}")]
+    #[error("Can't read the file: {0}")]
     File(String),
 }
 

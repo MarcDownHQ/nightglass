@@ -100,6 +100,26 @@ fn read<R: BufRead>(input: R, window: &RangeInclusive<i64>, wanted: Option<&Hash
     out
 }
 
+/// `parse` on a guide file, read as it goes rather than loaded whole. Gzip is detected by its magic bytes.
+pub fn parse_file(path: &std::path::Path, window: RangeInclusive<i64>, channels: Option<&HashSet<String>>) -> std::io::Result<Vec<Programme>> {
+    let mut input = std::io::BufReader::with_capacity(1 << 16, std::fs::File::open(path)?);
+    Ok(if input.fill_buf()?.starts_with(&[0x1f, 0x8b]) {
+        read(std::io::BufReader::new(MultiGzDecoder::new(input)), &window, channels)
+    } else {
+        read(input, &window, channels)
+    })
+}
+
+/// `channels` on a guide file.
+pub fn channels_file(path: &std::path::Path) -> std::io::Result<Vec<(String, String)>> {
+    let mut input = std::io::BufReader::with_capacity(1 << 16, std::fs::File::open(path)?);
+    Ok(if input.fill_buf()?.starts_with(&[0x1f, 0x8b]) {
+        read_channels(std::io::BufReader::new(MultiGzDecoder::new(input)))
+    } else {
+        read_channels(input)
+    })
+}
+
 /// The channels a guide describes, as (id, first display name), in guide order: what a channel
 /// without a guide can be matched with by hand.
 pub fn channels(data: &[u8]) -> Vec<(String, String)> {
@@ -277,6 +297,22 @@ mod tests {
         gz.write_all(XML.as_bytes()).unwrap();
         let gz = gz.finish().unwrap();
         assert_eq!(parse(&gz, at()..=at() + 86_400, None).len(), 3);
+    }
+
+    #[test]
+    fn reads_files_plain_and_gzipped() {
+        let dir = std::env::temp_dir();
+        let plain = dir.join(format!("ng-xmltv-{}.xml", std::process::id()));
+        std::fs::write(&plain, XML).unwrap();
+        let gz = dir.join(format!("ng-xmltv-{}.xml.gz", std::process::id()));
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        enc.write_all(XML.as_bytes()).unwrap();
+        std::fs::write(&gz, enc.finish().unwrap()).unwrap();
+        for path in [&plain, &gz] {
+            assert_eq!(parse_file(path, at()..=at() + 86_400, None).unwrap().len(), 3);
+            assert_eq!(channels_file(path).unwrap().len(), 1);
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
     #[test]

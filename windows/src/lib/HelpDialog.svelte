@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { panels } from './dialogs.svelte';
   import Modal from './Modal.svelte';
 
@@ -64,15 +65,15 @@
   ];
 </script>
 
-<Modal title="Keyboard shortcuts" width={820} close={() => (panels.help = false)}>
+<Modal title={t('Keyboard shortcuts')} width={820} close={() => (panels.help = false)}>
   <div class="groups">
     {#each GROUPS as [title, keys] (title)}
       <section>
-        <h3 class="mono">{title}</h3>
+        <h3 class="mono">{t(title)}</h3>
         <dl>
           {#each keys as [key, what] (key)}
             <dt><kbd class="mono">{key}</kbd></dt>
-            <dd>{what}</dd>
+            <dd>{t(what)}</dd>
           {/each}
         </dl>
       </section>

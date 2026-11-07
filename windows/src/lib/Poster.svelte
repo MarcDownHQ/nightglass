@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import Tag from './Tag.svelte';
   import { neon } from './theme';
 
@@ -34,7 +35,7 @@
     {:else}
       <span class="fallback">{title}</span>
     {/if}
-    {#if watched}<span class="watched icon" title="Watched">&#xE73E;</span>{/if}
+    {#if watched}<span class="watched icon" title={t('Watched')}>&#xE73E;</span>{/if}
     {#if progress > 0}<span class="bar"><span style:width="{progress * 100}%"></span></span>{/if}
   </span>
   <span class="caption">
