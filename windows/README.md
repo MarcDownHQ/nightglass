@@ -19,7 +19,12 @@ En plus de la version macOS :
 - onglets **Recent** (10 dernières chaînes) et **Hidden** dans Live ;
 - **clic droit** sur une chaîne : favori, voir dans le guide, copier l'URL du flux, masquer la chaîne ou sa catégorie (clic droit sur un onglet pour masquer une catégorie) ;
 - films et épisodes **repris là où on s'était arrêté**, marqués vus (à la main ou à 92 %), rangée **Continue watching**, **épisode suivant** dans le lecteur et enchaîné à la fin ;
-- **volume** et langues audio / sous-titres choisies mémorisés d'une lecture à l'autre.
+- **volume** et langues audio / sous-titres choisies mémorisés d'une lecture à l'autre ;
+- **classement des chaînes** (bouton entonnoir à droite des onglets) : ordre de la playlist, par nom, par numéro ou les plus regardées ; filtre par pays ou langue d'après les préfixes `FR |`, `|FR|`, `[FR]`… ;
+- **doublons regroupés** : « TF1 », « TF1 HD » et « FR | TF1 FHD » font une seule ligne, sur le meilleur flux ; l'étiquette de qualité ouvre la liste des flux, et si un flux tombe, le suivant prend le relais ;
+- **catégories fusionnées** entre sources et préfixes (« FR | Sport » et « Sport » ne font qu'un onglet), noms de chaînes et de catégories affichés sans préfixe ;
+- **plusieurs listes de favoris**, chacune son onglet, numérotée à partir de 1 (le pavé numérique y suit ces numéros) et réordonnable par glisser-déposer, `Alt+↑/↓` ou clic droit ;
+- fenêtre **Organize** : ordre, noms et visibilité des catégories, listes de favoris.
 
 ## Architecture
 
@@ -79,6 +84,7 @@ L'exe n'est pas signé : Windows affiche l'avertissement SmartScreen à l'instal
 
 ```powershell
 cargo test --workspace
+npm test   # règles de classement (préfixes, doublons, catégories) avec Vitest
 ```
 
 Tests d'intégration (facultatifs, contre de vrais serveurs) :
@@ -95,7 +101,7 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant.
+`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris.
 
 ## Licence
 

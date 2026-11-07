@@ -1,9 +1,13 @@
-export interface MenuEntry {
-  label: string;
-  /** Segoe Fluent Icons code point. */
-  icon?: string;
-  action: () => void;
-}
+export type MenuEntry =
+  | {
+      label: string;
+      /** Segoe Fluent Icons code point. */
+      icon?: string;
+      /** A choice among several: a tick instead of the icon. */
+      checked?: boolean;
+      action: () => void;
+    }
+  | { heading: string };
 
 /** The right-click menu: one at a time, drawn by `ContextMenu.svelte` at the pointer. */
 class ContextMenuState {

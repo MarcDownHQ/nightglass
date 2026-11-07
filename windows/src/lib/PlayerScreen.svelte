@@ -31,8 +31,8 @@
   });
 
   function zap(delta: number) {
-    const list = store.channels;
-    const i = list.findIndex((c) => c.id === item?.id);
+    const list = store.lineup;
+    const i = list.findIndex((c) => c.id === item?.id || c.variants?.some((v) => v.id === item?.id));
     if (i >= 0) void store.tune(list[(i + delta + list.length) % list.length]);
   }
 

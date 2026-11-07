@@ -1,3 +1,4 @@
+import { splitCountry } from './lineup';
 import type { Programme } from './models';
 
 const NEONS = ['var(--magenta)', 'var(--cyan)', 'var(--acid)'];
@@ -9,16 +10,27 @@ export function neon(name: string): string {
   return NEONS[Number((h < 0n ? -h : h) % 3n)];
 }
 
-/** "Alpe d'Huez TV (720p) [Not 24/7]" → "Alpe d'Huez TV". The quality comes back as a tag via `qualityTag`. */
+/**
+ * "FR | Alpe d'Huez TV HD (720p) [Not 24/7]" → "Alpe d'Huez TV": without the country prefix and the
+ * quality, which comes back as a tag via `qualityTag`.
+ */
 export function displayName(name: string): string {
-  return name.replace(/\s*(\((\d{3,4}p|4K|HD|FHD|SD)\)|\[[^\]]*\])/gi, '').trim();
+  const bare = splitCountry(name)
+    .rest.replace(/\s*(\((\d{3,4}p|4K|HD|FHD|UHD|SD)\)|\[[^\]]*\])/gi, '')
+    .replace(/(\s+(4K|UHD|FHD|HD|SD|HEVC|H\.?265))+\s*$/i, '')
+    .trim();
+  return bare || name.trim();
 }
 
+/** The quality a name announces, as a tag: 4K, FHD, HD or SD; nothing when it says nothing. */
 export function qualityTag(name: string): string | null {
-  const m = name.match(/\((\d{3,4})p\)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return n >= 2160 ? '4K' : n >= 1080 ? 'FHD' : n >= 720 ? 'HD' : 'SD';
+  const m = name.match(/\((\d{3,4})p\)|\b(\d{3,4})p\b/);
+  if (m) {
+    const n = Number(m[1] ?? m[2]);
+    return n >= 2160 ? '4K' : n >= 1080 ? 'FHD' : n >= 720 ? 'HD' : 'SD';
+  }
+  const t = name.match(/\b(4K|UHD|FHD|HD|SD)\b/i)?.[1].toUpperCase();
+  return t === 'UHD' ? '4K' : (t ?? null);
 }
 
 export function initials(name: string): string {

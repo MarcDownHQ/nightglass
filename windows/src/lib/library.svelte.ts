@@ -1,4 +1,5 @@
 import { SvelteSet } from 'svelte/reactivity';
+import type { SortMode } from './lineup';
 import type { Episode } from './models';
 import { prefs } from './prefs';
 
@@ -19,13 +20,39 @@ const WATCHED = 0.92;
 const KEEP = 300;
 const RECENTS = 10;
 
+/** A favourites list: its own tab, its own order, its own numbers. */
+export interface FavoriteList {
+  id: string;
+  name: string;
+  /** Channel ids, in the order the user set. */
+  items: string[];
+}
+
+/** The first list holds what was starred before lists existed. */
+function initialLists(): FavoriteList[] {
+  const saved = prefs.json<FavoriteList[] | null>('favoriteLists', null);
+  return saved ?? [{ id: 'favorites', name: 'Favorites', items: prefs.json<string[]>('favorites', []) }];
+}
+
 /** What the user did with the catalogs: recents, hidden channels and categories, where they stopped, volume and languages. */
 class Library {
   /** Ids of the last channels tuned, most recent first. */
   recents = $state<string[]>(prefs.json('recents', []));
   hiddenChannels = new SvelteSet<string>(prefs.json('hiddenChannels', []));
-  /** Category names, hidden in every source. */
+  /** Category keys (`categoryKey`), hidden in every source. */
   hiddenGroups = new SvelteSet<string>(prefs.json('hiddenGroups', []));
+  favoriteLists = $state<FavoriteList[]>(initialLists());
+  /** Category keys in the order the user set; the others follow in playlist order. */
+  categoryOrder = $state<string[]>(prefs.json('categoryOrder', []));
+  /** Category key → name the user gave it. */
+  categoryNames = $state<Record<string, string>>(prefs.json('categoryNames', {}));
+  sort = $state<SortMode>(prefs.json('sort', 'playlist'));
+  /** One row per channel, its HD/SD/backup feeds behind it. */
+  mergeDuplicates = $state<boolean>(prefs.json('mergeDuplicates', true));
+  /** Only the channels of this country or language prefix. */
+  country = $state<string | null>(prefs.json('country', null));
+  /** Seconds of live TV watched per channel, for the “Most watched” order. */
+  watchTime = $state<Record<string, number>>(prefs.json('watchTime', {}));
   progress = $state<Record<string, Progress>>(prefs.json('progress', {}));
   volume = $state<number>(prefs.json('volume', 100));
   muted = $state<boolean>(prefs.json('muted', false));
@@ -35,6 +62,61 @@ class Library {
   subOff = $state<boolean>(prefs.json('subOff', false));
 
   private lastSaved = 0;
+
+  /** Saves one of the settings above under its own name. */
+  persist(key: 'categoryOrder' | 'categoryNames' | 'sort' | 'mergeDuplicates' | 'country' | 'favoriteLists' | 'watchTime') {
+    prefs.setJson(key, this[key]);
+  }
+
+  isFavorite(id: string): boolean {
+    return this.favoriteLists.some((l) => l.items.includes(id));
+  }
+
+  /** Adds to the list or takes out of it. */
+  toggleFavorite(listId: string, id: string) {
+    const list = this.favoriteLists.find((l) => l.id === listId);
+    if (!list) return;
+    list.items = list.items.includes(id) ? list.items.filter((i) => i !== id) : [...list.items, id];
+    this.persist('favoriteLists');
+  }
+
+  /** Moves a channel in its list: by `delta` places, or before `before` (drag and drop). */
+  moveFavorite(listId: string, id: string, delta: number | { before: string | null }) {
+    const list = this.favoriteLists.find((l) => l.id === listId);
+    if (!list) return;
+    const rest = list.items.filter((i) => i !== id);
+    let at: number;
+    if (typeof delta === 'number') at = Math.max(0, Math.min(rest.length, list.items.indexOf(id) + delta));
+    else at = delta.before === null ? rest.length : Math.max(0, rest.indexOf(delta.before));
+    rest.splice(at, 0, id);
+    list.items = rest;
+    this.persist('favoriteLists');
+  }
+
+  createList(name: string): FavoriteList {
+    const list = { id: crypto.randomUUID(), name, items: [] };
+    this.favoriteLists.push(list);
+    this.persist('favoriteLists');
+    return this.favoriteLists[this.favoriteLists.length - 1];
+  }
+
+  renameList(listId: string, name: string) {
+    const list = this.favoriteLists.find((l) => l.id === listId);
+    if (list && name.trim()) list.name = name.trim();
+    this.persist('favoriteLists');
+  }
+
+  deleteList(listId: string) {
+    this.favoriteLists = this.favoriteLists.filter((l) => l.id !== listId);
+    this.persist('favoriteLists');
+  }
+
+  /** Live TV watched: counted once the channel has played a minute. */
+  watched(id: string, seconds: number) {
+    if (seconds < 60) return;
+    this.watchTime[id] = (this.watchTime[id] ?? 0) + Math.round(seconds);
+    this.persist('watchTime');
+  }
 
   tuned(id: string) {
     this.recents = [id, ...this.recents.filter((r) => r !== id)].slice(0, RECENTS);

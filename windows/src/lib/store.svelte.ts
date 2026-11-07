@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
 import { episodeKey, library } from './library.svelte';
+import { categoryKey, categoryLabel, fold, groupDuplicates, splitCountry } from './lineup';
 import {
   epgKey,
   type Catalog,
@@ -22,7 +23,6 @@ class Store {
   errors = $state<Record<string, string>>({});
   /** Programmes per normalised EPG id, sorted by start. */
   guide = $state.raw<Record<string, Programme[]>>({});
-  favorites = new SvelteSet<string>(prefs.json('favorites', []));
   /** Source the screens show; null means every source. */
   activeSource = $state<string | null>(prefs.get('activeSource'));
   /** Unix seconds, ticking every 30 s for progress lines and now/next. */
@@ -54,9 +54,50 @@ class Store {
     !library.hiddenChannels.size && !library.hiddenGroups.size
       ? this.allChannels
       : this.allChannels.filter(
-          (c) => !library.hiddenChannels.has(c.id) && !(c.channel.group && library.hiddenGroups.has(c.channel.group)),
+          (c) => !library.hiddenChannels.has(c.id) && !(c.channel.group && library.hiddenGroups.has(categoryKey(c.channel.group))),
         ),
   );
+
+  /** Country or language prefixes found in the channels, most channels first. */
+  countries = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const c of this.channels) {
+      const code = countryOf(c);
+      if (code) counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([code]) => code);
+  });
+
+  /**
+   * What the Live screen lists: the country picked, duplicates merged behind their best feed, in the
+   * order chosen. Zapping, the guide and the numbers keep to it.
+   */
+  lineup = $derived.by(() => {
+    let list = this.channels;
+    const country = library.country;
+    if (country && this.countries.includes(country)) list = list.filter((c) => countryOf(c) === country);
+    if (library.mergeDuplicates) {
+      list = groupDuplicates(list, (c) => c.channel.name).map(({ lead, variants }) => (variants.length > 1 ? { ...lead, variants } : lead));
+    }
+    switch (library.sort) {
+      case 'name':
+        return [...list].sort((a, b) => fold(categoryLabel(a.channel.name)).localeCompare(fold(categoryLabel(b.channel.name))));
+      case 'number':
+        return [...list].sort((a, b) => (a.channel.number ?? Infinity) - (b.channel.number ?? Infinity));
+      case 'watched': {
+        const time = (c: LiveItem) => (c.variants ?? [c]).reduce((sum, v) => sum + (library.watchTime[v.id] ?? 0), 0);
+        return [...list].sort((a, b) => time(b) - time(a));
+      }
+      default:
+        return list;
+    }
+  });
+
+  /** Categories as the tabs show them: one per name across sources and prefixes, in the order set. */
+  categories = $derived(categoriesOf(this.lineup));
+
+  /** Every category, the hidden ones included: the Organize window. */
+  allCategories = $derived(categoriesOf(this.allChannels));
 
   movies = $derived(
     this.visibleSources.flatMap((source) =>
@@ -156,10 +197,6 @@ class Store {
     prefs.set('activeSource', id);
   }
 
-  toggleFavorite(item: LiveItem) {
-    if (!this.favorites.delete(item.id)) this.favorites.add(item.id);
-    prefs.setJson('favorites', [...this.favorites]);
-  }
 
   programmes(channel: Channel): Programme[] {
     return (channel.epgId && this.guide[epgKey(channel.epgId)]) || [];
@@ -184,6 +221,7 @@ class Store {
       live: true,
       number: channel.number ?? undefined,
       item,
+      fallback: this.fallback(item),
     };
   }
 
@@ -242,7 +280,24 @@ class Store {
     return matches.find((c) => c.source.id === player.current?.item?.source.id) ?? matches[0];
   }
 
+  /** When a feed fails, the next one of the same channel, saying so. */
+  private fallback(item: LiveItem): (() => void) | undefined {
+    const variants = item.variants;
+    if (!variants || variants.length < 2) return undefined;
+    const next = variants[variants.indexOf(variants.find((v) => v.id === item.id)!) + 1];
+    if (!next) return undefined;
+    return () => {
+      player.notify(`Feed failed: trying ${next.channel.name}`);
+      void this.tune({ ...next, variants });
+    };
+  }
+
+  private tunedAt = 0;
+
   async tune(item: LiveItem) {
+    const previous = player.current?.item;
+    if (previous && this.tunedAt) library.watched(previous.id, (Date.now() - this.tunedAt) / 1000);
+    this.tunedAt = Date.now();
     library.tuned(item.id);
     try {
       player.play(await this.playable(item));
@@ -250,6 +305,25 @@ class Store {
       player.error = String(e);
     }
   }
+}
+
+function categoriesOf(items: LiveItem[]): { key: string; label: string }[] {
+  const labels = new Map<string, string>();
+  for (const { channel } of items) {
+    if (!channel.group) continue;
+    const key = categoryKey(channel.group);
+    if (!labels.has(key)) labels.set(key, library.categoryNames[key] ?? categoryLabel(channel.group));
+  }
+  const rank = new Map(library.categoryOrder.map((k, i) => [k, i]));
+  return [...labels]
+    .map(([key, label], i) => ({ key, label, i }))
+    .sort((a, b) => (rank.get(a.key) ?? 1e6 + a.i) - (rank.get(b.key) ?? 1e6 + b.i))
+    .map(({ key, label }) => ({ key, label }));
+}
+
+/** The country of a channel: its own prefix, or its category's. */
+function countryOf(c: LiveItem): string | null {
+  return splitCountry(c.channel.name).country ?? (c.channel.group ? splitCountry(c.channel.group).country : null);
 }
 
 /** The same guide loaded twice must not list a programme twice. */

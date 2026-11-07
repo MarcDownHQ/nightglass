@@ -19,6 +19,8 @@ export interface Playable {
   start?: number;
   /** Films and episodes: the position as it plays, then once more at the end or on stop. */
   onprogress?: (time: number, duration: number, final: boolean) => void;
+  /** Live TV: another feed of the same channel, tried when this one fails. */
+  fallback?: () => void;
   /** The next episode, offered in the HUD and played when this one ends. */
   next?: { title: string; play: () => void };
 }
@@ -206,6 +208,8 @@ class Player {
         if (p.live && this.started && this.retunes < 3) {
           this.retunes++;
           this.load(p);
+        } else if (p.live && p.fallback) {
+          p.fallback();
         } else if (e.reason === 'error' || p.live) {
           this.loading = false;
           this.error = e.error ?? 'Stream ended.';

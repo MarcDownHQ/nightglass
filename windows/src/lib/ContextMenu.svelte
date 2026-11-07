@@ -35,17 +35,22 @@
 
 {#if contextMenu.entries.length}
   <ul class="menu" role="menu" bind:this={root} style:left="{left}px" style:top="{top}px">
-    {#each contextMenu.entries as entry (entry.label)}
+    {#each contextMenu.entries as entry, i (i)}
       <li>
-        <button
-          role="menuitem"
-          onclick={() => {
-            contextMenu.close();
-            entry.action();
-          }}
-        >
-          <span class="icon">{entry.icon ?? ''}</span>{entry.label}
-        </button>
+        {#if 'heading' in entry}
+          <span class="heading mono">{entry.heading}</span>
+        {:else}
+          <button
+            role={entry.checked === undefined ? 'menuitem' : 'menuitemradio'}
+            aria-checked={entry.checked}
+            onclick={() => {
+              contextMenu.close();
+              entry.action();
+            }}
+          >
+            <span class="icon">{entry.checked ? '' : (entry.icon ?? '')}</span>{entry.label}
+          </button>
+        {/if}
       </li>
     {/each}
   </ul>
@@ -53,6 +58,8 @@
 
 <style>
   .menu {
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     position: fixed;
     z-index: 100;
     min-width: 220px;
@@ -81,6 +88,16 @@
     outline: none;
     background: rgb(243 238 255 / 0.07);
     color: var(--text);
+  }
+  .heading {
+    display: block;
+    padding: 8px 10px 4px;
+    font-size: 11px;
+    color: var(--acid);
+  }
+  li:not(:first-child) > .heading {
+    margin-top: 4px;
+    border-top: 1px solid rgb(243 238 255 / 0.08);
   }
   .icon {
     width: 16px;

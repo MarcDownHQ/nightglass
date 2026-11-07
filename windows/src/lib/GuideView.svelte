@@ -25,7 +25,7 @@
   const start = $derived((Math.floor((store.now - HALF) / HALF) + shift) * HALF);
   const end = $derived(start + WINDOW);
   const perSecond = $derived(Math.max(0, width - LABEL) / WINDOW);
-  const rows = $derived(store.channels.filter((c) => store.programmes(c.channel).length));
+  const rows = $derived(store.lineup.filter((c) => store.programmes(c.channel).length));
   const day = $derived(new Date(start * 1000).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }));
 
   let listView: { reveal: (index: number) => void } | undefined = $state();
@@ -36,7 +36,7 @@
     const id = nav.guideChannel;
     if (!id || !listView) return;
     nav.guideChannel = null;
-    const i = rows.findIndex((c) => c.id === id);
+    const i = rows.findIndex((c) => c.id === id || c.variants?.some((v) => v.id === id));
     if (i < 0) return player.notify("No programme guide for this channel");
     shift = 0;
     listView.reveal(i);

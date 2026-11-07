@@ -1,9 +1,11 @@
 <script lang="ts">
   import ChannelLogo from './ChannelLogo.svelte';
-  import { openChannelMenu } from './channelMenu';
-  import { contextMenu } from './menuState.svelte';
+  import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
+  import { organizer } from './dialogs.svelte';
   import HudPanel from './HudPanel.svelte';
   import { library } from './library.svelte';
+  import { categoryKey, categoryLabel, type SortMode } from './lineup';
+  import { contextMenu, type MenuEntry } from './menuState.svelte';
   import type { LiveItem } from './models';
   import { dial, nav, typing } from './nav.svelte';
   import NeonTab from './NeonTab.svelte';
@@ -18,51 +20,179 @@
   import { videoHole } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
 
-  const FAVORITES = '★ Favorites';
-  const RECENT = '↺ Recent';
-  const HIDDEN = 'Hidden';
-  let category = $state('All');
+  /** A tab: `list:<id>` a favourites list, `cat:<key>` a category, or all / recent / hidden. */
+  interface Tab {
+    id: string;
+    label: string;
+  }
+
+  let tab = $state('all');
   let listView: { reveal: (index: number) => void } | undefined = $state();
-  let tabs: HTMLElement;
+  let tabsEl: HTMLElement;
+  let dragged = $state<string | null>(null);
+
+  const playingId = $derived(player.current?.item?.id);
+  /** The row of the channel playing: the channel itself, or the merged row holding its feed. */
+  const isPlaying = (row: LiveItem) => row.id === playingId || !!row.variants?.some((v) => v.id === playingId);
+
+  const byId = $derived.by(() => {
+    const map = new Map<string, LiveItem>();
+    for (const row of store.lineup) {
+      map.set(row.id, row);
+      for (const v of row.variants ?? []) map.set(v.id, row);
+    }
+    return map;
+  });
 
   const hidden = $derived.by(() => {
     if (store.channels === store.allChannels) return [];
     const shown = new Set(store.channels);
     return store.allChannels.filter((c) => !shown.has(c));
   });
-  const recent = $derived.by(() => {
-    const byId = new Map(store.channels.map((c) => [c.id, c]));
-    return library.recents.flatMap((id) => byId.get(id) ?? []);
+  const recent = $derived([...new Set(library.recents.flatMap((id) => byId.get(id) ?? []))]);
+
+  /** A list's channels in its own order; a channel in it twice through two feeds shows once. */
+  function listRows(listId: string): LiveItem[] {
+    const items = library.favoriteLists.find((l) => l.id === listId)?.items ?? [];
+    return [...new Set(items.flatMap((id) => byId.get(id) ?? []))];
+  }
+
+  const tabs = $derived.by((): Tab[] => [
+    // The first list shows once it has something; the lists made on purpose show even empty.
+    ...library.favoriteLists
+      .filter((l, i) => i > 0 || l.items.length)
+      .map((l) => ({ id: `list:${l.id}`, label: `★ ${l.name}` })),
+    ...(recent.length ? [{ id: 'recent', label: '↺ Recent' }] : []),
+    { id: 'all', label: 'All' },
+    ...store.categories.map((c) => ({ id: `cat:${c.key}`, label: c.label })),
+    ...(hidden.length ? [{ id: 'hidden', label: 'Hidden' }] : []),
+  ]);
+
+  const listId = $derived(tab.startsWith('list:') ? tab.slice(5) : undefined);
+
+  const list = $derived.by((): LiveItem[] => {
+    if (tab === 'all') return store.lineup;
+    if (tab === 'recent') return recent;
+    if (tab === 'hidden') return hidden;
+    if (listId) return listRows(listId);
+    const key = tab.slice(4);
+    return store.lineup.filter((c) => c.channel.group && categoryKey(c.channel.group) === key);
   });
 
-  const categories = $derived.by(() => {
-    const out = [...(store.favorites.size ? [FAVORITES] : []), ...(recent.length ? [RECENT] : []), 'All'];
-    const seen = new Set<string>();
-    for (const { channel } of store.channels) {
-      if (channel.group && !seen.has(channel.group)) {
-        seen.add(channel.group);
-        out.push(channel.group);
-      }
-    }
-    if (hidden.length) out.push(HIDDEN);
-    return out;
+  const caption = $derived(tab === 'all' ? 'All channels' : (tabs.find((t) => t.id === tab)?.label ?? ''));
+
+  $effect(() => {
+    if (!tabs.some((t) => t.id === tab)) tab = 'all';
   });
 
-  const list = $derived(
-    category === 'All'
-      ? store.channels
-      : category === FAVORITES
-        ? store.channels.filter((c) => store.favorites.has(c.id))
-        : category === RECENT
-          ? recent
-          : category === HIDDEN
-            ? hidden
-            : store.channels.filter((c) => c.channel.group === category),
-  );
+  // Keep the playing channel in view, whoever tuned it (keys, dial, search, zapping in fullscreen).
+  $effect(() => {
+    const i = list.findIndex(isPlaying);
+    if (i >= 0) listView?.reveal(i);
+  });
 
-  function tabMenu(e: MouseEvent, c: string) {
-    if (c === 'All' || c === FAVORITES || c === RECENT || c === HIDDEN) return;
-    contextMenu.open(e, [{ label: `Hide “${c}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, c) }]);
+  $effect(() => {
+    void tab;
+    tabsEl?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+
+  // A channel picked in the guide or the search: show it in All and tune it.
+  $effect(() => {
+    const id = nav.focusChannel;
+    const row = id && (byId.get(id) ?? store.channels.find((c) => c.id === id));
+    if (!row) return;
+    nav.focusChannel = null;
+    tab = 'all';
+    void store.tune(row);
+  });
+
+  function move(delta: number) {
+    if (!list.length) return;
+    const i = list.findIndex(isPlaying);
+    void store.tune(list[i < 0 ? 0 : (i + delta + list.length) % list.length]);
+  }
+
+  function shiftTab(delta: number) {
+    const i = tabs.findIndex((t) => t.id === tab);
+    tab = tabs[(i + delta + tabs.length) % tabs.length].id;
+  }
+
+  function tabMenu(e: MouseEvent, t: Tab) {
+    const entries: MenuEntry[] = [];
+    if (t.id.startsWith('cat:')) {
+      const key = t.id.slice(4);
+      entries.push(
+        { label: `Hide “${t.label}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
+        { label: 'Organize categories…', icon: '', action: () => (organizer.open = true) },
+      );
+    } else if (t.id.startsWith('list:')) {
+      entries.push({ label: 'Organize lists…', icon: '', action: () => (organizer.open = true) });
+    } else return;
+    contextMenu.open(e, entries);
+  }
+
+  const SORTS: [SortMode, string][] = [
+    ['playlist', 'Playlist order'],
+    ['name', 'Name'],
+    ['number', 'Number'],
+    ['watched', 'Most watched'],
+  ];
+
+  function viewMenu(e: MouseEvent) {
+    const set = <K extends 'sort' | 'country' | 'mergeDuplicates'>(key: K, value: (typeof library)[K]) => {
+      library[key] = value;
+      library.persist(key);
+    };
+    contextMenu.open(e, [
+      { heading: 'Order' },
+      ...SORTS.map(([mode, label]) => ({ label, checked: library.sort === mode, action: () => set('sort', mode) })),
+      { heading: 'Feeds' },
+      { label: 'Merge HD, SD and backup feeds', checked: library.mergeDuplicates, action: () => set('mergeDuplicates', !library.mergeDuplicates) },
+      ...(store.countries.length > 1
+        ? [
+            { heading: 'Country' },
+            { label: 'All countries', checked: !library.country, action: () => set('country', null) },
+            ...store.countries.slice(0, 20).map((code) => ({ label: code, checked: library.country === code, action: () => set('country', code) })),
+          ]
+        : []),
+      { heading: 'Organize' },
+      { label: 'Categories and lists…', icon: '', action: () => (organizer.open = true) },
+      { label: 'New favorites list…', icon: '', action: () => void newList() },
+    ]);
+  }
+
+  /** `S`: the first list, or the list shown. */
+  function toggleFavorite() {
+    const item = player.current?.item;
+    if (item) library.toggleFavorite(listId ?? library.favoriteLists[0]?.id ?? '', item.id);
+  }
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.metaKey) return;
+    const playing = list.find(isPlaying);
+    if (e.altKey) {
+      if (!listId || !playing || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      library.moveFavorite(listId, playing.id, e.key === 'ArrowUp' ? -1 : 1);
+    } else if (e.key === 'ArrowDown') move(1);
+    else if (e.key === 'ArrowUp') move(-1);
+    else if (e.key === 'ArrowRight') shiftTab(1);
+    else if (e.key === 'ArrowLeft') shiftTab(-1);
+    else if (e.key === 'Enter') void player.expand();
+    else if (e.key === 'Escape') player.stop();
+    else if (e.key === ' ') player.togglePause();
+    else if (e.key.toLowerCase() === 's') toggleFavorite();
+    else if (/^[0-9]$/.test(e.key)) {
+      // In a favourites list the numbers are the list's own: 1 is its first channel.
+      const rows = list;
+      const inList = !!listId;
+      dial.type(e.key, (n) => {
+        const item = inList ? rows[n - 1] : store.byNumber(n);
+        if (!item) return;
+        if (!inList) tab = 'all';
+        void store.tune(byId.get(item.id) ?? item);
+      });
+    } else return;
+    e.preventDefault();
   }
 
   function onwheel(e: WheelEvent) {
@@ -70,63 +200,9 @@
     player.setVolume(library.volume + (e.deltaY < 0 ? 5 : -5));
   }
 
-  const selected = $derived(player.current?.item?.id);
-
-  $effect(() => {
-    if (!categories.includes(category)) category = 'All';
-  });
-
-  // Keep the playing channel in view, whoever tuned it (keys, dial, search, zapping in fullscreen).
-  $effect(() => {
-    const i = list.findIndex((c) => c.id === selected);
-    if (i >= 0) listView?.reveal(i);
-  });
-
-  $effect(() => {
-    void category;
-    tabs?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  });
-
-  // A channel picked in the guide or the search: show it in All and tune it.
-  $effect(() => {
-    const item = nav.focusChannel && store.channels.find((c) => c.id === nav.focusChannel);
-    if (!item) return;
-    nav.focusChannel = null;
-    category = 'All';
-    void store.tune(item);
-  });
-
-  function move(delta: number) {
-    if (!list.length) return;
-    const i = list.findIndex((c) => c.id === selected);
-    void store.tune(list[i < 0 ? 0 : (i + delta + list.length) % list.length]);
-  }
-
-  function shiftCategory(delta: number) {
-    const i = categories.indexOf(category);
-    category = categories[(i + delta + categories.length) % categories.length];
-  }
-
-  function onkeydown(e: KeyboardEvent) {
-    if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.altKey || e.metaKey) return;
-    if (e.key === 'ArrowDown') move(1);
-    else if (e.key === 'ArrowUp') move(-1);
-    else if (e.key === 'ArrowRight') shiftCategory(1);
-    else if (e.key === 'ArrowLeft') shiftCategory(-1);
-    else if (e.key === 'Enter') void player.expand();
-    else if (e.key === 'Escape') player.stop();
-    else if (e.key === ' ') player.togglePause();
-    else if (e.key.toLowerCase() === 's' && player.current?.item) store.toggleFavorite(player.current.item);
-    else if (/^[0-9]$/.test(e.key)) {
-      dial.type(e.key, (n) => {
-        const item = store.byNumber(n);
-        if (item) {
-          category = 'All';
-          void store.tune(item);
-        }
-      });
-    } else return;
-    e.preventDefault();
+  function drop(target: LiveItem | null) {
+    if (listId && dragged && dragged !== target?.id) library.moveFavorite(listId, dragged, { before: target?.id ?? null });
+    dragged = null;
   }
 </script>
 
@@ -134,13 +210,16 @@
 
 <div class="live">
   <div class="left">
-    <div class="tabs" bind:this={tabs}>
-      {#each categories as c (c)}
-        <NeonTab title={c} selected={c === category} onclick={() => (category = c)} oncontextmenu={(e) => tabMenu(e, c)} />
-      {/each}
+    <div class="bar">
+      <div class="tabs" bind:this={tabsEl}>
+        {#each tabs as t (t.id)}
+          <NeonTab title={t.label} selected={t.id === tab} onclick={() => (tab = t.id)} oncontextmenu={(e) => tabMenu(e, t)} />
+        {/each}
+      </div>
+      <button class="icon view" title="Order, feeds, countries, categories" onclick={viewMenu}>&#xE71C;</button>
     </div>
-    <HudPanel caption={category === 'All' ? 'All channels' : category} trailing={String(list.length)} class="channels">
-      {#key category}
+    <HudPanel {caption} trailing={String(list.length)} class="channels">
+      {#key tab}
         <VirtualList items={list} rowHeight={66} key={(c) => c.id} row={channelRow} bind:this={listView} />
       {/key}
     </HudPanel>
@@ -169,17 +248,51 @@
   {@const ch = item.channel}
   {@const c = neon(ch.name)}
   {@const np = store.nowNext(ch)}
+  {@const variants = item.variants?.length ?? 0}
   {@const quality = qualityTag(ch.name)}
-  <button class="row" class:on={item.id === selected} style:--c={c} onclick={() => store.tune(item)} ondblclick={() => player.expand()} oncontextmenu={(e) => openChannelMenu(e, item)}>
-    <span class="num mono">{ch.number ?? ''}</span>
+  <button
+    class="row"
+    class:on={isPlaying(item)}
+    class:dragging={dragged === item.id}
+    style:--c={c}
+    draggable={!!listId}
+    onclick={() => store.tune(item)}
+    ondblclick={() => player.expand()}
+    oncontextmenu={(e) => openChannelMenu(e, item, listId)}
+    ondragstart={(e) => {
+      dragged = item.id;
+      e.dataTransfer?.setData('text/plain', item.id);
+    }}
+    ondragend={() => (dragged = null)}
+    ondragover={(e) => listId && e.preventDefault()}
+    ondrop={(e) => {
+      e.preventDefault();
+      drop(item);
+    }}
+  >
+    <span class="num mono">{listId ? list.indexOf(item) + 1 : (ch.number ?? '')}</span>
     <ChannelLogo channel={ch} color={c} />
     <span class="text">
       <b>{displayName(ch.name)}</b>
-      <small>{np.now?.title ?? ch.group ?? ''}</small>
+      <small>{np.now?.title ?? (ch.group ? categoryLabel(ch.group) : '')}</small>
       <span class="progress"><ProgressLine value={np.now ? progress(np.now, store.now) : 0} color={c} /></span>
     </span>
-    {#if store.favorites.has(item.id)}<span class="star">★</span>{/if}
-    {#if quality}<Tag text={quality} />{/if}
+    {#if library.isFavorite(item.id)}<span class="star">★</span>{/if}
+    {#if variants > 1}
+      <span
+        class="feeds"
+        role="button"
+        tabindex="-1"
+        title="{variants} feeds of this channel"
+        onclick={(e) => {
+          e.stopPropagation();
+          openVariantMenu(e, item);
+        }}
+        onkeydown={() => {}}
+      >
+        <Tag text={quality ? `${quality} · ${variants}` : `${variants} feeds`} />
+      </span>
+    {:else if quality}<Tag text={quality} />{/if}
   </button>
 {/snippet}
 
@@ -199,7 +312,24 @@
     min-width: 0;
     min-height: 0;
   }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .view {
+    flex: none;
+    padding: 8px;
+    font-size: 15px;
+    color: var(--dim);
+  }
+  .view:hover {
+    color: var(--cyan);
+  }
   .tabs {
+    flex: 1;
+    min-width: 0;
     display: flex;
     gap: 8px;
     padding: 8px 4px;
@@ -319,6 +449,18 @@
   }
   .progress {
     padding-top: 4px;
+  }
+  .row.dragging {
+    opacity: 0.4;
+  }
+  .row[draggable='true'] {
+    cursor: grab;
+  }
+  .feeds {
+    cursor: pointer;
+  }
+  .feeds:hover :global(*) {
+    filter: brightness(1.4);
   }
   .star {
     color: var(--acid);
