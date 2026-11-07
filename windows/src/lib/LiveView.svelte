@@ -223,7 +223,7 @@
         {/each}
       </div>
       <button class="icon view" title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
-      <button class="icon view" title={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
+      <button class="icon view filter" title={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
     </div>
     <HudPanel {caption} trailing={String(list.length)} class="channels">
       {#key tab}
@@ -343,6 +343,10 @@
   }
   .view:hover {
     color: var(--cyan);
+  }
+  /* The funnel glyph sits on the baseline, a pixel lower than the grid one: lifted so both look centred. */
+  .view.filter {
+    padding: 7px 8px 9px;
   }
   .tabs {
     flex: 1;
