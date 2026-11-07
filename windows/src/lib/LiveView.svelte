@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
   import { organizer } from './dialogs.svelte';
   import HudPanel from './HudPanel.svelte';
   import { friendly } from './errors';
-  import { library } from './library.svelte';
+  import { library, listLabel } from './library.svelte';
   import { multiview } from './tilesState.svelte';
   import { categoryKey, categoryLabel, type SortMode } from './lineup';
   import { contextMenu, type MenuEntry } from './menuState.svelte';
@@ -64,11 +65,11 @@
     // The first list shows once it has something; the lists made on purpose show even empty.
     ...library.favoriteLists
       .filter((l, i) => i > 0 || l.items.length)
-      .map((l) => ({ id: `list:${l.id}`, label: `★ ${l.name}` })),
-    ...(recent.length ? [{ id: 'recent', label: '↺ Recent' }] : []),
-    { id: 'all', label: 'All' },
+      .map((l) => ({ id: `list:${l.id}`, label: `★ ${listLabel(l)}` })),
+    ...(recent.length ? [{ id: 'recent', label: t('↺ Recent') }] : []),
+    { id: 'all', label: t('All') },
     ...store.categories.map((c) => ({ id: `cat:${c.key}`, label: c.label })),
-    ...(hidden.length ? [{ id: 'hidden', label: 'Hidden' }] : []),
+    ...(hidden.length ? [{ id: 'hidden', label: t('Hidden') }] : []),
   ]);
 
   const listId = $derived(tab.startsWith('list:') ? tab.slice(5) : undefined);
@@ -82,10 +83,10 @@
     return store.lineup.filter((c) => c.channel.group && categoryKey(c.channel.group) === key);
   });
 
-  const caption = $derived(tab === 'all' ? 'All channels' : (tabs.find((t) => t.id === tab)?.label ?? ''));
+  const caption = $derived(tab === 'all' ? t('All channels') : (tabs.find((x) => x.id === tab)?.label ?? ''));
 
   $effect(() => {
-    if (!tabs.some((t) => t.id === tab)) tab = 'all';
+    if (!tabs.some((x) => x.id === tab)) tab = 'all';
   });
 
   // Keep the playing channel in view, whoever tuned it (keys, dial, search, zapping in fullscreen).
@@ -116,20 +117,20 @@
   }
 
   function shiftTab(delta: number) {
-    const i = tabs.findIndex((t) => t.id === tab);
+    const i = tabs.findIndex((x) => x.id === tab);
     tab = tabs[(i + delta + tabs.length) % tabs.length].id;
   }
 
-  function tabMenu(e: MouseEvent, t: Tab) {
+  function tabMenu(e: MouseEvent, tb: Tab) {
     const entries: MenuEntry[] = [];
-    if (t.id.startsWith('cat:')) {
-      const key = t.id.slice(4);
+    if (tb.id.startsWith('cat:')) {
+      const key = tb.id.slice(4);
       entries.push(
-        { label: `Hide “${t.label}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
-        { label: 'Organize categories…', icon: '', action: () => (organizer.open = true) },
+        { label: t('Hide “{name}”', { name: tb.label }), icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
+        { label: t('Organize categories…'), icon: '', action: () => (organizer.open = true) },
       );
-    } else if (t.id.startsWith('list:')) {
-      entries.push({ label: 'Organize lists…', icon: '', action: () => (organizer.open = true) });
+    } else if (tb.id.startsWith('list:')) {
+      entries.push({ label: t('Organize lists…'), icon: '', action: () => (organizer.open = true) });
     } else return;
     contextMenu.open(e, entries);
   }
@@ -147,20 +148,20 @@
       library.persist(key);
     };
     contextMenu.open(e, [
-      { heading: 'Order' },
-      ...SORTS.map(([mode, label]) => ({ label, checked: library.sort === mode, action: () => set('sort', mode) })),
-      { heading: 'Feeds' },
-      { label: 'Merge HD, SD and backup feeds', checked: library.mergeDuplicates, action: () => set('mergeDuplicates', !library.mergeDuplicates) },
+      { heading: t('Order') },
+      ...SORTS.map(([mode, label]) => ({ label: t(label), checked: library.sort === mode, action: () => set('sort', mode) })),
+      { heading: t('Feeds') },
+      { label: t('Merge HD, SD and backup feeds'), checked: library.mergeDuplicates, action: () => set('mergeDuplicates', !library.mergeDuplicates) },
       ...(store.countries.length > 1
         ? [
-            { heading: 'Country' },
-            { label: 'All countries', checked: !library.country, action: () => set('country', null) },
+            { heading: t('Country') },
+            { label: t('All countries'), checked: !library.country, action: () => set('country', null) },
             ...store.countries.slice(0, 20).map((code) => ({ label: code, checked: library.country === code, action: () => set('country', code) })),
           ]
         : []),
-      { heading: 'Organize' },
-      { label: 'Categories and lists…', icon: '', action: () => (organizer.open = true) },
-      { label: 'New favorites list…', icon: '', action: () => void newList() },
+      { heading: t('Organize') },
+      { label: t('Categories and lists…'), icon: '', action: () => (organizer.open = true) },
+      { label: t('New favorites list…'), icon: '', action: () => void newList() },
     ]);
   }
 
@@ -217,12 +218,12 @@
   <div class="left">
     <div class="bar">
       <div class="tabs" bind:this={tabsEl}>
-        {#each tabs as t (t.id)}
-          <NeonTab title={t.label} selected={t.id === tab} onclick={() => (tab = t.id)} oncontextmenu={(e) => tabMenu(e, t)} />
+        {#each tabs as tb (tb.id)}
+          <NeonTab title={tb.label} selected={tb.id === tab} onclick={() => (tab = tb.id)} oncontextmenu={(e) => tabMenu(e, tb)} />
         {/each}
       </div>
-      <button class="icon view" title="Multi-view: 2 or 4 channels at once" onclick={() => multiview.show()}>&#xF0E2;</button>
-      <button class="icon view" title="Order, feeds, countries, categories" onclick={viewMenu}>&#xE71C;</button>
+      <button class="icon view" title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
+      <button class="icon view" title={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
     </div>
     <HudPanel {caption} trailing={String(list.length)} class="channels">
       {#key tab}
@@ -236,8 +237,8 @@
       <div class="preview" use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
         {#if player.loading || player.error}
           <div class="status" class:error={player.error}>
-            {player.error ? friendly(player.error) : `Loading ${displayName(player.current.title)}…`}
-            {#if player.error}<button class="retry" onclick={() => player.retry()}>Retry</button>{/if}
+            {player.error ? friendly(player.error) : player.reconnecting ? t('Signal lost: reconnecting (attempt {n})…', { n: player.reconnecting }) : t('Loading {name}…', { name: displayName(player.current.title) })}
+            {#if player.error}<button class="retry" onclick={() => player.retry()}>{t('Retry')}</button>{/if}
           </div>
         {/if}
         <div class="corner">
@@ -248,7 +249,7 @@
       </div>
     {:else}
       <div class="preview empty">
-        <p class="status" class:error={player.error}>{player.error ? friendly(player.error) : 'Select a channel'}</p>
+        <p class="status" class:error={player.error}>{player.error ? friendly(player.error) : t('Select a channel')}</p>
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
       </div>
     {/if}
@@ -295,14 +296,14 @@
         class="feeds"
         role="button"
         tabindex="-1"
-        title="{variants} feeds of this channel"
+        title={t('{n} feeds of this channel', { n: variants })}
         onclick={(e) => {
           e.stopPropagation();
           openVariantMenu(e, item);
         }}
         onkeydown={() => {}}
       >
-        <Tag text={quality ? `${quality} · ${variants}` : `${variants} feeds`} />
+        <Tag text={quality ? `${quality} · ${variants}` : t('{n} feeds', { n: variants })} />
       </span>
     {:else if quality}<Tag text={quality} />{/if}
   </button>

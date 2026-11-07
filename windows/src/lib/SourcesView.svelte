@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
   import { kindLabel, type Source } from './models';
@@ -13,13 +14,19 @@
   function accountLine(a: Account): string {
     const parts: string[] = [];
     if (a.status && a.status !== 'Active') parts.push(a.status);
-    if (a.trial) parts.push('Trial');
+    if (a.trial) parts.push(t('Trial'));
     if (a.expires) {
       const days = Math.ceil((a.expires * 1000 - Date.now()) / 86_400_000);
       const date = new Date(a.expires * 1000).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
-      parts.push(days < 0 ? `Expired on ${date}` : days <= 14 ? `Expires in ${days} day${days === 1 ? '' : 's'} (${date})` : `Expires ${date}`);
-    } else parts.push('No expiry');
-    if (a.maxConnections) parts.push(`${a.activeConnections ?? 0}/${a.maxConnections} connections`);
+      parts.push(
+        days < 0
+          ? t('Expired on {date}', { date })
+          : days <= 14
+            ? t(days === 1 ? 'Expires in {n} day ({date})' : 'Expires in {n} days ({date})', { n: days, date })
+            : t('Expires {date}', { date }),
+      );
+    } else parts.push(t('No expiry'));
+    if (a.maxConnections) parts.push(t('{active}/{max} connections', { active: a.activeConnections ?? 0, max: a.maxConnections }));
     return parts.join(' · ');
   }
 
@@ -29,9 +36,9 @@
 </script>
 
 <div class="sources">
-  <HudPanel caption="Sources" trailing={String(store.sources.length)}>
+  <HudPanel caption={t('Sources')} trailing={String(store.sources.length)}>
     <div class="rows">
-      {#if !store.sources.length}<p class="empty">No source yet.</p>{/if}
+      {#if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
       {#each store.sources as s (s.id)}
         {@const kind = kindLabel(s.kind)}
         {@const cat = store.catalogs[s.id]}
@@ -40,7 +47,7 @@
           class:on={store.activeSource === s.id}
           role="button"
           tabindex="0"
-          title="Click to show only this source"
+          title={t('Click to show only this source')}
           onclick={() => toggle(s)}
           onkeydown={(e) => e.key === 'Enter' && toggle(s)}
         >
@@ -48,12 +55,12 @@
           <div class="text">
             <b>{s.name}</b>
             {#if store.loading.has(s.id)}
-              <small class="busy">Loading…</small>
+              <small class="busy">{t('Loading…')}</small>
             {:else if store.errors[s.id]}
               <small class="error" title={store.errors[s.id]}>{friendly(store.errors[s.id])}</small>
-              {#if cat}<small>Showing the copy from the last launch.</small>{/if}
+              {#if cat}<small>{t('Showing the copy from the last launch.')}</small>{/if}
             {:else}
-              <small>{cat?.channels.length ?? 0} channels · {cat?.movies.length ?? 0} movies · {cat?.series.length ?? 0} series</small>
+              <small>{t('{channels} channels · {movies} movies · {series} series', { channels: cat?.channels.length ?? 0, movies: cat?.movies.length ?? 0, series: cat?.series.length ?? 0 })}</small>
             {/if}
             {#if cat?.account}
               {@const soon = cat.account.expires && cat.account.expires * 1000 - Date.now() < 14 * 86_400_000}
@@ -62,7 +69,7 @@
           </div>
           <button
             class="icon"
-            title="Refresh"
+            title={t('Refresh')}
             onclick={(e) => {
               e.stopPropagation();
               void store.refresh(s);
@@ -70,7 +77,7 @@
           >
           <button
             class="icon remove"
-            title="Remove"
+            title={t('Remove')}
             onclick={(e) => {
               e.stopPropagation();
               store.remove(s);
@@ -83,10 +90,10 @@
   <div class="side">
     <AddSource />
     <div class="transfer">
-      <button onclick={exportSettings} title="Sources, favourites, lists, hidden categories, progress: to a file"
-        ><span class="icon">&#xEDE1;</span> Export settings…</button
+      <button onclick={exportSettings} title={t('Sources, favourites, lists, hidden categories, progress: to a file')}
+        ><span class="icon">&#xEDE1;</span> {t('Export settings…')}</button
       >
-      <button onclick={importSettings} title="From a file exported on this PC or another"><span class="icon">&#xE8B5;</span> Import settings…</button>
+      <button onclick={importSettings} title={t('From a file exported on this PC or another')}><span class="icon">&#xE8B5;</span> {t('Import settings…')}</button>
     </div>
   </div>
 </div>

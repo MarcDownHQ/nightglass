@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { player } from './player.svelte';
 </script>
 
 <!-- Stops playback entirely (Esc in Live, Ctrl+. anywhere). -->
-<button class="stop" onclick={() => player.stop()} title="Stop playback (Ctrl+.)"><i class="icon">&#xE71A;</i> Stop</button>
+<button class="stop" onclick={() => player.stop()} title={t('Stop playback (Ctrl+.)')}><i class="icon">&#xE71A;</i> {t('Stop')}</button>
 
 <style>
   .stop {

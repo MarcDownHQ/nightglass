@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import HudPanel from './HudPanel.svelte';
+  import { friendly } from './errors';
   import { fold } from './lineup';
   import type { LiveItem } from './models';
   import { multiview } from './tilesState.svelte';
@@ -62,13 +64,13 @@
 <div class="multiview">
   <div class="side">
     <div class="tools">
-      <button class:on={multiview.layout === 2} onclick={() => multiview.setLayout(2)} title="Two channels">&#xE745; 2</button>
-      <button class:on={multiview.layout === 4} onclick={() => multiview.setLayout(4)} title="Four channels">&#xF0E2; 4</button>
+      <button class:on={multiview.layout === 2} onclick={() => multiview.setLayout(2)} title={t('Two channels')}>&#xE745; 2</button>
+      <button class:on={multiview.layout === 4} onclick={() => multiview.setLayout(4)} title={t('Four channels')}>&#xF0E2; 4</button>
       <span class="spacer"></span>
-      <button class="close" onclick={() => multiview.close()} title="Close multi-view (Esc)">Close</button>
+      <button class="close" onclick={() => multiview.close()} title={t('Close multi-view (Esc)')}>{t('Close')}</button>
     </div>
-    <input class="filter" placeholder="Filter channels" bind:value={filter} spellcheck="false" />
-    <HudPanel caption="Into tile {multiview.active + 1}" trailing={String(list.length)} class="channels">
+    <input class="filter" placeholder={t('Filter channels')} bind:value={filter} spellcheck="false" />
+    <HudPanel caption={t('Into tile {n}', { n: multiview.active + 1 })} trailing={String(list.length)} class="channels">
       <VirtualList items={list} rowHeight={52} key={(c) => c.id} row={channelRow} />
     </HudPanel>
   </div>
@@ -86,20 +88,20 @@
       >
         <div class="video">
           {#if !tile.item}
-            <p class="hint">Tile {i + 1}<br /><small>Select it, then pick a channel</small></p>
+            <p class="hint">{t('Tile {n}', { n: i + 1 })}<br /><small>{t('Select it, then pick a channel')}</small></p>
           {:else if tile.loading || tile.error}
-            <p class="hint" class:error={tile.error}>{tile.error ?? 'Loading…'}</p>
+            <p class="hint" class:error={tile.error}>{tile.error ? friendly(tile.error) : t('Loading…')}</p>
           {/if}
         </div>
         {#if tile.item}
           <div class="caption">
-            <span class="icon sound" title={multiview.active === i ? 'Heard' : 'Muted (click the tile to hear it)'}>
+            <span class="icon sound" title={multiview.active === i ? t('Heard') : t('Muted (click the tile to hear it)')}>
               {multiview.active === i ? '' : ''}
             </span>
             <b>{displayName(tile.item.channel.name)}</b>
             <button
               class="icon"
-              title="Empty this tile"
+              title={t('Empty this tile')}
               onclick={(e) => {
                 e.stopPropagation();
                 void multiview.clear(i);

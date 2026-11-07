@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
-  import { library } from './library.svelte';
+  import { library, listLabel } from './library.svelte';
   import type { LiveItem } from './models';
   import { nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
@@ -25,7 +26,7 @@
       const r = p.resume;
       if (r.kind === 'movie') {
         const m = movies.get(id);
-        return m ? [{ id, title: m.movie.name, subtitle: `${clock(p.duration - p.position)} left`, poster: m.movie.poster, progress: p.position / p.duration, play: () => store.playMovie(m) }] : [];
+        return m ? [{ id, title: m.movie.name, subtitle: t('{time} left', { time: clock(p.duration - p.position) }), poster: m.movie.poster, progress: p.position / p.duration, play: () => store.playMovie(m) }] : [];
       }
       const s = shows.get(r.series);
       return s
@@ -49,21 +50,21 @@
   {#if last}
     {@const np = store.nowNext(last.channel)}
     {@const c = neon(last.channel.name)}
-    <button class="hero" style:--c={c} onclick={() => watchFullscreen(last)} title="Watch fullscreen">
+    <button class="hero" style:--c={c} onclick={() => watchFullscreen(last)} title={t('Watch fullscreen')}>
       <ChannelLogo channel={last.channel} color={c} size={84} />
       <div class="hero-text">
-        <span class="label mono">Back to</span>
+        <span class="label mono">{t('Back to')}</span>
         <NeonText text={displayName(last.channel.name)} size={44} />
         <span class="now">{np.now ? `${hm(np.now.start)} · ${np.now.title}` : (last.channel.group ?? '')}</span>
         {#if np.now}<div class="bar"><ProgressLine value={progress(np.now, store.now)} color={c} height={3} /></div>{/if}
       </div>
-      <span class="play"><span class="icon">&#xE768;</span> Watch</span>
+      <span class="play"><span class="icon">&#xE768;</span> {t('Watch')}</span>
     </button>
   {:else}
     <div class="hello">
       <NeonText text="Welcome" size={44} />
-      <p>Pick a channel in Live: the last one you watch comes back here.</p>
-      <button class="go" onclick={() => (nav.section = 'live')}>Open Live</button>
+      <p>{t('Pick a channel in Live: the last one you watch comes back here.')}</p>
+      <button class="go" onclick={() => (nav.section = 'live')}>{t('Open Live')}</button>
     </div>
   {/if}
 
@@ -85,12 +86,12 @@
     </section>
   {/snippet}
 
-  {#if recent.length > 1}{@render channelCards('Recent', recent.slice(1, 13))}{/if}
-  {#if favorites.length}{@render channelCards(library.favoriteLists[0].name, favorites)}{/if}
+  {#if recent.length > 1}{@render channelCards(t('Recent'), recent.slice(1, 13))}{/if}
+  {#if favorites.length}{@render channelCards(listLabel(library.favoriteLists[0]), favorites)}{/if}
 
   {#if continuing.length}
     <section>
-      <h3 class="mono">Continue watching</h3>
+      <h3 class="mono">{t('Continue watching')}</h3>
       <div class="strip posters">
         {#each continuing as c (c.id)}
           <div class="poster"><Poster title={c.title} subtitle={c.subtitle} url={c.poster} rating={null} progress={c.progress} onclick={c.play} /></div>
@@ -101,7 +102,7 @@
 
   {#if upcoming.length}
     <section>
-      <h3 class="mono">Reminders</h3>
+      <h3 class="mono">{t('Reminders')}</h3>
       <ul class="reminders">
         {#each upcoming as r (r.channel + r.start)}
           <li>

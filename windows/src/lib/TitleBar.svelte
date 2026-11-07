@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Menu from './Menu.svelte';
   import { nav, SECTIONS, type Section } from './nav.svelte';
@@ -13,9 +14,9 @@
   const win = getCurrentWindow();
   const ALL = '';
 
-  const current = $derived(store.visibleSources.length === 1 ? store.visibleSources[0].name : 'All sources');
+  const current = $derived(store.visibleSources.length === 1 ? store.visibleSources[0].name : t('All sources'));
   const choices = $derived([
-    { id: ALL, name: 'All sources', selected: store.visibleSources.length !== 1 },
+    { id: ALL, name: t('All sources'), selected: store.visibleSources.length !== 1 },
     ...store.sources.map((s) => ({ id: s.id, name: s.name, selected: store.activeSource === s.id })),
   ]);
 
@@ -30,10 +31,10 @@
       library.unlocked = false;
       return;
     }
-    const pin = await prompt.ask('Parental PIN', '', { secret: true });
+    const pin = await prompt.ask(t('Parental PIN'), '', { secret: true });
     if (pin === null) return;
     if (await library.checkPin(pin)) library.unlocked = true;
-    else player.notify('Wrong PIN');
+    else player.notify(t('Wrong PIN'));
   }
 </script>
 
@@ -43,40 +44,40 @@
 
 <header data-tauri-drag-region>
   <div class="brand"><NeonText text="NIGHTGLASS" size={26} /></div>
-  {#each SECTIONS.slice(0, 5) as s (s.id)}{@render tab(s.id, s.title)}{/each}
+  {#each SECTIONS.slice(0, 5) as s (s.id)}{@render tab(s.id, t(s.title))}{/each}
   <div class="spacer" data-tauri-drag-region></div>
-  {#if store.loading.size}<span class="loading mono">Loading…</span>{/if}
+  {#if store.loading.size}<span class="loading mono">{t('Loading…')}</span>{/if}
   {#if updater.available}
     <button
       class="pill update"
-      title={updater.error ?? `Install version ${updater.available.version}; Nightglass restarts`}
+      title={updater.error ?? t('Install version {version}; Nightglass restarts', { version: updater.available.version })}
       onclick={() => updater.install()}
     >
       <span class="icon">&#xE896;</span>
-      {updater.progress === null ? `Update ${updater.available.version}` : `Updating ${Math.round(updater.progress * 100)}%`}
+      {updater.progress === null ? t('Update {version}', { version: updater.available.version }) : t('Updating {percent}%', { percent: Math.round(updater.progress * 100) })}
     </button>
   {/if}
   {#if library.pinHash && library.lockedGroups.size}
-    <button class="pill lock" class:open={library.unlocked} onclick={lock} title={library.unlocked ? 'Lock the PIN categories again' : 'Show the categories behind the PIN'}>
+    <button class="pill lock" class:open={library.unlocked} onclick={lock} title={library.unlocked ? t('Lock the PIN categories again') : t('Show the categories behind the PIN')}>
       <span class="icon">{library.unlocked ? '\uE785' : '\uE72E'}</span>
     </button>
   {/if}
   {#if store.sources.length > 1}
-    <Menu label="Source" items={choices} onpick={(id) => store.setActive(id || null)} title="Choose the source to show">
+    <Menu label={t('Source')} items={choices} onpick={(id) => store.setActive(id || null)} title={t('Choose the source to show')}>
       {#snippet trigger()}
         <span class="pill picker"><span class="dot"></span><span class="name">{current}</span><span class="icon chevron">&#xE70D;</span></span>
       {/snippet}
     </Menu>
   {/if}
   <button class="pill" onclick={() => (nav.searching = true)}>
-    <span class="icon">&#xE721;</span> Search <span class="dim mono">Ctrl K</span>
+    <span class="icon">&#xE721;</span> {t('Search')} <span class="dim mono">Ctrl K</span>
   </button>
-  {@render tab('sources', 'Sources')}
-  <button class="icon gear" title="Settings" onclick={() => (panels.settings = true)}>&#xE713;</button>
+  {@render tab('sources', t('Sources'))}
+  <button class="icon gear" title={t('Settings')} onclick={() => (panels.settings = true)}>&#xE713;</button>
   <div class="controls">
-    <button class="icon" aria-label="Minimize" onclick={() => win.minimize()}>&#xE921;</button>
-    <button class="icon" aria-label="Maximize" onclick={() => win.toggleMaximize()}>&#xE922;</button>
-    <button class="icon close" aria-label="Close" onclick={() => win.close()}>&#xE8BB;</button>
+    <button class="icon" aria-label={t('Minimize')} onclick={() => win.minimize()}>&#xE921;</button>
+    <button class="icon" aria-label={t('Maximize')} onclick={() => win.toggleMaximize()}>&#xE922;</button>
+    <button class="icon close" aria-label={t('Close')} onclick={() => win.close()}>&#xE8BB;</button>
   </div>
 </header>
 

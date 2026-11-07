@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { contextMenu } from './menuState.svelte';
   import { episodeKey, library } from './library.svelte';
   import type { Episode, SeriesItem } from './models';
@@ -12,14 +13,14 @@
   function menu(e: MouseEvent, item: SeriesItem, episode: Episode) {
     const key = episodeKey(item.id, episode);
     contextMenu.open(e, [
-      { label: 'Resume', icon: '', action: () => void store.playEpisode(item, episode) },
-      { label: 'Play from the start', icon: '', action: () => void store.playEpisode(item, episode, undefined, true) },
+      { label: t('Resume'), icon: '', action: () => void store.playEpisode(item, episode) },
+      { label: t('Play from the start'), icon: '', action: () => void store.playEpisode(item, episode, undefined, true) },
       {
-        label: 'Mark as watched',
+        label: t('Mark as watched'),
         icon: '',
         action: () => library.setWatched(key, { kind: 'episode', series: item.id, episode }, true),
       },
-      { label: 'Open the series', icon: '', action: () => (nav.openSeries = item) },
+      { label: t('Open the series'), icon: '', action: () => (nav.openSeries = item) },
     ]);
   }
 
@@ -48,7 +49,7 @@
   <PosterBrowser
     items={store.series}
     info={(i) => i.series}
-    empty="No series. Add an Xtream account that has some."
+    empty={t('No series. Add an Xtream account that has some.')}
     onpick={(i) => (nav.openSeries = i)}
     {continuing}
   />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { library } from './library.svelte';
   import { player } from './player.svelte';
 
@@ -7,14 +8,14 @@
 </script>
 
 <div class="volume">
-  <button class="icon" onclick={() => player.toggleMute()} title={library.muted ? 'Unmute (M)' : 'Mute (M)'}>{icon}</button>
+  <button class="icon" onclick={() => player.toggleMute()} title={library.muted ? t('Unmute (M)') : t('Mute (M)')}>{icon}</button>
   <input
     type="range"
     min="0"
     max="130"
     step="1"
     value={library.muted ? 0 : library.volume}
-    aria-label="Volume"
+    aria-label={t('Volume')}
     title="Volume {library.volume}% (+/−)"
     oninput={(e) => player.setVolume(Number(e.currentTarget.value))}
   />

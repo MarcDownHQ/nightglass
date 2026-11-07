@@ -1,3 +1,4 @@
+import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
@@ -69,6 +70,11 @@ class Player {
   private osdTimer: ReturnType<typeof setTimeout> | undefined;
   private started = false;
   private retunes = 0;
+  /** Live TV dropped and is being tuned again: the attempt number, 0 otherwise. */
+  reconnecting = $state(0);
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private stallTimer: ReturnType<typeof setTimeout> | undefined;
+  private onOnline: (() => void) | null = null;
   private wasFullscreen = false;
 
   constructor() {
@@ -117,6 +123,7 @@ class Player {
 
   play(p: Playable) {
     if (p.id === this.current?.id && !this.error) return;
+    this.cancelReconnect();
     this.report(true);
     void this.stopRecording();
     this.current = p;
@@ -145,6 +152,7 @@ class Player {
   }
 
   stop() {
+    this.cancelReconnect();
     this.report(true);
     void this.stopRecording();
     void invoke('mpv_command', { args: ['stop'] });
@@ -181,8 +189,44 @@ class Player {
   retry() {
     const p = this.current;
     if (!p) return;
+    this.cancelReconnect();
     this.retunes = 0;
     this.load(p);
+  }
+
+  /**
+   * A live stream that played and dropped (or stalled) is tuned again after 1, 2, 4… up to 30 s, for
+   * about two and a half minutes; offline, it waits for the network to come back. False when it gave up.
+   */
+  private reconnect(p: Playable): boolean {
+    const delays = [1, 2, 4, 8, 15, 30, 30, 30];
+    if (this.retunes >= delays.length) return false;
+    const delay = delays[this.retunes++];
+    this.reconnecting = this.retunes;
+    this.loading = true;
+    this.error = null;
+    this.cancelTimers();
+    const go = () => {
+      this.onOnline = null;
+      if (this.current === p) this.load(p);
+    };
+    if (!navigator.onLine) {
+      this.onOnline = go;
+      addEventListener('online', go, { once: true });
+    } else this.retryTimer = setTimeout(go, delay * 1000);
+    return true;
+  }
+
+  private cancelTimers() {
+    clearTimeout(this.retryTimer);
+    clearTimeout(this.stallTimer);
+    if (this.onOnline) removeEventListener('online', this.onOnline);
+    this.onOnline = null;
+  }
+
+  private cancelReconnect() {
+    this.cancelTimers();
+    this.reconnecting = 0;
   }
 
   togglePause() {
@@ -222,9 +266,9 @@ class Player {
       const path = await invoke<string>('record_path', { name: `${this.current.title} ${stamp}` });
       await invoke('mpv_set', { name: 'stream-record', value: path });
       this.recording = path;
-      this.notify('Recording');
+      this.notify(t('Recording'));
     } catch (e) {
-      this.notify(`Recording failed: ${e}`);
+      this.notify(t('Recording failed: {error}', { error: String(e) }));
     }
   }
 
@@ -233,7 +277,7 @@ class Player {
     if (!path) return;
     this.recording = null;
     await invoke('mpv_set', { name: 'stream-record', value: '' }).catch(() => {});
-    this.notify(`Saved to ${path}`, 4000);
+    this.notify(t('Saved to {path}', { path }), 4000);
   }
 
   /** A small window above the others, in the screen's corner; again to go back. */
@@ -293,13 +337,13 @@ class Player {
   setVolume(volume: number) {
     library.setVolume(volume, false);
     void this.applyVolume();
-    this.notify(`Volume ${library.volume}%`);
+    this.notify(t('Volume {n}%', { n: library.volume }));
   }
 
   toggleMute() {
     library.setVolume(library.volume, !library.muted);
     void this.applyVolume();
-    this.notify(library.muted ? 'Muted' : `Volume ${library.volume}%`);
+    this.notify(library.muted ? t('Muted') : t('Volume {n}%', { n: library.volume }));
   }
 
   private async applyVolume() {
@@ -319,18 +363,22 @@ class Player {
       case 'playback-restart':
         this.loading = false;
         this.started = true;
+        // Playing again: the next drop gets the whole series of attempts.
+        this.retunes = 0;
+        this.reconnecting = 0;
         break;
       case 'end-file': {
         const p = this.current;
         if (!p || (e.reason !== 'eof' && e.reason !== 'error')) break;
         // A live stream never ends on its own: the server dropped it, so tune again, a bounded number of times.
-        if (p.live && this.started && this.retunes < 3) {
-          this.retunes++;
-          this.load(p);
+        if (p.live && (this.started || this.reconnecting) && this.reconnect(p)) {
+          // Waiting for the next attempt.
         } else if (p.live && p.fallback) {
+          this.reconnecting = 0;
           p.fallback();
         } else if (e.reason === 'error' || p.live) {
           this.loading = false;
+          this.reconnecting = 0;
           this.error = e.error ?? 'Stream ended.';
         } else {
           // Watched to the end: tell it so, then the next episode if there is one.
@@ -356,6 +404,14 @@ class Player {
         break;
       case 'paused-for-cache':
         this.buffering = value === true;
+        clearTimeout(this.stallTimer);
+        // A live stream stuck buffering for 20 s is as good as dropped: tune again.
+        if (this.buffering && this.current?.live) {
+          const p = this.current;
+          this.stallTimer = setTimeout(() => {
+            if (this.current === p && this.buffering && !this.reconnect(p)) this.error = 'Stream ended.';
+          }, 20_000);
+        }
         break;
       case 'time-pos':
         this.time = n;
@@ -384,9 +440,9 @@ class Player {
 
 export const player = new Player();
 
-export function trackName(t: Track): string {
-  const channels = t['demux-channel-count'] ?? 0;
-  return [t.lang?.toUpperCase(), t.title, t.codec?.toUpperCase(), channels > 2 ? `${channels}ch` : undefined]
+export function trackName(track: Track): string {
+  const channels = track['demux-channel-count'] ?? 0;
+  return [track.lang?.toUpperCase(), track.title, track.codec?.toUpperCase(), channels > 2 ? `${channels}ch` : undefined]
     .filter(Boolean)
     .join(' · ');
 }

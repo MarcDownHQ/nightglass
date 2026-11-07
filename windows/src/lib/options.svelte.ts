@@ -10,8 +10,10 @@ class Options {
   startFullscreen = $state<boolean>(prefs.json('startFullscreen', false));
   /** Size of the whole interface, 1 = 100 %. For a TV across the room. */
   zoom = $state<number>(prefs.json('zoom', 1));
+  /** Hours between two automatic reloads of the catalogs and guides while the app runs; 0: at launch only. */
+  refreshHours = $state<number>(prefs.json('refreshHours', 12));
 
-  set<K extends 'startScreen' | 'startFullscreen' | 'zoom'>(key: K, value: (typeof this)[K]) {
+  set<K extends 'startScreen' | 'startFullscreen' | 'zoom' | 'refreshHours'>(key: K, value: (typeof this)[K]) {
     this[key] = value;
     prefs.setJson(key, value);
     if (key === 'zoom') void this.applyZoom();

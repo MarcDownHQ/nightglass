@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
+  import { friendly } from './errors';
   import { invoke } from '@tauri-apps/api/core';
   import HudPanel from './HudPanel.svelte';
   import type { Catalog, Source, SourceKind } from './models';
@@ -38,19 +40,19 @@
       const catalog = await invoke<Catalog>('catalog', { source });
       store.add(source, catalog);
       message = {
-        text: `Added · ${catalog.channels.length} channels, ${catalog.movies.length} movies, ${catalog.series.length} series`,
+        text: t('Added · {channels} channels, {movies} movies, {series} series', { channels: catalog.channels.length, movies: catalog.movies.length, series: catalog.series.length }),
         error: false,
       };
       name = url = epg = user = pass = '';
     } catch (e) {
-      message = { text: String(e), error: true };
+      message = { text: friendly(String(e)), error: true };
     } finally {
       busy = false;
     }
   }
 </script>
 
-<HudPanel caption="Add a source">
+<HudPanel caption={t('Add a source')}>
   <form
     onsubmit={(e) => {
       e.preventDefault();
@@ -62,21 +64,21 @@
         <NeonTab title={k} selected={k === kind} onclick={() => (kind = k)} />
       {/each}
     </div>
-    <label><span>Name</span><input bind:value={name} placeholder="My provider" spellcheck="false" /></label>
+    <label><span>{t('Name')}</span><input bind:value={name} placeholder={t('My provider')} spellcheck="false" /></label>
     {#if kind === 'M3U'}
-      <label><span>Playlist URL or file</span><input bind:value={url} placeholder="https://… .m3u" spellcheck="false" /></label>
-      <label><span>Guide URL (XMLTV, optional)</span><input bind:value={epg} placeholder="https://… .xml" spellcheck="false" /></label>
-      <button type="button" class="preset" onclick={preset}>Use iptv-org France</button>
+      <label><span>{t('Playlist URL or file')}</span><input bind:value={url} placeholder="https://… .m3u" spellcheck="false" /></label>
+      <label><span>{t('Guide URL (XMLTV, optional)')}</span><input bind:value={epg} placeholder="https://… .xml" spellcheck="false" /></label>
+      <button type="button" class="preset" onclick={preset}>{t('Use iptv-org France')}</button>
     {:else if kind === 'Xtream'}
-      <label><span>Server</span><input bind:value={url} placeholder="http://provider:8080" spellcheck="false" /></label>
-      <label><span>Username</span><input bind:value={user} autocomplete="off" spellcheck="false" /></label>
-      <label><span>Password</span><input type="password" bind:value={pass} autocomplete="off" /></label>
+      <label><span>{t('Server')}</span><input bind:value={url} placeholder="http://provider:8080" spellcheck="false" /></label>
+      <label><span>{t('Username')}</span><input bind:value={user} autocomplete="off" spellcheck="false" /></label>
+      <label><span>{t('Password')}</span><input type="password" bind:value={pass} autocomplete="off" /></label>
     {:else}
-      <label><span>Portal URL</span><input bind:value={url} placeholder="http://portal/c/" spellcheck="false" /></label>
-      <label><span>MAC address</span><input bind:value={mac} placeholder="00:1A:79:XX:XX:XX" spellcheck="false" /></label>
+      <label><span>{t('Portal URL')}</span><input bind:value={url} placeholder="http://portal/c/" spellcheck="false" /></label>
+      <label><span>{t('MAC address')}</span><input bind:value={mac} placeholder="00:1A:79:XX:XX:XX" spellcheck="false" /></label>
     {/if}
     <div>
-      <button type="submit" class="connect" disabled={busy || !url.trim()}>{busy ? 'Connecting…' : 'Connect'}</button>
+      <button type="submit" class="connect" disabled={busy || !url.trim()}>{busy ? t('Connecting…') : t('Connect')}</button>
     </div>
     {#if message}<p class="message" class:error={message.error}>{message.text}</p>{/if}
   </form>

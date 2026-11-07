@@ -37,7 +37,7 @@ class MultiView {
       if (payload.event === 'playback-restart') t.loading = false;
       else if (payload.event === 'end-file' && 'reason' in payload && payload.reason === 'error') {
         t.loading = false;
-        t.error = payload.error ?? 'Stream failed';
+        t.error = payload.error ?? 'Stream ended.';
       }
     });
   }

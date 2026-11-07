@@ -8,7 +8,7 @@ mod stalker;
 pub mod xmltv;
 mod xtream;
 
-pub use http::Http;
+pub use http::{Http, OnDisk};
 pub use m3u::M3uSource;
 pub use models::*;
 pub use stalker::StalkerClient;

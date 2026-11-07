@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { i18n, t, type Language } from './i18n.svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import { organizer, panels } from './dialogs.svelte';
   import Modal from './Modal.svelte';
@@ -16,51 +17,75 @@
   ];
 </script>
 
-<Modal title="Settings" close={() => (panels.settings = false)}>
+<Modal title={t('Settings')} close={() => (panels.settings = false)}>
   <div class="settings">
     <section>
-      <h3 class="mono">At launch</h3>
+      <h3 class="mono">{t('At launch')}</h3>
       {#each STARTS as [value, label, hint] (value)}
         <label class="choice">
           <input type="radio" name="start" checked={options.startScreen === value} onchange={() => options.set('startScreen', value)} />
-          <span><b>{label}</b><small>{hint}</small></span>
+          <span><b>{t(label)}</b><small>{t(hint)}</small></span>
         </label>
       {/each}
       <label class="choice">
         <input type="checkbox" checked={options.startFullscreen} onchange={(e) => options.set('startFullscreen', e.currentTarget.checked)} />
-        <span><b>Fullscreen window</b><small>F11 switches at any time</small></span>
+        <span><b>{t('Fullscreen window')}</b><small>{t('F11 switches at any time')}</small></span>
       </label>
     </section>
 
     <section>
-      <h3 class="mono">Interface size</h3>
-      <div class="zoom">
-        <button onclick={() => options.stepZoom(-0.1)} title="Smaller (Ctrl −)">−</button>
-        <span class="mono">{Math.round(options.zoom * 100)} %</span>
-        <button onclick={() => options.stepZoom(0.1)} title="Larger (Ctrl +)">+</button>
-        <button class="link" disabled={options.zoom === 1} onclick={() => options.set('zoom', 1)}>Reset (Ctrl 0)</button>
-      </div>
-      <small class="hint">Larger for a TV across the room.</small>
+      <h3 class="mono">{t('Sources')}</h3>
+      <label class="select">
+        {t('Reload catalogs and guides')}
+        <select value={options.refreshHours} onchange={(e) => options.set('refreshHours', Number(e.currentTarget.value))}>
+          <option value={6}>{t('every 6 hours')}</option>
+          <option value={12}>{t('every 12 hours')}</option>
+          <option value={24}>{t('every day')}</option>
+          <option value={0}>{t('only at launch')}</option>
+        </select>
+      </label>
     </section>
 
     <section>
-      <h3 class="mono">Channels and parental control</h3>
+      <h3 class="mono">{t('Language')}</h3>
+      <label class="select">
+        <select value={i18n.choice} onchange={(e) => i18n.set(e.currentTarget.value as Language)}>
+          <option value="auto">{t('Same as Windows')}</option>
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h3 class="mono">{t('Interface size')}</h3>
+      <div class="zoom">
+        <button onclick={() => options.stepZoom(-0.1)} title={t('Smaller (Ctrl −)')}>−</button>
+        <span class="mono">{Math.round(options.zoom * 100)} %</span>
+        <button onclick={() => options.stepZoom(0.1)} title={t('Larger (Ctrl +)')}>+</button>
+        <button class="link" disabled={options.zoom === 1} onclick={() => options.set('zoom', 1)}>{t('Reset (Ctrl 0)')}</button>
+      </div>
+      <small class="hint">{t('Larger for a TV across the room.')}</small>
+    </section>
+
+    <section>
+      <h3 class="mono">{t('Channels and parental control')}</h3>
       <button
         class="link"
         onclick={() => {
           panels.settings = false;
           organizer.open = true;
-        }}>Categories, favourites lists and PIN…</button
+        }}>{t('Categories, favourites lists and PIN…')}</button
       >
     </section>
 
     <section>
-      <h3 class="mono">Settings file</h3>
+      <h3 class="mono">{t('Settings file')}</h3>
       <div class="row">
-        <button class="link" onclick={exportSettings}>Export…</button>
-        <button class="link" onclick={importSettings}>Import…</button>
+        <button class="link" onclick={exportSettings}>{t('Export…')}</button>
+        <button class="link" onclick={importSettings}>{t('Import…')}</button>
       </div>
-      <small class="hint">Sources, favourites, lists, hidden categories, progress: to move to another PC.</small>
+      <small class="hint">{t('Sources, favourites, lists, hidden categories, progress: to move to another PC.')}</small>
     </section>
 
     <section>
@@ -71,10 +96,10 @@
           onclick={() => {
             panels.settings = false;
             panels.help = true;
-          }}>Keyboard shortcuts (?)</button
+          }}>{t('Keyboard shortcuts (?)')}</button
         >
         {#if updater.available}
-          <button class="link" onclick={() => updater.install()}>Install {updater.available.version}</button>
+          <button class="link" onclick={() => updater.install()}>{t('Install {version}', { version: updater.available.version })}</button>
         {/if}
       </div>
     </section>
@@ -119,6 +144,20 @@
   .hint {
     font-size: 13px;
     color: var(--dim);
+  }
+  .select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+  }
+  select {
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid rgb(243 238 255 / 0.2);
+    background: var(--night);
+    color: var(--text);
+    font: inherit;
   }
   .zoom {
     display: flex;

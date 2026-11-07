@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { contextMenu } from './menuState.svelte';
   import { library } from './library.svelte';
   import type { MovieItem } from './models';
@@ -17,11 +18,11 @@
     const resume = { kind: 'movie' as const, id: i.id };
     const started = library.startAt(i.id) > 0;
     contextMenu.open(e, [
-      { label: started ? 'Resume' : 'Play', icon: '', action: () => store.playMovie(i) },
-      ...(started ? [{ label: 'Play from the start', icon: '', action: () => store.playMovie(i, true) }] : []),
+      { label: started ? t('Resume') : 'Play', icon: '', action: () => store.playMovie(i) },
+      ...(started ? [{ label: t('Play from the start'), icon: '', action: () => store.playMovie(i, true) }] : []),
       library.progress[i.id]?.watched
-        ? { label: 'Mark as unwatched', icon: '', action: () => library.setWatched(i.id, resume, false) }
-        : { label: 'Mark as watched', icon: '', action: () => library.setWatched(i.id, resume, true) },
+        ? { label: t('Mark as unwatched'), icon: '', action: () => library.setWatched(i.id, resume, false) }
+        : { label: t('Mark as watched'), icon: '', action: () => library.setWatched(i.id, resume, true) },
     ]);
   }
 
@@ -33,7 +34,7 @@
         {
           id,
           title: m.movie.name,
-          subtitle: `${clock(p.duration - p.position)} left`,
+          subtitle: t('{time} left', { time: clock(p.duration - p.position) }),
           poster: m.movie.poster,
           progress: p.position / p.duration,
           play: () => store.playMovie(m),

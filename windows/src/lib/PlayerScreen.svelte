@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { dial, nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
@@ -89,8 +90,8 @@
   {/if}
   {#if player.loading || player.error}
     <div class="status" class:error={player.error}>
-      {player.error ? friendly(player.error) : `Loading ${displayName(player.current?.title ?? '')}…`}
-      {#if player.error}<button class="retry" onclick={() => player.retry()}>Retry</button>{/if}
+      {player.error ? friendly(player.error) : player.reconnecting ? t('Signal lost: reconnecting (attempt {n})…', { n: player.reconnecting }) : t('Loading {name}…', { name: displayName(player.current?.title ?? '') })}
+      {#if player.error}<button class="retry" onclick={() => player.retry()}>{t('Retry')}</button>{/if}
     </div>
   {/if}
   {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
@@ -106,36 +107,36 @@
         <Volume />
         <TrackMenus />
         {#if player.current?.live}
-          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? 'Stop recording (R)' : 'Record to Videos\\Nightglass (R)'}
+          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? t('Stop recording (R)') : 'Record to Videos\\Nightglass (R)'}
             >&#xE7C8;</button
           >
         {/if}
       {/if}
-      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? 'Back to the full window (P)' : 'Mini player, always on top (P)'}>
+      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')}>
         {@html player.mini ? '&#xE740;' : '&#xE944;'}
       </button>
       <StopButton />
       {#if !player.mini}
-        <button class="icon back" onclick={() => player.collapse()} title="Back to the list (Esc), playback continues">&#xE73F;</button>
+        <button class="icon back" onclick={() => player.collapse()} title={t('Back to the list (Esc), playback continues')}>&#xE73F;</button>
       {/if}
     </header>
 
     <footer>
       {#if item}
         <div class="now">
-          <span class="label mono">Now</span>
+          <span class="label mono">{t('Now')}</span>
           <h2>{np.now?.title ?? displayName(item.channel.name)}</h2>
           {#if np.now}<div class="bar"><ProgressLine value={progress(np.now, store.now)} height={3} /></div>{/if}
         </div>
         {#if player.behind}
-          <button class="live-edge" onclick={() => player.goLive()} title="Back to live (L)">
+          <button class="live-edge" onclick={() => player.goLive()} title={t('Back to live (L)')}>
             <span class="mono">−{clock(player.behind)}</span>
-            <span class="label mono">Go live</span>
+            <span class="label mono">{t('Go live')}</span>
           </button>
         {/if}
         {#if np.next}
           <div class="next">
-            <span class="label mono">Next</span>
+            <span class="label mono">{t('Next')}</span>
             <span>{hm(np.next.start)} · {np.next.title}</span>
           </div>
         {/if}
@@ -143,19 +144,19 @@
         <div class="vod">
           <span class="label mono dim">{player.current?.subtitle}</span>
           <div class="transport mono">
-            <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? 'Play' : 'Pause'}>
+            <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>
               {@html player.paused ? '&#xE768;' : '&#xE769;'}
             </button>
             <span>{clock(player.time)}</span>
-            <button class="track" onclick={seekAt} aria-label="Seek">
+            <button class="track" onclick={seekAt} aria-label={t('Seek')}>
               <span class="fill" style:width="{player.duration > 0 ? (player.time / player.duration) * 100 : 0}%"></span>
             </button>
             <span>{clock(player.duration)}</span>
           </div>
         </div>
         {#if player.current?.next}
-          <button class="next-episode" onclick={() => player.current?.next?.play()} title="Next episode (N)">
-            <span class="label mono">Next episode</span>
+          <button class="next-episode" onclick={() => player.current?.next?.play()} title={t('Next episode (N)')}>
+            <span class="label mono">{t('Next episode')}</span>
             <span>{player.current.next.title} <span class="icon">&#xE893;</span></span>
           </button>
         {/if}

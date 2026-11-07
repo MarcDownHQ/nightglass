@@ -120,12 +120,14 @@ async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Resu
 /// `cache` is the source id to keep the guide under for the next launch.
 #[tauri::command]
 async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String>, cache: Option<String>) -> Result<Guide, String> {
-    let data = http.fetch(&url).await.map_err(|e| e.to_string())?;
+    // Guides run to hundreds of MB: written to disk as they download, then read from there.
+    let file = http.to_disk(&url).await.map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
         let now = unix_now();
         let wanted: HashSet<String> = keys.into_iter().collect();
         let mut out: Guide = HashMap::new();
-        for p in xmltv::parse(&data, now - PAST..=now + 86_400, None) {
+        let programmes = xmltv::parse_file(&file.path, now - PAST..=now + 86_400, None).map_err(|e| e.to_string())?;
+        for p in programmes {
             let key = xmltv::epg_key(&p.channel);
             if wanted.is_empty() || wanted.contains(&key) {
                 out.entry(key).or_default().push(p);
@@ -139,14 +141,14 @@ async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String
                 log::warn!("guide cache: {e}");
             }
             // The guide's own channel list, to match a channel by hand.
-            if let Err(e) = cache::write(&app, "epgchannels", &id, &xmltv::channels(&data)) {
+            if let Err(e) = xmltv::channels_file(&file.path).map_err(|e| e.to_string()).and_then(|c| cache::write(&app, "epgchannels", &id, &c)) {
                 log::warn!("guide channels cache: {e}");
             }
         }
-        out
+        Ok(out)
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 /// The channels the source's guide describes, (id, name), as last downloaded.

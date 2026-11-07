@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n.svelte';
   import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -15,7 +16,7 @@
     try {
       let granted = await isPermissionGranted();
       if (!granted) granted = (await requestPermission()) === 'granted';
-      if (granted) sendNotification({ title: `${r.title} starts`, body: `${hm(r.start)} on ${r.channelName}` });
+      if (granted) sendNotification({ title: t('{title} starts', { title: r.title }), body: t('{time} on {channel}', { time: hm(r.start), channel: r.channelName }) });
     } catch (e) {
       console.warn(`notification: ${e}`);
     }
@@ -39,7 +40,7 @@
     void player.collapse();
     nav.focusChannel = r.channel;
     nav.section = 'live';
-    if (!store.channels.some((c) => c.id === r.channel)) player.notify(`${r.channelName} is not in the sources shown`);
+    if (!store.channels.some((c) => c.id === r.channel)) player.notify(t('{name} is not in the sources shown', { name: r.channelName }));
   }
 </script>
 
@@ -52,8 +53,8 @@
           <b>{r.title}</b>
           <small>{hm(r.start)} · {r.channelName}</small>
         </div>
-        <button class="watch" onclick={() => watch(r)}>Watch</button>
-        <button class="icon close" title="Dismiss" onclick={() => (due = due.filter((x) => x !== r))}>&#xE8BB;</button>
+        <button class="watch" onclick={() => watch(r)}>{t('Watch')}</button>
+        <button class="icon close" title={t('Dismiss')} onclick={() => (due = due.filter((x) => x !== r))}>&#xE8BB;</button>
       </div>
     {/each}
   </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './lib/i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
@@ -89,8 +90,8 @@
   {:else if ready && !store.sources.length}
     <div class="empty">
       <NeonText text="No source yet" size={44} />
-      <p>Add an M3U playlist, an Xtream account or a Stalker portal.</p>
-      <button class="primary" onclick={() => (nav.section = 'sources')}>Add a source</button>
+      <p>{t('Add an M3U playlist, an Xtream account or a Stalker portal.')}</p>
+      <button class="primary" onclick={() => (nav.section = 'sources')}>{t('Add a source')}</button>
     </div>
   {:else if ready}
     {#if nav.section === 'home'}
