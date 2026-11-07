@@ -39,6 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - run: npm run check
+      - run: npm test
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # With the update key (not on forks), the installer is also signed for the in-app updater (.sig next to it).

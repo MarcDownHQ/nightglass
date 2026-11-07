@@ -75,6 +75,8 @@ export interface LiveItem {
   id: string;
   source: Source;
   channel: Channel;
+  /** The feeds of the same channel when duplicates are merged, best first (this item among them). */
+  variants?: LiveItem[];
 }
 
 export interface MovieItem {

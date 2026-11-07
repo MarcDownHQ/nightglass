@@ -9,6 +9,8 @@
   import { library } from './lib/library.svelte';
   import { nav, SECTIONS, typing } from './lib/nav.svelte';
   import NeonText from './lib/NeonText.svelte';
+  import OrganizeDialog from './lib/OrganizeDialog.svelte';
+  import PromptDialog from './lib/PromptDialog.svelte';
   import { player } from './lib/player.svelte';
   import PlayerScreen from './lib/PlayerScreen.svelte';
   import SearchPalette from './lib/SearchPalette.svelte';
@@ -86,6 +88,8 @@
 {/if}
 
 <ContextMenu />
+<OrganizeDialog />
+<PromptDialog />
 
 {#if player.osd}
   <div class="toast" role="status">{player.osd}</div>

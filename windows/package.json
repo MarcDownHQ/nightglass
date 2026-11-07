@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
     "tauri": "tauri",
     "fetch-libmpv": "powershell -ExecutionPolicy Bypass -File scripts/fetch-libmpv.ps1",
     "licenses": "cargo about generate -m src-tauri/Cargo.toml about.hbs -o licenses/rust-crates.html"
@@ -23,6 +24,7 @@
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
     "typescript": "^6.0.3",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^3.2.4"
   }
 }
