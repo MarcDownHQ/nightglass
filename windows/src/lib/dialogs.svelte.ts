@@ -1,13 +1,18 @@
+import type { LiveItem } from './models';
+
 /** A one-field question (a list name), answered in `PromptDialog.svelte`. */
 class Prompt {
   title = $state<string | null>(null);
   value = $state('');
+  /** Typed characters show as dots: the PIN. */
+  secret = $state(false);
   private resolve: ((value: string | null) => void) | null = null;
 
-  ask(title: string, value = ''): Promise<string | null> {
+  ask(title: string, value = '', { secret = false } = {}): Promise<string | null> {
     this.resolve?.(null);
     this.title = title;
     this.value = value;
+    this.secret = secret;
     return new Promise((resolve) => (this.resolve = resolve));
   }
 
@@ -27,3 +32,10 @@ class Organizer {
 }
 
 export const organizer = new Organizer();
+
+/** The channel being matched with a guide channel by hand (`EpgMatchDialog.svelte`). */
+class EpgMatch {
+  item = $state<LiveItem | null>(null);
+}
+
+export const epgMatch = new EpgMatch();

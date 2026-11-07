@@ -4,6 +4,7 @@
   import { organizer } from './dialogs.svelte';
   import HudPanel from './HudPanel.svelte';
   import { library } from './library.svelte';
+  import { multiview } from './tilesState.svelte';
   import { categoryKey, categoryLabel, type SortMode } from './lineup';
   import { contextMenu, type MenuEntry } from './menuState.svelte';
   import type { LiveItem } from './models';
@@ -47,7 +48,8 @@
   const hidden = $derived.by(() => {
     if (store.channels === store.allChannels) return [];
     const shown = new Set(store.channels);
-    return store.allChannels.filter((c) => !shown.has(c));
+    // Hidden by the user, not locked: what the PIN guards never shows here.
+    return store.allChannels.filter((c) => !shown.has(c) && !library.isLocked(c.channel.group && categoryKey(c.channel.group)));
   });
   const recent = $derived([...new Set(library.recents.flatMap((id) => byId.get(id) ?? []))]);
 
@@ -181,6 +183,8 @@
     else if (e.key === 'Escape') player.stop();
     else if (e.key === ' ') player.togglePause();
     else if (e.key.toLowerCase() === 's') toggleFavorite();
+    else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
+    else if (e.key.toLowerCase() === 'p') void player.toggleMini();
     else if (/^[0-9]$/.test(e.key)) {
       // In a favourites list the numbers are the list's own: 1 is its first channel.
       const rows = list;
@@ -216,6 +220,7 @@
           <NeonTab title={t.label} selected={t.id === tab} onclick={() => (tab = t.id)} oncontextmenu={(e) => tabMenu(e, t)} />
         {/each}
       </div>
+      <button class="icon view" title="Multi-view: 2 or 4 channels at once" onclick={() => multiview.show()}>&#xF0E2;</button>
       <button class="icon view" title="Order, feeds, countries, categories" onclick={viewMenu}>&#xE71C;</button>
     </div>
     <HudPanel {caption} trailing={String(list.length)} class="channels">
@@ -231,7 +236,10 @@
         {#if player.loading || player.error}
           <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current.title)}…`}</p>
         {/if}
-        <div class="corner"><StopButton /></div>
+        <div class="corner">
+          {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
+          <StopButton />
+        </div>
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
       </div>
     {:else}
@@ -461,6 +469,16 @@
   }
   .feeds:hover :global(*) {
     filter: brightness(1.4);
+  }
+  .corner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .rec {
+    font-size: 12px;
+    color: var(--magenta);
+    text-shadow: 0 0 6px var(--magenta);
   }
   .star {
     color: var(--acid);

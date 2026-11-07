@@ -40,22 +40,25 @@ class Store {
   allChannels = $derived(
     this.visibleSources.flatMap((source) =>
       (this.catalogs[source.id]?.channels ?? []).map(
-        (channel, i): LiveItem => ({
-          id: source.id + channel.id,
-          source,
-          channel: channel.number === null ? { ...channel, number: i + 1 } : channel,
-        }),
+        (channel, i): LiveItem => {
+          const id = source.id + channel.id;
+          const epgId = library.epgOverrides[id];
+          const numbered = channel.number === null ? { ...channel, number: i + 1 } : channel;
+          return { id, source, channel: epgId ? { ...numbered, epgId } : numbered };
+        },
       ),
     ),
   );
 
   /** The channels the screens list, zap and search: without the hidden channels and categories. */
   channels = $derived(
-    !library.hiddenChannels.size && !library.hiddenGroups.size
+    !library.hiddenChannels.size && !library.hiddenGroups.size && !this.locking
       ? this.allChannels
-      : this.allChannels.filter(
-          (c) => !library.hiddenChannels.has(c.id) && !(c.channel.group && library.hiddenGroups.has(categoryKey(c.channel.group))),
-        ),
+      : this.allChannels.filter((c) => {
+          if (library.hiddenChannels.has(c.id)) return false;
+          const key = c.channel.group && categoryKey(c.channel.group);
+          return !(key && (library.hiddenGroups.has(key) || library.isLocked(key)));
+        }),
   );
 
   /** Country or language prefixes found in the channels, most channels first. */
@@ -99,15 +102,24 @@ class Store {
   /** Every category, the hidden ones included: the Organize window. */
   allCategories = $derived(categoriesOf(this.allChannels));
 
+  /** Some categories are behind the PIN and it was not typed. */
+  get locking(): boolean {
+    return !!library.pinHash && !library.unlocked && library.lockedGroups.size > 0;
+  }
+
   movies = $derived(
     this.visibleSources.flatMap((source) =>
-      (this.catalogs[source.id]?.movies ?? []).map((movie): MovieItem => ({ id: source.id + movie.id, source, movie })),
+      (this.catalogs[source.id]?.movies ?? [])
+        .filter((m) => !this.locking || !library.isLocked(m.group && categoryKey(m.group)))
+        .map((movie): MovieItem => ({ id: source.id + movie.id, source, movie })),
     ),
   );
 
   series = $derived(
     this.visibleSources.flatMap((source) =>
-      (this.catalogs[source.id]?.series ?? []).map((series): SeriesItem => ({ id: source.id + series.id, source, series })),
+      (this.catalogs[source.id]?.series ?? [])
+        .filter((s) => !this.locking || !library.isLocked(s.group && categoryKey(s.group)))
+        .map((series): SeriesItem => ({ id: source.id + series.id, source, series })),
     ),
   );
 
@@ -149,8 +161,15 @@ class Store {
     if (catalog.epgUrl) void this.loadGuide(source, catalog.epgUrl, catalog.channels);
   }
 
+  /** Downloads the source's guide again: after a channel was matched by hand. */
+  reloadGuide(source: Source) {
+    const catalog = this.catalogs[source.id];
+    if (catalog?.epgUrl) void this.loadGuide(source, catalog.epgUrl, catalog.channels);
+  }
+
   async loadGuide(source: Source, url: string, channels: Channel[]) {
-    const keys = [...new Set(channels.flatMap((c) => (c.epgId ? [epgKey(c.epgId)] : [])))];
+    const ids = channels.map((c) => library.epgOverrides[source.id + c.id] ?? c.epgId);
+    const keys = [...new Set(ids.flatMap((id) => (id ? [epgKey(id)] : [])))];
     if (!keys.length) return;
     try {
       this.mergeGuide(await invoke<Record<string, Programme[]>>('guide', { url, keys, cache: source.id }));
@@ -172,6 +191,13 @@ class Store {
     this.sources = [...this.sources, source];
     void this.save();
     this.setCatalog(source, catalog);
+  }
+
+  /** From a settings file: same ids replace, others are added; then everything reloads. */
+  async importSources(list: Source[]) {
+    const ids = new Set(list.map((s) => s.id));
+    this.sources = [...this.sources.filter((s) => !ids.has(s.id)), ...list];
+    await this.save();
   }
 
   remove(source: Source) {
@@ -223,6 +249,30 @@ class Store {
       item,
       fallback: this.fallback(item),
     };
+  }
+
+  /** A past programme of a channel whose server keeps them, played like a film. */
+  async playReplay(item: LiveItem, p: Programme) {
+    try {
+      const url = await invoke<string>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
+      player.play({
+        id: `replay:${item.id}:${p.start}`,
+        title: p.title,
+        subtitle: `${item.channel.name} · replay`,
+        url,
+        headers: item.channel.headers,
+        live: false,
+      });
+      void player.expand();
+    } catch (e) {
+      player.notify(`Replay unavailable: ${e}`);
+    }
+  }
+
+  /** Whether `p` can be replayed: the channel keeps past programmes and `p` started within that window. */
+  canReplay(item: LiveItem, p: Programme): boolean {
+    const days = item.channel.catchupDays;
+    return !!days && p.start <= this.now && p.start > this.now - days * 86_400;
   }
 
   /** From where it was left, unless `fromStart`. */

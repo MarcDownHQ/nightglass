@@ -26,6 +26,14 @@
   const start = $derived(Math.max(0, Math.floor((scrollTop - headerHeight) / rowHeight) - overscan));
   const visible = $derived(items.slice(start, Math.ceil((scrollTop - headerHeight + height) / rowHeight) + overscan));
 
+  // Its own observer rather than bind:clientHeight, which missed the first layout of a list mounted in a hidden or collapsing area.
+  $effect(() => {
+    const observer = new ResizeObserver(() => (height = viewport.clientHeight));
+    observer.observe(viewport);
+    height = viewport.clientHeight;
+    return () => observer.disconnect();
+  });
+
   /** Scrolls just enough to show the row. */
   export function reveal(index: number) {
     const top = headerHeight + index * rowHeight;
@@ -34,7 +42,7 @@
   }
 </script>
 
-<div class="viewport" bind:this={viewport} bind:clientHeight={height} onscroll={() => (scrollTop = viewport.scrollTop)}>
+<div class="viewport" bind:this={viewport} onscroll={() => (scrollTop = viewport.scrollTop)}>
   <div class="content" style:height="{headerHeight + items.length * rowHeight}px">
     {#if header}<div class="header" style:height="{headerHeight}px">{@render header()}</div>{/if}
     {#each visible as item, i (key(item))}

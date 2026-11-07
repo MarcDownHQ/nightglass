@@ -11,6 +11,8 @@ pub struct Playlist {
 
 pub fn parse(text: &str) -> Playlist {
     let mut channels = Vec::new();
+    // The URL is the id; a playlist listing one stream twice (two categories, two names) gets `#2`, `#3`…
+    let mut seen: HashMap<String, usize> = HashMap::new();
     let mut epg = None;
     let mut info: Option<(HashMap<String, String>, String)> = None;
     let mut headers = HashMap::new();
@@ -55,7 +57,11 @@ pub fn parse(text: &str) -> Playlist {
                 title.clone()
             };
             channels.push(Channel {
-                id: stream.to_string(),
+                id: {
+                    let n = seen.entry(stream.to_string()).or_insert(0);
+                    *n += 1;
+                    if *n == 1 { stream.to_string() } else { format!("{stream}#{n}") }
+                },
                 name,
                 number: a.get("tvg-chno").and_then(|n| n.parse().ok()),
                 group: group.map(str::to_string),
@@ -63,6 +69,7 @@ pub fn parse(text: &str) -> Playlist {
                 epg_id: a.get("tvg-id").filter(|id| !id.is_empty()).cloned(),
                 stream,
                 headers: std::mem::take(&mut headers),
+                catchup_days: None,
             });
             info = None;
         }
@@ -123,6 +130,17 @@ impl M3uSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_stream_twice_gets_two_ids() {
+        let p = parse("#EXTM3U
+#EXTINF:-1,A
+http://s.test/1
+#EXTINF:-1,B
+http://s.test/1
+");
+        assert_eq!(p.channels.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["http://s.test/1", "http://s.test/1#2"]);
+    }
 
     #[test]
     fn parses_iptv_org_style() {

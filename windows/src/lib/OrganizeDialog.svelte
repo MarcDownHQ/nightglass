@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { organizer } from './dialogs.svelte';
+  import { organizer, prompt } from './dialogs.svelte';
   import { newList } from './channelMenu';
   import { library } from './library.svelte';
   import { categoryKey, categoryLabel } from './lineup';
+  import { removePin, toggleCategoryLock, unlock } from './parental';
   import { store } from './store.svelte';
 
   /** Categories (order, names, hidden) and favourites lists, in one window. */
@@ -100,6 +101,14 @@
                 <button class="icon eye" title={hidden ? 'Show' : 'Hide'} onclick={() => library.toggleHidden(library.hiddenGroups, c.key)}>
                   {hidden ? '' : ''}
                 </button>
+                <button
+                  class="icon lock"
+                  class:on={library.lockedGroups.has(c.key)}
+                  title={library.lockedGroups.has(c.key) ? 'Behind the parental PIN' : 'Put behind the parental PIN'}
+                  onclick={() => toggleCategoryLock(c.key)}
+                >
+                  {library.lockedGroups.has(c.key) ? '' : ''}
+                </button>
               </li>
             {:else}
               <li class="empty">No categories.</li>
@@ -125,6 +134,30 @@
               </li>
             {/each}
           </ul>
+
+          <div class="title pin">
+            <h3 class="mono">Parental PIN</h3>
+          </div>
+          <p class="hint">
+            {#if library.pinHash}
+              Locked categories (live, movies and series) stay out of sight until the PIN is typed, with the lock in the title bar.
+            {:else}
+              No PIN yet. The lock next to a category makes one.
+            {/if}
+          </p>
+          {#if library.pinHash}
+            <div class="pin-buttons">
+              <button
+                class="link"
+                onclick={async () => {
+                  if (!(await unlock())) return;
+                  const pin = await prompt.ask('New parental PIN', '', { secret: true });
+                  if (pin) await library.setPin(pin);
+                }}>Change the PIN</button
+              >
+              <button class="link" onclick={() => removePin()}>Remove the PIN</button>
+            </div>
+          {/if}
         </section>
       </div>
     </div>
@@ -270,6 +303,16 @@
   }
   .eye {
     font-size: 14px;
+  }
+  .lock.on {
+    color: var(--acid);
+  }
+  .pin {
+    margin-top: 18px;
+  }
+  .pin-buttons {
+    display: flex;
+    gap: 18px;
   }
   .count {
     font-size: 12px;

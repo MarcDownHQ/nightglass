@@ -21,7 +21,7 @@
     <div class="dialog" role="dialog" aria-label={prompt.title}>
       <h2>{prompt.title}</h2>
       <!-- svelte-ignore a11y_autofocus -->
-      <input bind:this={input} bind:value={prompt.value} {onkeydown} autofocus spellcheck="false" />
+      <input bind:this={input} bind:value={prompt.value} type={prompt.secret ? 'password' : 'text'} {onkeydown} autofocus spellcheck="false" />
       <div class="buttons">
         <button onclick={() => prompt.answer(null)}>Cancel</button>
         <button class="ok" onclick={() => prompt.answer(prompt.value)}>OK</button>

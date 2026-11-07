@@ -4,6 +4,7 @@
   import { kindLabel, type Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
+  import { exportSettings, importSettings } from './settings';
   import { neon } from './theme';
 
   function toggle(s: Source) {
@@ -58,7 +59,15 @@
       {/each}
     </div>
   </HudPanel>
-  <AddSource />
+  <div class="side">
+    <AddSource />
+    <div class="transfer">
+      <button onclick={exportSettings} title="Sources, favourites, lists, hidden categories, progress: to a file"
+        ><span class="icon">&#xEDE1;</span> Export settings…</button
+      >
+      <button onclick={importSettings} title="From a file exported on this PC or another"><span class="icon">&#xE8B5;</span> Import settings…</button>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -70,6 +79,30 @@
     align-items: start;
     gap: 32px;
     padding: 16px 28px;
+  }
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .transfer {
+    display: flex;
+    gap: 10px;
+  }
+  .transfer button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    border: 1px solid rgb(5 217 232 / 0.35);
+    font-size: 15px;
+    color: var(--cyan);
+  }
+  .transfer button:hover {
+    border-color: var(--cyan);
   }
   .rows {
     overflow-y: auto;

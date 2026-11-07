@@ -100,6 +100,58 @@ fn read<R: BufRead>(input: R, window: &RangeInclusive<i64>, wanted: Option<&Hash
     out
 }
 
+/// The channels a guide describes, as (id, first display name), in guide order: what a channel
+/// without a guide can be matched with by hand.
+pub fn channels(data: &[u8]) -> Vec<(String, String)> {
+    if data.len() > 18 && data[0] == 0x1f && data[1] == 0x8b {
+        read_channels(std::io::BufReader::new(MultiGzDecoder::new(data)))
+    } else {
+        read_channels(data)
+    }
+}
+
+fn read_channels<R: BufRead>(input: R) -> Vec<(String, String)> {
+    let mut reader = quick_xml::Reader::from_reader(input);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut id: Option<String> = None;
+    let mut name = String::new();
+    let mut in_name = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => match e.local_name().as_ref() {
+                "channel" => {
+                    id = e.try_get_attribute("id").ok().flatten().and_then(|a| a.normalized_value(XmlVersion::Implicit1_0).ok()).map(|v| v.into_owned());
+                    name.clear();
+                }
+                "display-name" if id.is_some() && name.is_empty() => in_name = true,
+                _ => {}
+            },
+            // `<channel id="x"/>`: no name, the id stands for it.
+            Ok(Event::Empty(e)) if e.local_name().as_ref() == "channel" => {
+                if let Some(id) = e.try_get_attribute("id").ok().flatten().and_then(|a| a.normalized_value(XmlVersion::Implicit1_0).ok()) {
+                    out.push((id.to_string(), id.into_owned()));
+                }
+            }
+            Ok(Event::Text(t)) if in_name => name.push_str(&t.xml10_content()),
+            Ok(Event::End(e)) => match e.local_name().as_ref() {
+                "display-name" => in_name = false,
+                "channel" => {
+                    if let Some(id) = id.take() {
+                        let label = if name.trim().is_empty() { id.clone() } else { name.trim().to_string() };
+                        out.push((id, label));
+                    }
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
 fn programme(e: &BytesStart, window: &RangeInclusive<i64>, wanted: Option<&HashSet<String>>) -> Option<(String, i64, i64)> {
     let mut channel = None;
     let (mut start, mut end) = (None, None);
@@ -138,13 +190,26 @@ pub(crate) fn date(s: &str) -> Option<i64> {
 }
 
 /// Days since 1970-01-01 in the proleptic Gregorian calendar (Howard Hinnant's algorithm).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = y - era * 400;
     let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
+}
+
+/// The civil date of a day count since 1970-01-01: the inverse of `days_from_civil`.
+pub(crate) fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -212,6 +277,14 @@ mod tests {
         gz.write_all(XML.as_bytes()).unwrap();
         let gz = gz.finish().unwrap();
         assert_eq!(parse(&gz, at()..=at() + 86_400, None).len(), 3);
+    }
+
+    #[test]
+    fn lists_channels() {
+        assert_eq!(channels(XML.as_bytes()), [("wire.fr".to_string(), "Wire".to_string())]);
+        // Some guides put each channel's programmes right after it.
+        let bare = r#"<tv><channel id="a.fr"/><programme channel="a.fr" start="20261104190000" stop="20261104200000"><title>T</title></programme><channel id="b.fr"><display-name>B</display-name></channel></tv>"#;
+        assert_eq!(channels(bare.as_bytes()), [("a.fr".to_string(), "a.fr".to_string()), ("b.fr".to_string(), "B".to_string())]);
     }
 
     #[test]

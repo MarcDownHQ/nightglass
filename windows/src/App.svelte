@@ -3,9 +3,13 @@
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
   import ContextMenu from './lib/ContextMenu.svelte';
+  import EpgMatchDialog from './lib/EpgMatchDialog.svelte';
   import GuideView from './lib/GuideView.svelte';
   import LiveView from './lib/LiveView.svelte';
   import MoviesView from './lib/MoviesView.svelte';
+  import { multiview } from './lib/tilesState.svelte';
+  import MultiView from './lib/MultiView.svelte';
+  import ReminderBanner from './lib/ReminderBanner.svelte';
   import { library } from './lib/library.svelte';
   import { nav, SECTIONS, typing } from './lib/nav.svelte';
   import NeonText from './lib/NeonText.svelte';
@@ -53,12 +57,19 @@
 
 <svelte:window bind:innerWidth={W} bind:innerHeight={H} {onkeydown} />
 
-<div class="backdrop" style:clip-path={backdropClip(W, H, hole.rect)}></div>
+<div
+  class="backdrop"
+  style:clip-path={multiview.open
+    ? backdropClip(W, H, ...multiview.rects.map((r, i) => (multiview.tiles[i].item ? r : null)))
+    : backdropClip(W, H, hole.rect)}
+></div>
 
 <!-- Stays mounted under the fullscreen player, so the screens keep their category and scroll. -->
 <div class="app" class:hidden={player.expanded}>
   <TitleBar />
-  {#if nav.section === 'sources'}
+  {#if multiview.open}
+    <MultiView />
+  {:else if nav.section === 'sources'}
     <SourcesView />
   {:else if ready && !store.sources.length}
     <div class="empty">
@@ -87,8 +98,10 @@
   <SearchPalette />
 {/if}
 
+<ReminderBanner />
 <ContextMenu />
 <OrganizeDialog />
+<EpgMatchDialog />
 <PromptDialog />
 
 {#if player.osd}

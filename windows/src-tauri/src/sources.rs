@@ -42,6 +42,28 @@ pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
+/// Writes the sources and the page's settings to a JSON file the user picked, for another PC.
+/// The file holds the passwords in clear: the UI says so before it asks where to save.
+#[tauri::command]
+pub fn settings_export(app: AppHandle, path: PathBuf, prefs: serde_json::Value) -> Result<(), String> {
+    let sources = load(&file(&app)?);
+    let doc = serde_json::json!({ "app": "Nightglass", "version": 1, "sources": sources, "prefs": prefs });
+    let json = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Reads a file made by `settings_export`: its sources (checked) and settings.
+#[tauri::command]
+pub fn settings_import(path: PathBuf) -> Result<(Vec<Source>, serde_json::Value), String> {
+    let data = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut doc: serde_json::Value = serde_json::from_slice(&data).map_err(|_| "Not a Nightglass settings file.".to_string())?;
+    if doc.get("app").and_then(|a| a.as_str()) != Some("Nightglass") {
+        return Err("Not a Nightglass settings file.".into());
+    }
+    let sources = serde_json::from_value(doc["sources"].take()).map_err(|e| format!("Sources: {e}"))?;
+    Ok((sources, doc["prefs"].take()))
+}
+
 pub fn dpapi(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
     let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
