@@ -146,7 +146,7 @@
     gap: 8px;
   }
   .tools button {
-    height: 32px;
+    height: 33px;
     box-sizing: border-box;
     display: flex;
     align-items: center;

@@ -187,10 +187,12 @@
     display: flex;
     gap: 20px;
   }
+  /* 19 px: an odd line for the capitals, an odd number of pixels tall, to sit in its middle. */
   .link {
     align-self: flex-start;
     color: var(--cyan);
     font-size: 15px;
+    line-height: 19px;
   }
   .link:disabled {
     opacity: 0.4;

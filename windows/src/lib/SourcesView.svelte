@@ -123,7 +123,9 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 9px 12px;
+    height: 39px;
+    box-sizing: border-box;
+    padding: 0 12px;
     border-radius: 999px;
     border: 1px solid rgb(5 217 232 / 0.35);
     font-size: 15px;

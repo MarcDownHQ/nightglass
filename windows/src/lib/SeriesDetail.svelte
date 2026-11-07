@@ -119,7 +119,7 @@
 <style>
   .detail {
     position: absolute;
-    inset: 64px 0 0;
+    inset: 65px 0 0;
     overflow: hidden;
   }
   .blur {
@@ -200,7 +200,10 @@
     gap: 8px;
   }
   .seasons button {
-    padding: 4px 12px;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    line-height: 17px;
     border-radius: 5px;
     border: 1.5px solid rgb(243 238 255 / 0.2);
     font-size: 16px;

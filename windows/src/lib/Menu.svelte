@@ -77,6 +77,8 @@
     padding: 7px 10px;
     border-radius: 6px;
     font-size: 15px;
+    /* 33 px rows: an odd height puts the capitals exactly in the middle. */
+    line-height: 19px;
     color: var(--dim);
     white-space: nowrap;
   }

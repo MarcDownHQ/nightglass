@@ -85,8 +85,10 @@
 
 <style>
   header {
+    /* Odd heights (65 here, 35 for the controls): the capitals, an odd number of pixels tall, then sit
+       exactly in the middle instead of half a pixel off. */
     flex: none;
-    height: 64px;
+    height: 65px;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -102,7 +104,9 @@
     align-self: stretch;
   }
   .nav {
-    padding: 6px 12px;
+    height: 35px;
+    box-sizing: border-box;
+    padding: 0 12px;
     font-size: 18px;
     font-weight: 600;
     color: var(--dim);
@@ -134,7 +138,7 @@
     align-items: center;
     gap: 8px;
     margin-right: 12px;
-    height: 34px;
+    height: 35px;
     box-sizing: border-box;
     padding: 0 14px;
     border-radius: 999px;
@@ -155,7 +159,7 @@
     color: var(--dim);
   }
   .lock {
-    width: 34px;
+    width: 35px;
     padding: 0;
     justify-content: center;
     color: var(--dim);
@@ -201,8 +205,8 @@
   }
   .gear {
     margin-left: 6px;
-    width: 34px;
-    height: 34px;
+    width: 35px;
+    height: 35px;
     font-size: 16px;
     color: var(--dim);
   }

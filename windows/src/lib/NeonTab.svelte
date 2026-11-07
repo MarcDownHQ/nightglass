@@ -13,13 +13,14 @@
 <button type="button" class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
 
 <style>
-  /* A set height: a ★ or ↺ drawn from a fallback font would otherwise make its tab taller. */
+  /* A set height: a ★ or ↺ drawn from a fallback font would otherwise make its tab taller. Odd, so the
+     capitals (an odd number of pixels tall) sit exactly in the middle. */
   .tab {
     flex: none;
-    height: 34px;
+    height: 35px;
     box-sizing: border-box;
     padding: 0 14px;
-    line-height: 1;
+    line-height: 17px;
     border-radius: 999px;
     border: 1px solid rgb(243 238 255 / 0.15);
     color: var(--dim);

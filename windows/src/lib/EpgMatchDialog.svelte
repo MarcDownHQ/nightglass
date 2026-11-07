@@ -99,10 +99,13 @@
     inset: 0;
     z-index: 105;
     display: grid;
-    place-items: center;
+    /* Centred on a whole pixel (see .dialog): a half-pixel offset blurs text and moves it off centre. */
+    place-items: start center;
+    padding-top: round(down, 50vh, 1px);
     background: rgb(5 1 15 / 0.6);
   }
   .dialog {
+    translate: 0 round(down, -50%, 1px);
     width: min(640px, calc(100vw - 80px));
     height: min(620px, calc(100vh - 120px));
     display: flex;

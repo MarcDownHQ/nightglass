@@ -126,6 +126,7 @@
   .preset {
     align-self: flex-start;
     font-size: 14px;
+    line-height: 18px;
     font-weight: 500;
     color: var(--cyan);
   }
