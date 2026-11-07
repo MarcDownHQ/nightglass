@@ -50,7 +50,9 @@
     items={store.series}
     info={(i) => i.series}
     empty={t('No series. Add an Xtream account that has some.')}
-    onpick={(i) => (nav.openSeries = i)}
+    onpick={(i) => {
+      nav.openSeries = i;
+    }}
     {continuing}
   />
 </div>

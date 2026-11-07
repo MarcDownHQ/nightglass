@@ -18,7 +18,7 @@
     const resume = { kind: 'movie' as const, id: i.id };
     const started = library.startAt(i.id) > 0;
     contextMenu.open(e, [
-      { label: started ? t('Resume') : 'Play', icon: '', action: () => store.playMovie(i) },
+      { label: started ? t('Resume') : t('Play'), icon: '', action: () => store.playMovie(i) },
       ...(started ? [{ label: t('Play from the start'), icon: '', action: () => store.playMovie(i, true) }] : []),
       library.progress[i.id]?.watched
         ? { label: t('Mark as unwatched'), icon: '', action: () => library.setWatched(i.id, resume, false) }
@@ -48,7 +48,7 @@
 <PosterBrowser
   items={store.movies}
   info={(i) => i.movie}
-  empty="No movies. M3U playlists don't carry any; add an Xtream account."
+  empty={t('No movies. M3U playlists don’t carry any; add an Xtream account.')}
   onpick={(i) => store.playMovie(i)}
   {menu}
   {status}

@@ -290,6 +290,7 @@
       <small>{np.now?.title ?? (ch.group ? categoryLabel(ch.group) : '')}</small>
       <span class="progress"><ProgressLine value={np.now ? progress(np.now, store.now) : 0} color={c} /></span>
     </span>
+    <span class="side">
     {#if library.isFavorite(item.id)}<span class="star">★</span>{/if}
     {#if variants > 1}
       <span
@@ -306,6 +307,7 @@
         <Tag text={quality ? `${quality} · ${variants}` : t('{n} feeds', { n: variants })} />
       </span>
     {:else if quality}<Tag text={quality} />{/if}
+    </span>
   </button>
 {/snippet}
 
@@ -325,11 +327,13 @@
     min-width: 0;
     min-height: 0;
   }
+  /* The tabs keep 8 px of room for their glow; the bar gives it back so they line up with the preview. */
   .bar {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
+    margin-top: -8px;
   }
   .view {
     flex: none;
@@ -348,6 +352,8 @@
     padding: 8px 4px;
     overflow-x: auto;
     scrollbar-width: none;
+    /* The tabs that don't fit fade out instead of being cut. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   }
   .left :global(.channels) {
     flex: 1;
@@ -432,6 +438,7 @@
   .num {
     flex: none;
     width: 32px;
+    text-align: right;
     font-size: 12px;
     color: var(--dim);
   }
@@ -456,7 +463,9 @@
     color: #fff;
     text-shadow: 0 0 6px var(--c);
   }
+  /* Kept when empty, so rows without a programme line up with the others. */
   .text small {
+    min-height: 1lh;
     font-size: 14px;
     color: var(--dim);
   }
@@ -470,6 +479,7 @@
     cursor: grab;
   }
   .feeds {
+    display: flex;
     cursor: pointer;
   }
   .feeds:hover :global(*) {
@@ -497,5 +507,14 @@
   }
   .star {
     color: var(--acid);
+  }
+  /* A fixed column for the star and the tags, so every progress line ends at the same place. */
+  .side {
+    flex: none;
+    width: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
   }
 </style>

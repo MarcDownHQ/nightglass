@@ -352,5 +352,7 @@ export const FR: Record<string, string> = {
   'Enter, back': 'Entrée, retour',
   'Pause, fullscreen': 'Pause, plein écran',
   'Ctrl 1…6': 'Ctrl 1…6',
-  'or F1': 'ou F1',
+  or: 'ou',
+  'Name of {name}': 'Nom de {name}',
+  'This address isn’t valid: it starts with http:// or https://, or it is the path of a file.': 'Cette adresse n’est pas valide : elle commence par http:// ou https://, ou c’est le chemin d’un fichier.',
 };

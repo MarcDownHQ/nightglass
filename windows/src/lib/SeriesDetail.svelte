@@ -44,12 +44,12 @@
     const key = episodeKey(item.id, e);
     const started = library.startAt(key) > 0;
     contextMenu.open(ev, [
-      { label: started ? "Resume" : "Play", icon: "", action: () => void store.playEpisode(item, e, episodes) },
-      ...(started ? [{ label: "Play from the start", icon: "", action: () => void store.playEpisode(item, e, episodes, true) }] : []),
+      { label: started ? t('Resume') : t('Play'), icon: "", action: () => void store.playEpisode(item, e, episodes) },
+      ...(started ? [{ label: t('Play from the start'), icon: "", action: () => void store.playEpisode(item, e, episodes, true) }] : []),
       library.progress[key]?.watched
-        ? { label: "Mark as unwatched", icon: "", action: () => toggleWatched(e) }
-        : { label: "Mark as watched", icon: "", action: () => toggleWatched(e) },
-      { label: "Mark the season as watched", icon: "", action: () => markSeason(e.season) },
+        ? { label: t('Mark as unwatched'), icon: "", action: () => toggleWatched(e) }
+        : { label: t('Mark as watched'), icon: "", action: () => toggleWatched(e) },
+      { label: t('Mark the season as watched'), icon: "", action: () => markSeason(e.season) },
     ]);
   }
 
@@ -107,7 +107,7 @@
                 </span>
                 <span class="icon play">&#xE768;</span>
               </button>
-              <button class="icon seen" title={p?.watched ? "Mark as unwatched" : "Mark as watched"} onclick={() => toggleWatched(e)}>&#xE73E;</button>
+              <button class="icon seen" title={p?.watched ? t('Mark as unwatched') : t('Mark as watched')} onclick={() => toggleWatched(e)}>&#xE73E;</button>
             </div>
           {/each}
         </div>

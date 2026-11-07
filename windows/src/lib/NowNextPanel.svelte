@@ -27,16 +27,14 @@
       <b>{np.next?.title ?? '—'}</b>
     </div>
   </div>
-  <footer class="mono">
-    {#if item?.channel.number}<span>{t('Ch {n}', { n: item.channel.number })}</span>{/if}
-    {#if item && player.height > 0}<span>{player.height}p</span>{/if}
-    <span>{item?.source.name ?? ''}</span>
+  {#if item}<footer class="mono">
+    {#if item.channel.number}<span>{t('Ch {n}', { n: item.channel.number })}</span>{/if}
+    {#if player.height > 0}<span>{player.height}p</span>{/if}
+    <span>{item.source.name}</span>
     <span class="spacer"></span>
-    {#if item}
-      <TrackMenus />
-      <SignalBars level={player.signal} />
-    {/if}
-  </footer>
+    <TrackMenus />
+    <SignalBars level={player.signal} />
+  </footer>{/if}
 </HudPanel>
 
 <style>
@@ -68,7 +66,9 @@
   .next .label {
     color: var(--cyan);
   }
+  /* Its first line centred on the first line of the bigger title beside it. */
   .next b {
+    margin-top: 4px;
     font-size: 19px;
     font-weight: 600;
     display: -webkit-box;

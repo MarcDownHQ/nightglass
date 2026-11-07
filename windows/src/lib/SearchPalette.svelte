@@ -88,6 +88,8 @@
         key: item.id,
         item,
         title: displayName(item.channel.name),
+        // Several sources can carry a channel of the same name: say which one.
+        detail: store.sources.length > 1 ? item.source.name : undefined,
       })),
       ...group('TV', matches('TV', programmes(), (x) => x.p.title, q), ({ item, p }) => ({
         kind: 'TV',

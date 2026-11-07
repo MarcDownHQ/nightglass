@@ -60,17 +60,17 @@
 
 {#if item}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && (epgMatch.item = null)}>
-    <div class="dialog" role="dialog" aria-label="Match the guide">
+    <div class="dialog" role="dialog" aria-label={t('Match the guide…')}>
       <header>
-        <h2>Guide for {displayName(item.channel.name)}</h2>
+        <h2>{t('Guide for {name}', { name: displayName(item.channel.name) })}</h2>
         <button class="icon close" title={t('Close (Esc)')} onclick={() => (epgMatch.item = null)}>&#xE8BB;</button>
       </header>
       <p class="hint">
-        {t('Playlist id:')} <span class="mono">{item.channel.epgId ?? 'none'}</span>
-        {#if current}· matched by hand: <span class="mono">{current}</span>
+        {t('Playlist id:')} <span class="mono">{item.channel.epgId ?? t('none')}</span>
+        {#if current}{t('· matched by hand:')} <span class="mono">{current}</span>
           <button class="link" onclick={() => choose(null)}>{t('Undo')}</button>{/if}
       </p>
-      <input bind:this={input} bind:value={query} placeholder="Search the guide's channels" spellcheck="false" />
+      <input bind:this={input} bind:value={query} placeholder={t('Search the guide’s channels')} spellcheck="false" />
       <div class="list">
         {#if loading}
           <p class="note">{t('Loading…')}</p>

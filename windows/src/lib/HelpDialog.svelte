@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { i18n, t } from './i18n.svelte';
   import { panels } from './dialogs.svelte';
   import Modal from './Modal.svelte';
 
@@ -63,6 +63,16 @@
       ],
     ],
   ];
+
+  /** Key names as a French keyboard prints them. */
+  const FRENCH_KEYS: Record<string, string> = { Enter: 'Entrée', Space: 'Espace', Esc: 'Échap', Home: 'Début' };
+
+  function keyLabel(key: string): string {
+    return key
+      .split(' ')
+      .map((w) => (w === 'or' ? t('or') : i18n.lang === 'fr' ? (FRENCH_KEYS[w] ?? w) : w))
+      .join(' ');
+  }
 </script>
 
 <Modal title={t('Keyboard shortcuts')} width={820} close={() => (panels.help = false)}>
@@ -72,7 +82,7 @@
         <h3 class="mono">{t(title)}</h3>
         <dl>
           {#each keys as [key, what] (key)}
-            <dt><kbd class="mono">{key}</kbd></dt>
+            <dt><kbd class="mono">{keyLabel(key)}</kbd></dt>
             <dd>{t(what)}</dd>
           {/each}
         </dl>
@@ -96,13 +106,17 @@
     font-weight: 500;
     color: var(--acid);
   }
+  /* One key column for every group, so all the descriptions start at the same place. */
   dl {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 118px 1fr;
     gap: 6px 14px;
     margin: 0;
   }
   dt {
+    display: flex;
+    align-items: center;
+    height: 20px;
     white-space: nowrap;
   }
   kbd {
@@ -114,6 +128,7 @@
   dd {
     margin: 0;
     font-size: 15px;
+    line-height: 20px;
     color: var(--dim);
   }
 </style>

@@ -98,7 +98,7 @@
 
   <div class="hud">
     <header>
-      {#if player.current?.number}<NeonText text={String(player.current.number)} size={30} />{/if}
+      {#if player.current?.number}<NeonText text={String(player.current.number)} size={player.mini ? 18 : 30} />{/if}
       <h1>{displayName(player.current?.title ?? '')}</h1>
       <span class="spacer"></span>
       {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
@@ -107,7 +107,7 @@
         <Volume />
         <TrackMenus />
         {#if player.current?.live}
-          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? t('Stop recording (R)') : 'Record to Videos\\Nightglass (R)'}
+          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? t('Stop recording (R)') : t('Record to Videos\\Nightglass (R)')}
             >&#xE7C8;</button
           >
         {/if}
