@@ -9,7 +9,8 @@
   }: { title: string; selected: boolean; color?: string; onclick: () => void; oncontextmenu?: (e: MouseEvent) => void } = $props();
 </script>
 
-<button class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
+<!-- type=button: inside a form (Add a source), a tab must not submit it. -->
+<button type="button" class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
 
 <style>
   /* A set height: a ★ or ↺ drawn from a fallback font would otherwise make its tab taller. */

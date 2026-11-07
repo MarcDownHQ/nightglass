@@ -65,7 +65,7 @@
   ];
 
   /** Key names as a French keyboard prints them. */
-  const FRENCH_KEYS: Record<string, string> = { Enter: 'Entrée', Space: 'Espace', Esc: 'Échap', Home: 'Début' };
+  const FRENCH_KEYS: Record<string, string> = { Enter: 'Entrée', Space: 'Espace', Esc: 'Échap', Home: 'Début', 'D-pad': 'Croix' };
 
   function keyLabel(key: string): string {
     return key

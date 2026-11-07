@@ -89,7 +89,7 @@
 {#snippet hit([id, name]: [string, string])}
   <button class="hit" class:on={id === current} onclick={() => choose(id)}>
     <b>{name}</b>
-    <span class="mono">{id}</span>
+    {#if id !== name}<span class="mono">{id}</span>{/if}
   </button>
 {/snippet}
 
@@ -160,13 +160,17 @@
     padding: 12px 4px;
     color: var(--dim);
   }
+  /* Name and id on one baseline, the pair centred in the row; the text starts where the field's does. */
   .hit {
     width: 100%;
     height: 100%;
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
+    align-content: center;
     align-items: baseline;
     gap: 12px;
-    padding: 0 10px;
+    padding: 0 13px;
     border-radius: 6px;
     text-align: left;
   }
