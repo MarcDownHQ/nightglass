@@ -17,7 +17,8 @@
    * EPG grid. A 3-hour window fitted to the width and paged with ←/→, so the only scroll is vertical
    * and the rows stay virtual.
    */
-  const ROW = 58;
+  /* 59: with its 1 px line, 58 px between lines, so a 44 px programme has 7 px above and below. */
+  const ROW = 59;
   const LABEL = 220;
   const WINDOW = 3 * 3600;
   const HALF = 1800;
@@ -316,14 +317,16 @@
   }
   .programme {
     position: absolute;
-    top: 6px;
-    bottom: 6px;
+    top: 7px;
+    bottom: 7px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 2px;
-    padding: 0 10px;
+    /* The time line's digits have less room under them than the title's capitals above: 2 px more
+       below puts the two lines' ink in the middle. */
+    padding: 0 10px 2px;
     border-radius: 6px;
     text-align: left;
     background: rgb(5 1 15 / 0.5);
