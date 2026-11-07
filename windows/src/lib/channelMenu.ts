@@ -1,10 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
-import { prompt } from './dialogs.svelte';
+import { epgMatch, prompt } from './dialogs.svelte';
 import { library } from './library.svelte';
 import { categoryKey, categoryLabel } from './lineup';
 import { contextMenu, type MenuEntry } from './menuState.svelte';
 import type { LiveItem } from './models';
+import { multiview } from './tilesState.svelte';
 import { nav } from './nav.svelte';
+import { toggleCategoryLock } from './parental';
 import { player } from './player.svelte';
 import { store } from './store.svelte';
 
@@ -35,6 +37,8 @@ export function openChannelMenu(e: MouseEvent, item: LiveItem, listId?: string) 
       },
     },
     { label: 'Copy the stream URL', icon: '', action: () => void copyUrl(item) },
+    { label: 'Add to multi-view', icon: '\uF0E2', action: () => void multiview.show(item) },
+    { label: 'Match the guide…', icon: '\uE8EC', action: () => (epgMatch.item = item) },
   ];
   if (listId) {
     entries.push(
@@ -67,6 +71,11 @@ export function openChannelMenu(e: MouseEvent, item: LiveItem, listId?: string) 
         ? { label: `Show “${name}” again`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) }
         : { label: `Hide “${name}”`, icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
     );
+    entries.push({
+      label: library.lockedGroups.has(key) ? `Take “${name}” out of the PIN` : `Put “${name}” behind the PIN`,
+      icon: '\uE72E',
+      action: () => void toggleCategoryLock(key),
+    });
   }
   contextMenu.open(e, entries);
 }

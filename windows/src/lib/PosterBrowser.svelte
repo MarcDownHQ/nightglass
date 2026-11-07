@@ -12,7 +12,11 @@ export interface ContinueCard {
 </script>
 
 <script lang="ts" generics="T extends { id: string }">
+  import { library } from './library.svelte';
+  import { categoryKey } from './lineup';
+  import { contextMenu } from './menuState.svelte';
   import NeonTab from './NeonTab.svelte';
+  import { toggleCategoryLock } from './parental';
   import Poster from './Poster.svelte';
   import VirtualList from './VirtualList.svelte';
 
@@ -81,7 +85,22 @@ export interface ContinueCard {
   {:else}
     <div class="tabs" bind:this={tabs}>
       {#each categories as c (c)}
-        <NeonTab title={c} selected={c === category} onclick={() => (category = c)} />
+        <NeonTab
+          title={c}
+          selected={c === category}
+          onclick={() => (category = c)}
+          oncontextmenu={(e) => {
+            if (c === 'All') return;
+            const key = categoryKey(c);
+            contextMenu.open(e, [
+              {
+                label: library.lockedGroups.has(key) ? `Take “${c}” out of the PIN` : `Put “${c}” behind the PIN`,
+                icon: '\uE72E',
+                action: () => void toggleCategoryLock(key),
+              },
+            ]);
+          }}
+        />
       {/each}
     </div>
     <div class="grid" bind:clientWidth={width}>

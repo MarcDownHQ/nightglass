@@ -46,6 +46,9 @@
     else if (e.key === 'ArrowUp') zap(-1);
     else if (e.key === 'ArrowDown') zap(1);
     else if (e.key.toLowerCase() === 'n' && player.current?.next) player.current.next.play();
+    else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
+    else if (e.key.toLowerCase() === 'p') void player.toggleMini();
+    else if (e.key.toLowerCase() === 'l' && player.behind) player.goLive();
     else if (/^[0-9]$/.test(e.key)) {
       dial.type(e.key, (n) => {
         const found = store.byNumber(n);
@@ -68,7 +71,21 @@
 
 <svelte:window {onkeydown} />
 
-<div class="screen" class:idle use:videoHole={0} onmousemove={poke} onmousedown={poke} ondblclick={() => player.collapse()} {onwheel} role="presentation">
+<div
+  class="screen"
+  class:idle
+  class:mini={player.mini}
+  use:videoHole={0}
+  onmousemove={poke}
+  onmousedown={poke}
+  ondblclick={() => (player.mini ? player.expand() : player.collapse())}
+  {onwheel}
+  role="presentation"
+>
+  {#if player.mini}
+    <!-- The small window has no title bar: the picture moves it. -->
+    <div class="drag" data-tauri-drag-region></div>
+  {/if}
   {#if player.loading || player.error}
     <p class="status" class:error={player.error}>{player.error ?? `Loading ${displayName(player.current?.title ?? '')}…`}</p>
   {/if}
@@ -79,11 +96,24 @@
       {#if player.current?.number}<NeonText text={String(player.current.number)} size={30} />{/if}
       <h1>{displayName(player.current?.title ?? '')}</h1>
       <span class="spacer"></span>
-      <SignalBars level={player.signal} />
-      <Volume />
-      <TrackMenus />
+      {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
+      {#if !player.mini}
+        <SignalBars level={player.signal} />
+        <Volume />
+        <TrackMenus />
+        {#if player.current?.live}
+          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? 'Stop recording (R)' : 'Record to Videos\\Nightglass (R)'}
+            >&#xE7C8;</button
+          >
+        {/if}
+      {/if}
+      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? 'Back to the full window (P)' : 'Mini player, always on top (P)'}>
+        {@html player.mini ? '&#xE740;' : '&#xE944;'}
+      </button>
       <StopButton />
-      <button class="icon back" onclick={() => player.collapse()} title="Back to the list (Esc), playback continues">&#xE73F;</button>
+      {#if !player.mini}
+        <button class="icon back" onclick={() => player.collapse()} title="Back to the list (Esc), playback continues">&#xE73F;</button>
+      {/if}
     </header>
 
     <footer>
@@ -93,6 +123,12 @@
           <h2>{np.now?.title ?? displayName(item.channel.name)}</h2>
           {#if np.now}<div class="bar"><ProgressLine value={progress(np.now, store.now)} height={3} /></div>{/if}
         </div>
+        {#if player.behind}
+          <button class="live-edge" onclick={() => player.goLive()} title="Back to live (L)">
+            <span class="mono">−{clock(player.behind)}</span>
+            <span class="label mono">Go live</span>
+          </button>
+        {/if}
         {#if np.next}
           <div class="next">
             <span class="label mono">Next</span>
@@ -132,9 +168,72 @@
   .screen.idle {
     cursor: none;
   }
+  .hud > :global(*) {
+    pointer-events: auto;
+  }
+  .drag {
+    position: absolute;
+    inset: 0;
+  }
+  .mini header {
+    padding: 10px 12px 24px;
+    gap: 10px;
+  }
+  .mini h1 {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mini footer,
+  .mini .dial {
+    display: none;
+  }
+  .mini .status {
+    font-size: 13px;
+  }
+  .tool {
+    padding: 6px;
+    font-size: 16px;
+    color: var(--dim);
+  }
+  .tool:hover {
+    color: var(--text);
+  }
+  .tool.on {
+    color: var(--magenta);
+  }
+  .rec {
+    font-size: 12px;
+    color: var(--magenta);
+    text-shadow: 0 0 6px var(--magenta);
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .live-edge {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid rgb(249 240 2 / 0.5);
+    background: rgb(5 1 15 / 0.6);
+    font-size: 18px;
+  }
+  .live-edge .label {
+    color: var(--acid);
+  }
   .hud {
     position: absolute;
     inset: 0;
+    /* Only the bars take clicks: the picture under them is the screen (double-click, dragging the mini player). */
+    pointer-events: none;
     display: flex;
     flex-direction: column;
     justify-content: space-between;

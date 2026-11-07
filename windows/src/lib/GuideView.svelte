@@ -1,6 +1,9 @@
 <script lang="ts">
   import ChannelLogo from './ChannelLogo.svelte';
   import { openChannelMenu } from './channelMenu';
+  import { library } from './library.svelte';
+  import { contextMenu, type MenuEntry } from './menuState.svelte';
+  import type { Programme } from './models';
   import HudPanel from './HudPanel.svelte';
   import type { LiveItem } from './models';
   import { nav, typing } from './nav.svelte';
@@ -47,6 +50,35 @@
   function open(item: LiveItem) {
     nav.focusChannel = item.id;
     nav.section = 'live';
+  }
+
+  function remind(item: LiveItem, p: Programme) {
+    library.toggleReminder({ channel: item.id, channelName: displayName(item.channel.name), title: p.title, start: p.start, end: p.end });
+    if (library.hasReminder(item.id, p.start)) player.notify(`Reminder set for ${hm(p.start)}`);
+  }
+
+  /** A click: replay a past programme when the server keeps it, a reminder for a future one, else the channel. */
+  function pick(item: LiveItem, p: Programme) {
+    if (p.end <= store.now && store.canReplay(item, p)) void store.playReplay(item, p);
+    else if (p.start > store.now) remind(item, p);
+    else open(item);
+  }
+
+  function programmeMenu(e: MouseEvent, item: LiveItem, p: Programme) {
+    const now = store.now;
+    const entries: MenuEntry[] = [{ heading: `${hm(p.start)}–${hm(p.end)} · ${p.title}` }];
+    if (p.start <= now && p.end > now) entries.push({ label: 'Watch live', icon: '\uE768', action: () => open(item) });
+    if (store.canReplay(item, p)) {
+      entries.push({ label: p.end > now ? 'Watch from the start' : 'Replay', icon: '\uE72C', action: () => void store.playReplay(item, p) });
+    }
+    if (p.start > now) {
+      entries.push({
+        label: library.hasReminder(item.id, p.start) ? 'Cancel the reminder' : 'Remind me',
+        icon: '\uEA8F',
+        action: () => remind(item, p),
+      });
+    }
+    contextMenu.open(e, entries);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -98,15 +130,20 @@
       {#each store.programmes(item.channel).filter((p) => p.end > start && p.start < end) as p (p.start)}
         {@const x0 = Math.max(0, p.start - start) * perSecond}
         {@const x1 = (Math.min(p.end, end) - start) * perSecond}
+        {@const replay = p.end <= now && store.canReplay(item, p)}
+        {@const reminded = library.hasReminder(item.id, p.start)}
         <button
           class="programme"
           class:live={p.start <= now && p.end > now}
+          class:replay
+          class:reminded
           style:left="{x0 + 2}px"
           style:width="{Math.max(x1 - x0 - 4, 2)}px"
-          title={p.desc ? `${p.title}\n\n${p.desc}` : p.title}
-          onclick={() => open(item)}
+          title={(p.desc ? `${p.title}\n\n${p.desc}` : p.title) + (replay ? '\n\nClick to replay' : p.start > now ? '\n\nClick for a reminder' : '')}
+          onclick={() => pick(item, p)}
+          oncontextmenu={(e) => programmeMenu(e, item, p)}
         >
-          <b>{p.title}</b>
+          <b>{#if replay}<span class="icon mark">&#xE72C;</span>{:else if reminded}<span class="icon mark">&#xEA8F;</span>{/if}{p.title}</b>
           <small class="mono">{hm(p.start)}–{hm(p.end)}</small>
         </button>
       {/each}
@@ -183,6 +220,14 @@
     display: flex;
     border-bottom: 1px solid rgb(5 217 232 / 0.08);
     box-sizing: border-box;
+  }
+  .programme .mark {
+    margin-right: 5px;
+    font-size: 11px;
+    color: var(--cyan);
+  }
+  .programme.reminded .mark {
+    color: var(--acid);
   }
   .row.marked {
     background: color-mix(in srgb, var(--c) 14%, transparent);

@@ -28,6 +28,16 @@ export interface FavoriteList {
   items: string[];
 }
 
+/** A programme to be told about when it starts. */
+export interface Reminder {
+  /** The channel's item id. */
+  channel: string;
+  channelName: string;
+  title: string;
+  start: number;
+  end: number;
+}
+
 /** The first list holds what was starred before lists existed. */
 function initialLists(): FavoriteList[] {
   const saved = prefs.json<FavoriteList[] | null>('favoriteLists', null);
@@ -53,6 +63,15 @@ class Library {
   country = $state<string | null>(prefs.json('country', null));
   /** Seconds of live TV watched per channel, for the “Most watched” order. */
   watchTime = $state<Record<string, number>>(prefs.json('watchTime', {}));
+  reminders = $state<Reminder[]>(prefs.json('reminders', []));
+  /** Channel item id → XMLTV channel id chosen by hand, for channels the guide doesn't match. */
+  epgOverrides = $state<Record<string, string>>(prefs.json('epgOverrides', {}));
+  /** SHA-256 of the parental PIN; null when none is set. */
+  pinHash = $state<string | null>(prefs.json('pinHash', null));
+  /** Category keys behind the PIN, live and on demand alike. */
+  lockedGroups = new SvelteSet<string>(prefs.json('lockedGroups', []));
+  /** The PIN was typed in this session: locked categories show until the app closes or is locked again. */
+  unlocked = $state(false);
   progress = $state<Record<string, Progress>>(prefs.json('progress', {}));
   volume = $state<number>(prefs.json('volume', 100));
   muted = $state<boolean>(prefs.json('muted', false));
@@ -64,8 +83,57 @@ class Library {
   private lastSaved = 0;
 
   /** Saves one of the settings above under its own name. */
-  persist(key: 'categoryOrder' | 'categoryNames' | 'sort' | 'mergeDuplicates' | 'country' | 'favoriteLists' | 'watchTime') {
+  persist(
+    key: 'categoryOrder' | 'categoryNames' | 'sort' | 'mergeDuplicates' | 'country' | 'favoriteLists' | 'watchTime' | 'reminders' | 'epgOverrides' | 'pinHash',
+  ) {
     prefs.setJson(key, this[key]);
+  }
+
+  /** Whether a category is out of sight behind the PIN right now. */
+  isLocked(key: string | null | undefined): boolean {
+    return !!key && !this.unlocked && !!this.pinHash && this.lockedGroups.has(key);
+  }
+
+  toggleLock(key: string) {
+    if (!this.lockedGroups.delete(key)) this.lockedGroups.add(key);
+    prefs.setJson('lockedGroups', [...this.lockedGroups]);
+  }
+
+  async setPin(pin: string | null) {
+    this.pinHash = pin ? await sha256(pin) : null;
+    this.persist('pinHash');
+  }
+
+  async checkPin(pin: string): Promise<boolean> {
+    return !!this.pinHash && (await sha256(pin)) === this.pinHash;
+  }
+
+  hasReminder(channel: string, start: number): boolean {
+    return this.reminders.some((r) => r.channel === channel && r.start === start);
+  }
+
+  toggleReminder(r: Reminder) {
+    this.reminders = this.hasReminder(r.channel, r.start)
+      ? this.reminders.filter((x) => !(x.channel === r.channel && x.start === r.start))
+      : [...this.reminders, r].sort((a, b) => a.start - b.start);
+    this.persist('reminders');
+  }
+
+  /** Reminders that are due: removed from the list and returned. Old ones are dropped. */
+  takeDue(now: number): Reminder[] {
+    const due = this.reminders.filter((r) => r.start - 60 <= now && r.end > now);
+    const keep = this.reminders.filter((r) => r.start - 60 > now);
+    if (keep.length !== this.reminders.length) {
+      this.reminders = keep;
+      this.persist('reminders');
+    }
+    return due;
+  }
+
+  setEpgOverride(channel: string, epgId: string | null) {
+    if (epgId) this.epgOverrides[channel] = epgId;
+    else delete this.epgOverrides[channel];
+    this.persist('epgOverrides');
   }
 
   isFavorite(id: string): boolean {
@@ -197,6 +265,11 @@ class Library {
 }
 
 export const library = new Library();
+
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`nightglass:${text}`));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export function episodeKey(series: string, episode: Episode): string {
   return `${series}/${episode.id}`;

@@ -24,7 +24,16 @@ En plus de la version macOS :
 - **doublons regroupés** : « TF1 », « TF1 HD » et « FR | TF1 FHD » font une seule ligne, sur le meilleur flux ; l'étiquette de qualité ouvre la liste des flux, et si un flux tombe, le suivant prend le relais ;
 - **catégories fusionnées** entre sources et préfixes (« FR | Sport » et « Sport » ne font qu'un onglet), noms de chaînes et de catégories affichés sans préfixe ;
 - **plusieurs listes de favoris**, chacune son onglet, numérotée à partir de 1 (le pavé numérique y suit ces numéros) et réordonnable par glisser-déposer, `Alt+↑/↓` ou clic droit ;
-- fenêtre **Organize** : ordre, noms et visibilité des catégories, listes de favoris.
+- fenêtre **Organize** : ordre, noms et visibilité des catégories, listes de favoris ;
+- **replay Xtream** (`tv_archive`) depuis le guide : clic sur un programme passé (icône ↺), ou « Watch from the start » sur celui en cours ; le guide garde 3 jours de passé ;
+- **timeshift du direct** : pause, retour arrière (`←`) dans le tampon de mpv (300 Mo), bouton « Go live » (`L`) ;
+- **rappels** : clic sur un programme à venir dans le guide ; notification Windows et bandeau « Watch » quand il commence ;
+- **enregistrement** du direct (`R`) dans `VidéosNightglass` ;
+- **multi-vue** 2 ou 4 chaînes (bouton à côté des onglets, ou clic droit « Add to multi-view »), une instance mpv par tuile, le son sur la tuile choisie ;
+- **mini-lecteur** toujours au-dessus (`P`), dans le coin de l'écran ;
+- **contrôle parental** : un PIN pour cacher des catégories (direct, films, séries), déverrouillables pour la session avec le cadenas de la barre de titre ;
+- **export / import** des sources et réglages dans un fichier JSON (écran Sources ; le fichier contient les mots de passe en clair) ;
+- **correspondance EPG à la main** (clic droit « Match the guide… ») pour une chaîne que le guide ne reconnaît pas.
 
 ## Architecture
 
@@ -101,7 +110,7 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris.
+`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…5` Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · `←→` dans le Guide : 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
 
 ## Licence
 

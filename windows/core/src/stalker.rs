@@ -81,6 +81,7 @@ impl StalkerClient {
                     epg_id: str(c.get("xmltv_id")),
                     stream: Url::parse(&format!("stalker:{}", utf8_percent_encode(&cmd, CMD))).ok()?,
                     headers: HashMap::new(),
+                    catchup_days: None,
                     id: format!("stk-{id}"),
                 })
             })

@@ -54,12 +54,15 @@ export function videoHole(node: HTMLElement, radius = 0) {
   };
 }
 
-/** CSS clip-path for the backdrop: the whole window minus the (rounded) hole. */
-export function backdropClip(W: number, H: number, rect: HoleRect | null): string {
-  if (!rect) return 'none';
-  const { x, y, w, h } = rect;
-  const r = Math.min(rect.radius, w / 2, h / 2);
+/** CSS clip-path for the backdrop: the whole window minus the (rounded) holes: the player's, or the multi-view tiles'. */
+export function backdropClip(W: number, H: number, ...rects: (HoleRect | null)[]): string {
+  const holes = rects.filter((r): r is HoleRect => !!r);
+  if (!holes.length) return 'none';
+  return `path(evenodd, "M0 0H${W}V${H}H0Z ${holes.map(roundedRect).join(' ')}")`;
+}
+
+function roundedRect({ x, y, w, h, radius }: HoleRect): string {
+  const r = Math.min(radius, w / 2, h / 2);
   const a = (dx: number, dy: number) => `A${r} ${r} 0 0 1 ${dx} ${dy}`;
-  const inner = `M${x + r} ${y}H${x + w - r}${a(x + w, y + r)}V${y + h - r}${a(x + w - r, y + h)}H${x + r}${a(x, y + h - r)}V${y + r}${a(x + r, y)}Z`;
-  return `path(evenodd, "M0 0H${W}V${H}H0Z ${inner}")`;
+  return `M${x + r} ${y}H${x + w - r}${a(x + w, y + r)}V${y + h - r}${a(x + w - r, y + h)}H${x + r}${a(x, y + h - r)}V${y + r}${a(x + r, y)}Z`;
 }

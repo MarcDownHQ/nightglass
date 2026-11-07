@@ -9,6 +9,8 @@ export interface Channel {
   epgId: string | null;
   stream: string;
   headers: Record<string, string>;
+  /** Days of past programmes the server can replay; null without replay. */
+  catchupDays?: number | null;
 }
 
 export interface Movie {

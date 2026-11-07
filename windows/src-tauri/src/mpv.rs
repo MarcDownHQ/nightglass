@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter};
 use windows_sys::Win32::Foundation::RECT;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, GetClientRect, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SetWindowPos, WS_CHILD, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
+    CreateWindowExW, DestroyWindow, GetClientRect, HWND_BOTTOM, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SetWindowPos, ShowWindow, WS_CHILD, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
 };
 
 type Handle = *mut c_void;
@@ -56,6 +56,8 @@ const OBSERVED: &[(&str, c_int)] = &[
     ("duration", FORMAT_DOUBLE),
     ("width", FORMAT_INT64),
     ("height", FORMAT_INT64),
+    // End of what the cache holds: on live TV, how far the picture can catch up after a pause.
+    ("demuxer-cache-time", FORMAT_DOUBLE),
     // Node properties read as a string come back as JSON.
     ("track-list", FORMAT_STRING),
 ];
@@ -70,6 +72,7 @@ struct Api {
     request_log_messages: unsafe extern "C" fn(Handle, *const c_char) -> c_int,
     wait_event: unsafe extern "C" fn(Handle, f64) -> *mut Event,
     error_string: unsafe extern "C" fn(c_int) -> *const c_char,
+    terminate_destroy: unsafe extern "C" fn(Handle),
     _lib: Library,
 }
 
@@ -91,6 +94,7 @@ impl Api {
             request_log_messages: symbol(&lib, "mpv_request_log_messages")?,
             wait_event: symbol(&lib, "mpv_wait_event")?,
             error_string: symbol(&lib, "mpv_error_string")?,
+            terminate_destroy: symbol(&lib, "mpv_terminate_destroy")?,
             _lib: lib,
         })
     }
@@ -100,7 +104,7 @@ fn c(s: &str) -> CString {
     CString::new(s).unwrap_or_default()
 }
 
-/// One mpv instance for the whole app. It lives until the process exits.
+/// An mpv instance: the main player lives until the process exits, multi-view tiles come and go.
 pub struct Mpv {
     api: Api,
     handle: Handle,
@@ -139,6 +143,10 @@ impl Mpv {
             ("hwdec", "auto-safe"),
             ("background-color", "#000000"),
             ("network-timeout", "20"),
+            // A back buffer for live TV: pause, rewind and catch up within it.
+            ("cache", "yes"),
+            ("demuxer-max-bytes", "150MiB"),
+            ("demuxer-max-back-bytes", "300MiB"),
         ];
         for (name, value) in options {
             if let Err(e) = mpv.check(unsafe { (mpv.api.set_option_string)(handle, c(name).as_ptr(), c(value).as_ptr()) }) {
@@ -170,9 +178,10 @@ impl Mpv {
         Err(unsafe { CStr::from_ptr((self.api.error_string)(code)) }.to_string_lossy().into_owned())
     }
 
-    /// Forwards mpv events to the webview as `mpv` events, until mpv shuts down.
-    pub fn pump(&self, app: &AppHandle) {
+    /// Forwards mpv events to the webview as `event_name` events, until mpv shuts down. A tile's carry its index.
+    pub fn pump(&self, app: &AppHandle, event_name: &str, tile: Option<usize>) {
         let mut last_time = f64::NEG_INFINITY;
+        let mut last_cache = f64::NEG_INFINITY;
         loop {
             let event = unsafe { &*(self.api.wait_event)(self.handle, -1.0) };
             let payload = match event.event_id {
@@ -208,14 +217,34 @@ impl Mpv {
                         }
                         last_time = t;
                     }
+                    if name == "demuxer-cache-time" {
+                        let t = value.as_f64().unwrap_or(0.0);
+                        if (t - last_cache).abs() < 1.0 {
+                            continue;
+                        }
+                        last_cache = t;
+                    }
                     json!({ "event": "property", "name": name, "value": value })
                 }
                 _ => continue,
             };
-            if let Err(e) = app.emit("mpv", payload) {
+            let payload = match (tile, payload) {
+                (Some(i), Value::Object(mut o)) => {
+                    o.insert("tile".into(), json!(i));
+                    Value::Object(o)
+                }
+                (_, p) => p,
+            };
+            if let Err(e) = app.emit(event_name, payload) {
                 log::warn!("mpv event: {e}");
             }
         }
+    }
+}
+
+impl Drop for Mpv {
+    fn drop(&mut self) {
+        unsafe { (self.api.terminate_destroy)(self.handle) };
     }
 }
 
@@ -261,6 +290,25 @@ pub fn video_host(parent: isize) -> isize {
         SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         hwnd as isize
     }
+}
+
+/// A child window for a multi-view tile, at `rect` (x, y, width, height in physical pixels).
+pub fn tile_host(parent: isize, rect: [i32; 4]) -> isize {
+    let host = video_host(parent);
+    move_host(host, rect);
+    host
+}
+
+pub fn move_host(host: isize, [x, y, w, h]: [i32; 4]) {
+    unsafe { SetWindowPos(host as _, std::ptr::null_mut(), x, y, w.max(1), h.max(1), SWP_NOZORDER | SWP_NOACTIVATE) };
+}
+
+pub fn show_host(host: isize, visible: bool) {
+    unsafe { ShowWindow(host as _, if visible { SW_SHOWNA } else { SW_HIDE }) };
+}
+
+pub fn destroy_host(host: isize) {
+    unsafe { DestroyWindow(host as _) };
 }
 
 /// Keeps the video window the size of the main window's client area.

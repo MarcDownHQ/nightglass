@@ -1,6 +1,7 @@
 mod cache;
 mod mpv;
 mod sources;
+mod tiles;
 
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,7 +12,13 @@ use tauri::{AppHandle, Manager, State, WindowEvent};
 use url::Url;
 
 /// The child window mpv draws into.
-struct VideoHost(isize);
+pub struct VideoHost(pub isize);
+
+/// The main window, parent of the video windows.
+pub struct MainWindow(pub isize);
+
+/// How far back the guide keeps programmes: the replay window of most Xtream servers.
+const PAST: i64 = 3 * 86_400;
 
 #[tauri::command]
 /// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
@@ -77,7 +84,7 @@ async fn guide_cached(app: AppHandle, id: String) -> Result<Option<Guide>, Strin
         let mut guide: Guide = cache::read(&app, "guide", &id)?;
         let now = unix_now();
         guide.retain(|_, list| {
-            list.retain(|p| p.end > now - 3 * 3600);
+            list.retain(|p| p.end > now - PAST);
             !list.is_empty()
         });
         Some(guide)
@@ -109,7 +116,7 @@ async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Resu
     source.client(&http).episodes(&series).await.map_err(|e| e.to_string())
 }
 
-/// Programmes from 3 h ago to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
+/// Programmes from 3 days ago (for replay) to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
 /// `cache` is the source id to keep the guide under for the next launch.
 #[tauri::command]
 async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String>, cache: Option<String>) -> Result<Guide, String> {
@@ -118,7 +125,7 @@ async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String
         let now = unix_now();
         let wanted: HashSet<String> = keys.into_iter().collect();
         let mut out: Guide = HashMap::new();
-        for p in xmltv::parse(&data, now - 3 * 3600..=now + 86_400, None) {
+        for p in xmltv::parse(&data, now - PAST..=now + 86_400, None) {
             let key = xmltv::epg_key(&p.channel);
             if wanted.is_empty() || wanted.contains(&key) {
                 out.entry(key).or_default().push(p);
@@ -127,15 +134,42 @@ async fn guide(app: AppHandle, http: State<'_, Http>, url: Url, keys: Vec<String
         for list in out.values_mut() {
             list.sort_by_key(|p| p.start);
         }
-        if let Some(id) = cache
-            && let Err(e) = cache::write(&app, "guide", &id, &out)
-        {
-            log::warn!("guide cache: {e}");
+        if let Some(id) = cache {
+            if let Err(e) = cache::write(&app, "guide", &id, &out) {
+                log::warn!("guide cache: {e}");
+            }
+            // The guide's own channel list, to match a channel by hand.
+            if let Err(e) = cache::write(&app, "epgchannels", &id, &xmltv::channels(&data)) {
+                log::warn!("guide channels cache: {e}");
+            }
         }
         out
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// The channels the source's guide describes, (id, name), as last downloaded.
+#[tauri::command]
+async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, String)>, String> {
+    tauri::async_runtime::spawn_blocking(move || cache::read(&app, "epgchannels", &id).unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// A past programme, from the servers that keep them (Xtream `tv_archive`).
+#[tauri::command]
+async fn catchup_url(http: State<'_, Http>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
+    source.client(&http).catchup_url(&channel, start, end).await.map_err(|e| e.to_string())
+}
+
+/// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
+#[tauri::command]
+fn record_path(app: AppHandle, name: String) -> Result<String, String> {
+    let dir = app.path().video_dir().map_err(|e| e.to_string())?.join("Nightglass");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe: String = name.chars().map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
+    Ok(dir.join(format!("{}.ts", safe.trim())).to_string_lossy().into_owned())
 }
 
 /// What the user typed as a playlist, guide or portal address: a URL, or a Windows path to a local file.
@@ -165,18 +199,24 @@ fn automation() -> HashMap<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
             }
             let window = app.get_webview_window("main").expect("main window");
-            let host = mpv::video_host(window.hwnd()?.0 as isize);
+            let main = window.hwnd()?.0 as isize;
+            let host = mpv::video_host(main);
             let dll = app.path().resource_dir()?.join("libmpv-2.dll");
             app.manage(Mpv::new(&dll, host)?);
             app.manage(VideoHost(host));
+            app.manage(MainWindow(main));
+            app.manage(tiles::MpvDll(dll));
+            app.manage(tiles::Tiles::default());
             app.manage(Http::new());
             let handle = app.handle().clone();
-            std::thread::spawn(move || handle.state::<Mpv>().pump(&handle));
+            std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -200,6 +240,16 @@ pub fn run() {
             stream_url,
             episodes,
             guide,
+            guide_channels,
+            catchup_url,
+            record_path,
+            sources::settings_export,
+            sources::settings_import,
+            tiles::tile_play,
+            tiles::tile_rect,
+            tiles::tile_mute,
+            tiles::tile_close,
+            tiles::tiles_mode,
             parse_location,
             automation
         ])

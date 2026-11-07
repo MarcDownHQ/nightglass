@@ -20,6 +20,9 @@ pub struct Channel {
     pub stream: Url,
     #[serde(default)]
     pub headers: HashMap<String, String>,
+    /// Days of past programmes the server can replay (Xtream `tv_archive`); none without replay.
+    #[serde(default)]
+    pub catchup_days: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -125,6 +128,14 @@ impl Client {
         match self {
             Client::Stalker(c) => c.stream_url(channel).await,
             _ => Ok(channel.stream.clone()),
+        }
+    }
+
+    /// A past programme of `channel`, from `start` to `end` (Unix seconds), on servers that keep them.
+    pub async fn catchup_url(&self, channel: &Channel, start: i64, end: i64) -> Result<Url> {
+        match self {
+            Client::Xtream(c) => c.catchup_url(channel, start, end).await,
+            _ => Err(IptvError::BadResponse("no replay on this source".into())),
         }
     }
 

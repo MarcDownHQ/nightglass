@@ -6,6 +6,9 @@
   import { player } from './player.svelte';
   import { store } from './store.svelte';
   import { updater } from './updater.svelte';
+  import { prompt } from './dialogs.svelte';
+  import { library } from './library.svelte';
+  import { multiview } from './tilesState.svelte';
 
   const win = getCurrentWindow();
   const ALL = '';
@@ -17,8 +20,20 @@
   ]);
 
   function show(section: Section) {
+    if (multiview.open) void multiview.close();
     nav.section = section;
     void player.collapse();
+  }
+
+  async function lock() {
+    if (library.unlocked) {
+      library.unlocked = false;
+      return;
+    }
+    const pin = await prompt.ask('Parental PIN', '', { secret: true });
+    if (pin === null) return;
+    if (await library.checkPin(pin)) library.unlocked = true;
+    else player.notify('Wrong PIN');
   }
 </script>
 
@@ -39,6 +54,11 @@
     >
       <span class="icon">&#xE896;</span>
       {updater.progress === null ? `Update ${updater.available.version}` : `Updating ${Math.round(updater.progress * 100)}%`}
+    </button>
+  {/if}
+  {#if library.pinHash && library.lockedGroups.size}
+    <button class="pill lock" class:open={library.unlocked} onclick={lock} title={library.unlocked ? 'Lock the PIN categories again' : 'Show the categories behind the PIN'}>
+      <span class="icon">{library.unlocked ? '\uE785' : '\uE72E'}</span>
     </button>
   {/if}
   {#if store.sources.length > 1}
@@ -127,6 +147,14 @@
   .pill .dim {
     font-size: 11px;
     color: var(--dim);
+  }
+  .lock {
+    padding: 7px 10px;
+    color: var(--dim);
+  }
+  .lock.open {
+    color: var(--acid);
+    border-color: rgb(249 240 2 / 0.5);
   }
   .update {
     color: var(--acid);
