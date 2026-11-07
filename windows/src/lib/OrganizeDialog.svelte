@@ -2,7 +2,7 @@
   import { t } from './i18n.svelte';
   import { organizer, prompt } from './dialogs.svelte';
   import { newList } from './channelMenu';
-  import { library } from './library.svelte';
+  import { library, listLabel } from './library.svelte';
   import { categoryKey, categoryLabel } from './lineup';
   import { removePin, toggleCategoryLock, unlock } from './parental';
   import { store } from './store.svelte';
@@ -96,7 +96,7 @@
                 }}
               >
                 <span class="icon grip">&#xE76F;</span>
-                <input value={c.label} aria-label="Name of {c.label}" onchange={(e) => rename(c.key, original(c.key), e.currentTarget.value)} />
+                <input value={c.label} aria-label={t('Name of {name}', { name: c.label })} onchange={(e) => rename(c.key, original(c.key), e.currentTarget.value)} />
                 <button class="icon" title={t('Up')} disabled={i === 0} onclick={() => step(c.key, -1)}>&#xE70E;</button>
                 <button class="icon" title={t('Down')} disabled={i === categories.length - 1} onclick={() => step(c.key, 1)}>&#xE70D;</button>
                 <button class="icon eye" title={hidden ? t('Show') : t('Hide')} onclick={() => library.toggleHidden(library.hiddenGroups, c.key)}>
@@ -127,11 +127,10 @@
             {#each library.favoriteLists as l, i (l.id)}
               <li>
                 <span class="icon star">&#xE735;</span>
-                <input value={l.name} aria-label="Name of {l.name}" onchange={(e) => library.renameList(l.id, e.currentTarget.value)} />
+                <input value={listLabel(l)} aria-label={t('Name of {name}', { name: listLabel(l) })} onchange={(e) => library.renameList(l.id, e.currentTarget.value)} />
                 <span class="count mono">{l.items.length}</span>
-                {#if i > 0}
-                  <button class="icon" title={t('Delete the list')} onclick={() => library.deleteList(l.id)}>&#xE74D;</button>
-                {/if}
+                <!-- The first list can't be deleted: its button keeps its place, hidden, so the counts line up. -->
+                <button class="icon" class:placeholder={i === 0} disabled={i === 0} title={t('Delete the list')} onclick={() => library.deleteList(l.id)}>&#xE74D;</button>
               </li>
             {/each}
           </ul>
@@ -141,9 +140,9 @@
           </div>
           <p class="hint">
             {#if library.pinHash}
-              Locked categories (live, movies and series) stay out of sight until the PIN is typed, with the lock in the title bar.
+              {t('Locked categories (live, movies and series) stay out of sight until the PIN is typed, with the lock in the title bar.')}
             {:else}
-              No PIN yet. The lock next to a category makes one.
+              {t('No PIN yet. The lock next to a category makes one.')}
             {/if}
           </p>
           {#if library.pinHash}
@@ -152,7 +151,7 @@
                 class="link"
                 onclick={async () => {
                   if (!(await unlock())) return;
-                  const pin = await prompt.ask('New parental PIN', '', { secret: true });
+                  const pin = await prompt.ask(t('New parental PIN'), '', { secret: true });
                   if (pin) await library.setPin(pin);
                 }}>{t('Change the PIN')}</button
               >
@@ -171,10 +170,13 @@
     inset: 0;
     z-index: 105;
     display: grid;
-    place-items: center;
+    /* Centred on a whole pixel (see .dialog): a half-pixel offset blurs text and moves it off centre. */
+    place-items: start center;
+    padding-top: round(down, 50vh, 1px);
     background: rgb(5 1 15 / 0.6);
   }
   .dialog {
+    translate: 0 round(down, -50%, 1px);
     width: min(980px, calc(100vw - 80px));
     max-height: calc(100vh - 120px);
     display: flex;
@@ -225,6 +227,7 @@
   }
   .link {
     font-size: 14px;
+    line-height: 18px;
     color: var(--cyan);
   }
   .hint {
@@ -291,10 +294,18 @@
     border-color: var(--cyan);
     background: var(--night);
   }
+  /* One square for every row button, whatever its glyph. */
   li button {
-    padding: 6px;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
     font-size: 12px;
     color: var(--dim);
+  }
+  li button.placeholder {
+    visibility: hidden;
   }
   li button:hover:not(:disabled) {
     color: var(--text);

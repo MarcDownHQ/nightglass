@@ -63,11 +63,13 @@
     </button>
   {/if}
   {#if store.sources.length > 1}
+    <div class="picker-menu">
     <Menu label={t('Source')} items={choices} onpick={(id) => store.setActive(id || null)} title={t('Choose the source to show')}>
       {#snippet trigger()}
         <span class="pill picker"><span class="dot"></span><span class="name">{current}</span><span class="icon chevron">&#xE70D;</span></span>
       {/snippet}
     </Menu>
+    </div>
   {/if}
   <button class="pill" onclick={() => (nav.searching = true)}>
     <span class="icon">&#xE721;</span> {t('Search')} <span class="dim mono">Ctrl K</span>
@@ -83,8 +85,10 @@
 
 <style>
   header {
+    /* Odd heights (65 here, 35 for the controls): the capitals, an odd number of pixels tall, then sit
+       exactly in the middle instead of half a pixel off. */
     flex: none;
-    height: 64px;
+    height: 65px;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -100,7 +104,9 @@
     align-self: stretch;
   }
   .nav {
-    padding: 6px 12px;
+    height: 35px;
+    box-sizing: border-box;
+    padding: 0 12px;
     font-size: 18px;
     font-weight: 600;
     color: var(--dim);
@@ -132,7 +138,9 @@
     align-items: center;
     gap: 8px;
     margin-right: 12px;
-    padding: 7px 14px;
+    height: 35px;
+    box-sizing: border-box;
+    padding: 0 14px;
     border-radius: 999px;
     border: 1px solid rgb(243 238 255 / 0.15);
     font-size: 15px;
@@ -151,7 +159,9 @@
     color: var(--dim);
   }
   .lock {
-    padding: 7px 10px;
+    width: 35px;
+    padding: 0;
+    justify-content: center;
     color: var(--dim);
   }
   .lock.open {
@@ -165,7 +175,12 @@
   .update:hover {
     border-color: var(--acid);
   }
+  /* The pill's margin sits outside the menu, so the list lines up with the pill's right edge. */
+  .picker-menu {
+    margin-right: 12px;
+  }
   .picker {
+    margin-right: 0;
     gap: 6px;
     border-color: rgb(255 42 109 / 0.5);
   }
@@ -190,7 +205,8 @@
   }
   .gear {
     margin-left: 6px;
-    padding: 8px;
+    width: 35px;
+    height: 35px;
     font-size: 16px;
     color: var(--dim);
   }

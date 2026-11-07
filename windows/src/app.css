@@ -1,3 +1,18 @@
+/*
+ * Bahnschrift with its metrics evened out. As shipped, its ascent leaves more room above the capitals
+ * than its descent leaves below the baseline, so every label sat 1–2 px high in its button. These
+ * overrides keep the line height (85.5 + 14.5 = 79 + 21) and put the capitals in the middle of it.
+ * 87.5% is the width of the Bahnschrift Condensed instance.
+ */
+@font-face {
+  font-family: 'Nightglass Title';
+  src: local('Bahnschrift');
+  font-weight: 300 700;
+  font-stretch: 87.5%;
+  ascent-override: 85.5%;
+  descent-override: 14.5%;
+}
+
 /* Nightglass tokens: see DESIGN.md at the repository root. */
 :root {
   --ink: #05010f;
@@ -11,7 +26,7 @@
   --panel: rgb(5 1 15 / 0.72);
 
   /* Bahnschrift ships with Windows and has condensed widths, like SF Pro Condensed on macOS. */
-  --title: 'Bahnschrift Condensed', 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
+  --title: 'Nightglass Title', 'Bahnschrift Condensed', 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', monospace;
   --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 
@@ -33,6 +48,12 @@ body {
   font-stretch: condensed;
   user-select: none;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Thin, quiet scrollbars everywhere: lists, menus, dialogs. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(243 238 255 / 0.15) transparent;
 }
 
 button {

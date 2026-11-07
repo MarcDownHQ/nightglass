@@ -16,6 +16,8 @@ describe('friendly', () => {
     ['Connexion impossible : error sending request: client error (Connect): dns error', /can’t be reached/],
     ['loading failed', /didn’t play/],
     ['unrecognized file format', /video stream/],
+    ['Invalid URL', /isn’t valid/],
+    ['Invalid path: list.m3u', /isn’t valid/],
   ])('%s', (raw, expected) => expect(friendly(raw)).toMatch(expected));
 
   it('speaks French when asked', () => {

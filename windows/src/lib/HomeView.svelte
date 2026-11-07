@@ -62,7 +62,7 @@
     </button>
   {:else}
     <div class="hello">
-      <NeonText text="Welcome" size={44} />
+      <NeonText text={t('Welcome')} size={44} />
       <p>{t('Pick a channel in Live: the last one you watch comes back here.')}</p>
       <button class="go" onclick={() => (nav.section = 'live')}>{t('Open Live')}</button>
     </div>
@@ -210,7 +210,9 @@
     grid-auto-columns: 230px;
     gap: 16px;
     overflow-x: auto;
+    /* Room for the hover glow, without moving the cards off the page margin. */
     padding: 6px 4px 10px;
+    margin: 0 -4px;
     scrollbar-width: thin;
     scrollbar-color: rgb(243 238 255 / 0.15) transparent;
   }
@@ -241,7 +243,9 @@
   .card b {
     font-size: 17px;
   }
+  /* Kept when empty, so every card's progress line sits at the same height. */
   .card small {
+    min-height: 1lh;
     font-size: 14px;
     color: var(--dim);
   }

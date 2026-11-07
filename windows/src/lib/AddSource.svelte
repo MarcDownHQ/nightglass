@@ -61,7 +61,7 @@
   >
     <div class="kinds">
       {#each kinds as k (k)}
-        <NeonTab title={k} selected={k === kind} onclick={() => (kind = k)} />
+        <NeonTab title={k} selected={k === kind} onclick={() => ((kind = k), (message = null))} />
       {/each}
     </div>
     <label><span>{t('Name')}</span><input bind:value={name} placeholder={t('My provider')} spellcheck="false" /></label>
@@ -126,6 +126,7 @@
   .preset {
     align-self: flex-start;
     font-size: 14px;
+    line-height: 18px;
     font-weight: 500;
     color: var(--cyan);
   }

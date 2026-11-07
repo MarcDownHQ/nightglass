@@ -60,9 +60,9 @@
     <section>
       <h3 class="mono">{t('Interface size')}</h3>
       <div class="zoom">
-        <button onclick={() => options.stepZoom(-0.1)} title={t('Smaller (Ctrl −)')}>−</button>
+        <button onclick={() => options.stepZoom(-0.1)} title={t('Smaller (Ctrl −)')} class="icon">&#xE738;</button>
         <span class="mono">{Math.round(options.zoom * 100)} %</span>
-        <button onclick={() => options.stepZoom(0.1)} title={t('Larger (Ctrl +)')}>+</button>
+        <button onclick={() => options.stepZoom(0.1)} title={t('Larger (Ctrl +)')} class="icon">&#xE710;</button>
         <button class="link" disabled={options.zoom === 1} onclick={() => options.set('zoom', 1)}>{t('Reset (Ctrl 0)')}</button>
       </div>
       <small class="hint">{t('Larger for a TV across the room.')}</small>
@@ -129,8 +129,12 @@
     gap: 10px;
     cursor: pointer;
   }
+  /* Radios and the checkbox share one box, centred on the first line of the label. */
   .choice input {
-    margin-top: 4px;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
     accent-color: var(--magenta);
   }
   .choice span {
@@ -139,6 +143,7 @@
   }
   .choice b {
     font-size: 16px;
+    line-height: 20px;
   }
   .choice small,
   .hint {
@@ -169,7 +174,10 @@
     height: 34px;
     border-radius: 50%;
     border: 1px solid rgb(243 238 255 / 0.2);
-    font-size: 18px;
+    font-size: 12px;
+  }
+  .zoom .link {
+    align-self: center;
   }
   .zoom span {
     min-width: 56px;
@@ -179,10 +187,12 @@
     display: flex;
     gap: 20px;
   }
+  /* 19 px: an odd line for the capitals, an odd number of pixels tall, to sit in its middle. */
   .link {
     align-self: flex-start;
     color: var(--cyan);
     font-size: 15px;
+    line-height: 19px;
   }
   .link:disabled {
     opacity: 0.4;

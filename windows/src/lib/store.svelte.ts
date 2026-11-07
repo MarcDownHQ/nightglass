@@ -392,10 +392,10 @@ function countryOf(c: LiveItem): string | null {
   return splitCountry(c.channel.name).country ?? (c.channel.group ? splitCountry(c.channel.group).country : null);
 }
 
-/** The same guide loaded twice must not list a programme twice. */
+/** Two guides for one channel (or one loaded twice): one programme per start time, or the grid stacks them. */
 function withoutRepeats(list: Programme[]): Programme[] {
   list.sort((a, b) => a.start - b.start);
-  return list.filter((p, i) => i === 0 || p.start !== list[i - 1].start || p.title !== list[i - 1].title);
+  return list.filter((p, i) => i === 0 || p.start !== list[i - 1].start);
 }
 
 export const store = new Store();

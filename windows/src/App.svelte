@@ -89,7 +89,7 @@
     <SourcesView />
   {:else if ready && !store.sources.length}
     <div class="empty">
-      <NeonText text="No source yet" size={44} />
+      <NeonText text={t('No source yet')} size={44} />
       <p>{t('Add an M3U playlist, an Xtream account or a Stalker portal.')}</p>
       <button class="primary" onclick={() => (nav.section = 'sources')}>{t('Add a source')}</button>
     </div>

@@ -9,12 +9,18 @@
   }: { title: string; selected: boolean; color?: string; onclick: () => void; oncontextmenu?: (e: MouseEvent) => void } = $props();
 </script>
 
-<button class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
+<!-- type=button: inside a form (Add a source), a tab must not submit it. -->
+<button type="button" class="tab" class:on={selected} style:--c={color} aria-pressed={selected} {onclick} {oncontextmenu}>{title}</button>
 
 <style>
+  /* A set height: a ★ or ↺ drawn from a fallback font would otherwise make its tab taller. Odd, so the
+     capitals (an odd number of pixels tall) sit exactly in the middle. */
   .tab {
     flex: none;
-    padding: 7px 14px;
+    height: 35px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    line-height: 17px;
     border-radius: 999px;
     border: 1px solid rgb(243 238 255 / 0.15);
     color: var(--dim);
@@ -27,10 +33,13 @@
     color: var(--text);
     border-color: rgb(243 238 255 / 0.35);
   }
+  /* The thicker ring is drawn inside, so selecting a tab doesn't move the others. */
   .tab.on {
     color: #fff;
-    border: 1.5px solid var(--c);
+    border-color: var(--c);
     background: color-mix(in srgb, var(--c) 18%, transparent);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent);
+    box-shadow:
+      inset 0 0 0 0.5px var(--c),
+      0 0 8px color-mix(in srgb, var(--c) 60%, transparent);
   }
 </style>

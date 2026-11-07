@@ -60,17 +60,17 @@
 
 {#if item}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && (epgMatch.item = null)}>
-    <div class="dialog" role="dialog" aria-label="Match the guide">
+    <div class="dialog" role="dialog" aria-label={t('Match the guide…')}>
       <header>
-        <h2>Guide for {displayName(item.channel.name)}</h2>
+        <h2>{t('Guide for {name}', { name: displayName(item.channel.name) })}</h2>
         <button class="icon close" title={t('Close (Esc)')} onclick={() => (epgMatch.item = null)}>&#xE8BB;</button>
       </header>
       <p class="hint">
-        {t('Playlist id:')} <span class="mono">{item.channel.epgId ?? 'none'}</span>
-        {#if current}· matched by hand: <span class="mono">{current}</span>
+        {t('Playlist id:')} <span class="mono">{item.channel.epgId ?? t('none')}</span>
+        {#if current}{t('· matched by hand:')} <span class="mono">{current}</span>
           <button class="link" onclick={() => choose(null)}>{t('Undo')}</button>{/if}
       </p>
-      <input bind:this={input} bind:value={query} placeholder="Search the guide's channels" spellcheck="false" />
+      <input bind:this={input} bind:value={query} placeholder={t('Search the guide’s channels')} spellcheck="false" />
       <div class="list">
         {#if loading}
           <p class="note">{t('Loading…')}</p>
@@ -89,7 +89,7 @@
 {#snippet hit([id, name]: [string, string])}
   <button class="hit" class:on={id === current} onclick={() => choose(id)}>
     <b>{name}</b>
-    <span class="mono">{id}</span>
+    {#if id !== name}<span class="mono">{id}</span>{/if}
   </button>
 {/snippet}
 
@@ -99,10 +99,13 @@
     inset: 0;
     z-index: 105;
     display: grid;
-    place-items: center;
+    /* Centred on a whole pixel (see .dialog): a half-pixel offset blurs text and moves it off centre. */
+    place-items: start center;
+    padding-top: round(down, 50vh, 1px);
     background: rgb(5 1 15 / 0.6);
   }
   .dialog {
+    translate: 0 round(down, -50%, 1px);
     width: min(640px, calc(100vw - 80px));
     height: min(620px, calc(100vh - 120px));
     display: flex;
@@ -160,13 +163,17 @@
     padding: 12px 4px;
     color: var(--dim);
   }
+  /* Name and id on one baseline, the pair centred in the row; the text starts where the field's does. */
   .hit {
     width: 100%;
     height: 100%;
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
+    align-content: center;
     align-items: baseline;
     gap: 12px;
-    padding: 0 10px;
+    padding: 0 13px;
     border-radius: 6px;
     text-align: left;
   }

@@ -70,11 +70,11 @@
     const entries: MenuEntry[] = [{ heading: `${hm(p.start)}–${hm(p.end)} · ${p.title}` }];
     if (p.start <= now && p.end > now) entries.push({ label: t('Watch live'), icon: '\uE768', action: () => open(item) });
     if (store.canReplay(item, p)) {
-      entries.push({ label: p.end > now ? t('Watch from the start') : 'Replay', icon: '\uE72C', action: () => void store.playReplay(item, p) });
+      entries.push({ label: p.end > now ? t('Watch from the start') : t('Replay'), icon: '\uE72C', action: () => void store.playReplay(item, p) });
     }
     if (p.start > now) {
       entries.push({
-        label: library.hasReminder(item.id, p.start) ? t('Cancel the reminder') : 'Remind me',
+        label: library.hasReminder(item.id, p.start) ? t('Cancel the reminder') : t('Remind me'),
         icon: '\uEA8F',
         action: () => remind(item, p),
       });
@@ -160,7 +160,7 @@
           </div>
           <div class="times">
             {#each { length: WINDOW / HALF } as _, i (i)}
-              <span class="mono" style:left="{i * HALF * perSecond + 6}px">{hm(start + i * HALF)}</span>
+              <span class="mono" style:left="{i * HALF * perSecond + 13}px">{hm(start + i * HALF)}</span>
             {/each}
           </div>
         </div>
@@ -179,7 +179,7 @@
       <b>{displayName(item.channel.name)}</b>
     </div>
     <div class="track">
-      {#each store.programmes(item.channel).filter((p) => p.end > start && p.start < end) as p (p.start)}
+      {#each store.programmes(item.channel).filter((p) => p.end > start && p.start < end) as p, i (p.start + ':' + i)}
         {@const x0 = Math.max(0, p.start - start) * perSecond}
         {@const x1 = (Math.min(p.end, end) - start) * perSecond}
         {@const replay = p.end <= now && store.canReplay(item, p)}
@@ -243,7 +243,8 @@
     box-sizing: border-box;
   }
   .paging button {
-    padding: 6px;
+    height: 28px;
+    padding: 0 6px;
     color: var(--cyan);
   }
   .paging .icon {

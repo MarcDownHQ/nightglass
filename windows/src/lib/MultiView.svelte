@@ -64,8 +64,8 @@
 <div class="multiview">
   <div class="side">
     <div class="tools">
-      <button class:on={multiview.layout === 2} onclick={() => multiview.setLayout(2)} title={t('Two channels')}>&#xE745; 2</button>
-      <button class:on={multiview.layout === 4} onclick={() => multiview.setLayout(4)} title={t('Four channels')}>&#xF0E2; 4</button>
+      <button class:on={multiview.layout === 2} onclick={() => multiview.setLayout(2)} title={t('Two channels')}><span class="icon">&#xE745;</span> 2</button>
+      <button class:on={multiview.layout === 4} onclick={() => multiview.setLayout(4)} title={t('Four channels')}><span class="icon">&#xF0E2;</span> 4</button>
       <span class="spacer"></span>
       <button class="close" onclick={() => multiview.close()} title={t('Close multi-view (Esc)')}>{t('Close')}</button>
     </div>
@@ -140,18 +140,26 @@
   .side :global(.channels) {
     flex: 1;
   }
+  /* Its top on the tiles' top. */
   .tools {
     display: flex;
     gap: 8px;
-    padding-top: 8px;
   }
   .tools button {
-    padding: 6px 12px;
+    height: 33px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
     border-radius: 999px;
     border: 1px solid rgb(243 238 255 / 0.15);
-    font-family: 'Segoe Fluent Icons', inherit;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--dim);
+  }
+  .tools .icon {
+    font-size: 13px;
   }
   .tools button.on {
     color: #fff;

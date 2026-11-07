@@ -63,7 +63,7 @@
 <style>
   .banners {
     position: fixed;
-    top: 72px;
+    top: 73px;
     right: 24px;
     z-index: 95;
     display: flex;

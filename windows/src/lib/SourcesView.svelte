@@ -51,7 +51,7 @@
           onclick={() => toggle(s)}
           onkeydown={(e) => e.key === 'Enter' && toggle(s)}
         >
-          <Tag text={kind} color={neon(kind)} />
+          <span class="kind"><Tag text={kind} color={neon(kind)} /></span>
           <div class="text">
             <b>{s.name}</b>
             {#if store.loading.has(s.id)}
@@ -123,7 +123,9 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 9px 12px;
+    height: 39px;
+    box-sizing: border-box;
+    padding: 0 12px;
     border-radius: 999px;
     border: 1px solid rgb(5 217 232 / 0.35);
     font-size: 15px;
@@ -166,6 +168,12 @@
     border-radius: 2px;
     background: var(--magenta);
     box-shadow: 0 0 6px var(--magenta);
+  }
+  /* One width for M3U, Xtream and Stalker, so the names line up. */
+  .kind {
+    flex: none;
+    width: 58px;
+    display: flex;
   }
   .text {
     flex: 1;

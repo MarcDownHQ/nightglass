@@ -4,6 +4,7 @@ import { t } from './i18n.svelte';
  * a cause and something to try. Unknown messages pass through unchanged.
  */
 const RULES: [RegExp, string][] = [
+  [/^invalid (url|path)/i, 'This address isn’t valid: it starts with http:// or https://, or it is the path of a file.'],
   [/identifiants refus|refused the credentials|auth.*fail|invalid credentials/i, 'The provider refused the username or password.'],
   [/\b(401|403|458|509)\b|forbidden|too many connections|max.?connections/i, 'The provider refused access: the account may have expired, or too many devices are watching at once.'],
   [/\b404\b|not found/i, 'The server has nothing at this address: the channel or the playlist may have moved.'],

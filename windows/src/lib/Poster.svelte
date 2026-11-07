@@ -46,7 +46,9 @@
 </button>
 
 <style>
+  /* A flex button shrinks to its content: the poster fills its column instead. */
   .poster {
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 8px;
