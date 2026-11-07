@@ -4,8 +4,24 @@
   import { kindLabel, type Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
+  import { friendly } from './errors';
+  import type { Account } from './models';
   import { exportSettings, importSettings } from './settings';
   import { neon } from './theme';
+
+  /** "Expires 12 Dec 2026 · 1/2 connections": what the provider says about the subscription. */
+  function accountLine(a: Account): string {
+    const parts: string[] = [];
+    if (a.status && a.status !== 'Active') parts.push(a.status);
+    if (a.trial) parts.push('Trial');
+    if (a.expires) {
+      const days = Math.ceil((a.expires * 1000 - Date.now()) / 86_400_000);
+      const date = new Date(a.expires * 1000).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+      parts.push(days < 0 ? `Expired on ${date}` : days <= 14 ? `Expires in ${days} day${days === 1 ? '' : 's'} (${date})` : `Expires ${date}`);
+    } else parts.push('No expiry');
+    if (a.maxConnections) parts.push(`${a.activeConnections ?? 0}/${a.maxConnections} connections`);
+    return parts.join(' · ');
+  }
 
   function toggle(s: Source) {
     store.setActive(store.activeSource === s.id ? null : s.id);
@@ -34,9 +50,14 @@
             {#if store.loading.has(s.id)}
               <small class="busy">Loading…</small>
             {:else if store.errors[s.id]}
-              <small class="error">{store.errors[s.id]}</small>
+              <small class="error" title={store.errors[s.id]}>{friendly(store.errors[s.id])}</small>
+              {#if cat}<small>Showing the copy from the last launch.</small>{/if}
             {:else}
               <small>{cat?.channels.length ?? 0} channels · {cat?.movies.length ?? 0} movies · {cat?.series.length ?? 0} series</small>
+            {/if}
+            {#if cat?.account}
+              {@const soon = cat.account.expires && cat.account.expires * 1000 - Date.now() < 14 * 86_400_000}
+              <small class="account" class:warn={soon || (cat.account.status && cat.account.status !== 'Active')}>{accountLine(cat.account)}</small>
             {/if}
           </div>
           <button
@@ -159,6 +180,12 @@
   }
   .text .error {
     color: var(--magenta);
+  }
+  .text .account {
+    color: var(--cyan);
+  }
+  .text .account.warn {
+    color: var(--acid);
   }
   .row button {
     font-size: 14px;

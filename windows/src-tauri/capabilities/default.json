@@ -22,6 +22,7 @@
     "core:window:allow-current-monitor",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
+    "core:webview:allow-set-webview-zoom",
     "updater:default",
     "notification:default",
     "dialog:default"
