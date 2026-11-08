@@ -1,9 +1,10 @@
 import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { library } from './library.svelte';
 import type { LiveItem } from './models';
+import { hole } from './video.svelte';
 
 /** What the player is showing. */
 export interface Playable {
@@ -64,9 +65,8 @@ class Player {
   cacheStart = $state(0);
   /** The file a recording goes to, while it records. */
   recording = $state<string | null>(null);
-  /** The small always-on-top window. */
-  mini = $state(false);
-  private bounds: { position: PhysicalPosition; size: PhysicalSize; fullscreen: boolean } | null = null;
+  /** Picture in picture: the video in its own small window above the others, the app free behind it. */
+  pip = $state(false);
   /** A short message over the picture: the volume as it changes. */
   osd = $state<string | null>(null);
   private osdTimer: ReturnType<typeof setTimeout> | undefined;
@@ -85,6 +85,14 @@ class Player {
     void invoke('mpv_command', { args: ['stop'] });
     void this.applyVolume();
     void this.applyLanguages();
+    // The PiP window outlives the page too.
+    void invoke('pip_close');
+    void listen<'pause' | 'expand'>('pip-action', ({ payload }) => (payload === 'pause' ? this.togglePause() : void this.expand()));
+    void listen('pip-closed', () => {
+      // Back in the main window, the video's place must be sent again.
+      hole.forget();
+      this.pip = false;
+    });
   }
 
   get signal(): number {
@@ -163,12 +171,15 @@ class Player {
     this.loading = false;
     this.error = null;
     this.tracks = [];
-    void (this.mini ? this.leaveMini() : this.leaveFullscreen());
+    void (this.pip ? invoke('pip_close') : this.leaveFullscreen());
   }
 
   /** Fullscreen playback: the whole screen, unless the window already filled it. */
   async expand() {
-    if (this.mini) await this.leaveMini();
+    if (this.pip) {
+      await invoke('pip_close');
+      await win.setFocus();
+    }
     if (!this.current || this.expanded) return;
     this.wasFullscreen = await win.isFullscreen();
     this.expanded = true;
@@ -177,7 +188,6 @@ class Player {
 
   /** Back to the list: live TV keeps playing in the preview, a movie stops. */
   async collapse() {
-    if (this.mini) await this.leaveMini();
     if (this.current && !this.current.live) this.stop();
     else await this.leaveFullscreen();
   }
@@ -283,38 +293,19 @@ class Player {
     this.notify(t('Saved to {path}', { path }), 4000);
   }
 
-  /** A small window above the others, in the screen's corner; again to go back. */
-  async toggleMini() {
-    if (this.mini) return this.leaveMini();
+  /** The video in a small window above the others (PiP), the app free behind it; again to bring it back. */
+  async togglePip() {
+    // Closing it comes back as `pip-closed`.
+    if (this.pip) return void (await invoke('pip_close'));
     if (!this.current) return;
-    this.bounds = { position: await win.outerPosition(), size: await win.outerSize(), fullscreen: await win.isFullscreen() };
-    if (this.bounds.fullscreen) await win.setFullscreen(false);
-    this.expanded = true;
-    this.mini = true;
-    await win.setMinSize(null);
-    await win.setSize(new LogicalSize(480, 270));
-    const monitor = await currentMonitor();
-    if (monitor) {
-      const scale = monitor.scaleFactor;
-      const x = (monitor.position.x + monitor.size.width) / scale - 480 - 24;
-      const y = (monitor.position.y + monitor.size.height) / scale - 270 - 64;
-      await win.setPosition(new LogicalPosition(x, y));
+    await this.leaveFullscreen();
+    this.pip = true;
+    try {
+      await invoke('pip_open');
+    } catch (e) {
+      this.pip = false;
+      this.notify(String(e));
     }
-    await win.setAlwaysOnTop(true);
-  }
-
-  private async leaveMini() {
-    if (!this.mini) return;
-    this.mini = false;
-    this.expanded = false;
-    await win.setAlwaysOnTop(false);
-    await win.setMinSize(new LogicalSize(1024, 640));
-    if (this.bounds) {
-      await win.setSize(this.bounds.size);
-      await win.setPosition(this.bounds.position);
-      if (this.bounds.fullscreen) await win.setFullscreen(true);
-    }
-    this.bounds = null;
   }
 
   /** Live TV: where following live plays, in the timeline of `time`. */

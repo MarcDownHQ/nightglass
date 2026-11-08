@@ -28,6 +28,11 @@ class VideoHole {
     void invoke('mpv_video_rect', { margins });
   }
 
+  /** The video's window moved (PiP and back): send the place again, even if unchanged. */
+  forget() {
+    this.sent = '';
+  }
+
   release(owner: HTMLElement) {
     if (this.owner === owner) this.set(null, null);
   }

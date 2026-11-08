@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
 use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Series, Source, xmltv};
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
 /// The child window mpv draws into.
@@ -46,6 +46,47 @@ fn mpv_video_rect(mpv: State<'_, Mpv>, margins: [f64; 4]) -> Result<(), String> 
         mpv.set(&format!("video-margin-ratio-{side}"), &value.clamp(0.0, 1.0).to_string())?;
     }
     Ok(())
+}
+
+/// Picture in picture: a small window above the others that the video moves into, leaving the main window free.
+#[tauri::command]
+async fn pip_open(app: AppHandle, mpv: State<'_, Mpv>) -> Result<(), String> {
+    if app.get_webview_window("pip").is_some() {
+        return Ok(());
+    }
+    let (w, h) = (480.0, 270.0);
+    let mut builder = WebviewWindowBuilder::new(&app, "pip", WebviewUrl::App("index.html".into()))
+        .title("Nightglass")
+        .inner_size(w, h)
+        .min_inner_size(240.0, 135.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .maximizable(false);
+    // Bottom right of the main window's screen, above the taskbar.
+    if let Some(m) = app.get_webview_window("main").and_then(|m| m.current_monitor().ok().flatten()) {
+        let k = m.scale_factor();
+        let right = f64::from(m.position().x) / k + f64::from(m.size().width) / k;
+        let bottom = f64::from(m.position().y) / k + f64::from(m.size().height) / k;
+        builder = builder.position(right - w - 24.0, bottom - h - 64.0);
+    }
+    let pip = builder.build().map_err(|e| e.to_string())?;
+    // The whole PiP window is picture.
+    for side in ["left", "top", "right", "bottom"] {
+        mpv.set(&format!("video-margin-ratio-{side}"), "0")?;
+    }
+    mpv::adopt_host(app.state::<VideoHost>().0, pip.hwnd().map_err(|e| e.to_string())?.0 as isize);
+    Ok(())
+}
+
+/// Closes the PiP window; the video goes back on its way out (see `run`).
+#[tauri::command]
+async fn pip_close(app: AppHandle) -> Result<(), String> {
+    match app.get_webview_window("pip") {
+        Some(pip) => pip.close().map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
 }
 
 #[tauri::command]
@@ -221,18 +262,31 @@ pub fn run() {
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::Resized(size) = event
-                && let Some(host) = window.try_state::<VideoHost>()
-            {
-                mpv::resize_host(host.0, size.width, size.height);
+        .on_window_event(|window, event| match event {
+            // The video window follows the size of the window it is in: the main one, or the PiP one.
+            WindowEvent::Resized(size) => {
+                if let Some(host) = window.try_state::<VideoHost>()
+                    && window.hwnd().is_ok_and(|h| mpv::host_parent(host.0) == h.0 as isize)
+                {
+                    mpv::resize_host(host.0, size.width, size.height);
+                }
             }
+            // The video comes home before the PiP window goes: destroyed with it, mpv would lose where it draws.
+            WindowEvent::CloseRequested { .. } if window.label() == "pip" => {
+                mpv::adopt_host(window.state::<VideoHost>().0, window.state::<MainWindow>().0);
+                let _ = window.emit_to("main", "pip-closed", ());
+            }
+            // The PiP window alone would keep the app running.
+            WindowEvent::Destroyed if window.label() == "main" => window.app_handle().exit(0),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             mpv_play,
             mpv_command,
             mpv_set,
             mpv_video_rect,
+            pip_open,
+            pip_close,
             sources_load,
             sources_save,
             catalog,

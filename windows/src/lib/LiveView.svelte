@@ -184,7 +184,7 @@
     else if (e.key.toLowerCase() === 's') {
       if (player.current?.item) toggleStar(player.current.item.id);
     } else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
-    else if (e.key.toLowerCase() === 'p') void player.toggleMini();
+    else if (e.key.toLowerCase() === 'p') void player.togglePip();
     else if (/^[0-9]$/.test(e.key)) {
       // In a favourites list the numbers are the list's own: 1 is its first channel.
       const rows = list;
@@ -231,7 +231,14 @@
   </section>
 
   <section class="right">
-    {#if player.current && !player.expanded}
+    {#if player.current && player.pip}
+      <div class="preview empty">
+        <div class="status">
+          {t('Playing in the mini player')}
+          <button class="retry" onclick={() => player.togglePip()}>{t('Bring it back here')}</button>
+        </div>
+      </div>
+    {:else if player.current && !player.expanded}
       <div class="preview" class:paused={player.paused} use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
         {#if player.current.live}<span class="live-badge"><span></span>{t('LIVE')}</span>{/if}
         {#if player.loading || player.error}
@@ -250,7 +257,7 @@
           <Volume />
           <span class="spacer"></span>
           <button class="icon ctl" aria-label={t('Multi-view: 2 or 4 channels at once')} title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
-          <button class="icon ctl" aria-label={t('Mini player (P)')} title={t('Mini player (P)')} onclick={() => player.toggleMini()}>&#xE8A7;</button>
+          <button class="icon ctl" aria-label={t('Mini player above the other windows (P)')} title={t('Mini player above the other windows (P)')} onclick={() => player.togglePip()}>&#xE8A7;</button>
           <button class="icon ctl" aria-label={t('Fullscreen (F)')} title={t('Fullscreen (F)')} onclick={() => player.expand()}>&#xE740;</button>
         </div>
       </div>
