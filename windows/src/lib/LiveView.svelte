@@ -73,6 +73,10 @@
     ...(hidden.length ? [{ id: 'hidden', label: t('Hidden') }] : []),
   ]);
 
+  /** Past this many categories the strip keeps only the shortcuts and the category shown; the ☰ list has them all. */
+  const STRIP_MAX = 30;
+  const stripTabs = $derived(store.categories.length <= STRIP_MAX ? tabs : tabs.filter((x) => !x.id.startsWith('cat:') || x.id === tab));
+
   const listId = $derived(tab.startsWith('list:') ? tab.slice(5) : undefined);
 
   const list = $derived.by((): LiveItem[] => {
@@ -242,7 +246,7 @@
     <div class="bar">
       <CategoryPicker {tabs} selected={tab} count={tabCount} onpick={(id) => (tab = id)} />
       <div class="tabs" bind:this={tabsEl} onwheel={tabsWheel}>
-        {#each tabs as tb (tb.id)}
+        {#each stripTabs as tb (tb.id)}
           <NeonTab title={tb.label} selected={tb.id === tab} onclick={() => (tab = tb.id)} oncontextmenu={(e) => tabMenu(e, tb)} />
         {/each}
       </div>
