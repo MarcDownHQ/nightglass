@@ -77,7 +77,7 @@
 <div
   class="backdrop"
   style:clip-path={multiview.open
-    ? backdropClip(W, H, ...multiview.rects.map((r, i) => (multiview.tiles[i].item ? r : null)))
+    ? backdropClip(W, H, ...multiview.rects.map((r, i) => (multiview.playing(i) ? r : null)))
     : backdropClip(W, H, hole.rect)}
 ></div>
 

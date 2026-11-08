@@ -83,6 +83,7 @@
         class="tile"
         class:active={multiview.active === i}
         class:empty={!tile.item}
+        class:dark={!multiview.playing(i)}
         role="button"
         tabindex="0"
         onclick={() => multiview.focus(i)}
@@ -239,9 +240,12 @@
     place-items: center;
     border-radius: 12px 12px 0 0;
   }
+  /* No picture yet: black, not the page. */
+  .tile.dark .video {
+    background: #000;
+  }
   .tile.empty .video {
     border-radius: 12px;
-    background: #000;
   }
   .hint {
     margin: 0;
