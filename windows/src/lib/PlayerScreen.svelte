@@ -7,7 +7,7 @@
   import SignalBars from './SignalBars.svelte';
   import StopButton from './StopButton.svelte';
   import { store } from './store.svelte';
-  import { clock, displayName, hm, progress, qualityTag } from './theme';
+  import { clock, displayName, hm, qualityTag } from './theme';
   import TrackMenus from './TrackMenus.svelte';
   import { videoHole } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
@@ -25,6 +25,7 @@
   const item = $derived(player.current?.item);
   const np = $derived(item ? store.nowNext(item.channel) : {});
   const quality = $derived(item ? qualityTag(item.channel.name) : null);
+  const left = $derived(np.now ? Math.max(0, Math.round((np.now.end - store.now) / 60)) : 0);
   const isRow = (row: LiveItem) => row.id === item?.id || !!row.variants?.some((v) => v.id === item?.id);
   /** What the arrows and the drawer zap through: the playing channel's category, else every channel. */
   const zapList = $derived.by(() => {
@@ -89,6 +90,34 @@
     player.setVolume(library.volume + (e.deltaY < 0 ? 5 : -5));
   }
 
+  /** Live: the buffer bar, from the oldest second kept to the last one arrived. Dragging previews, letting go seeks. */
+  let scrub = $state<number | null>(null);
+  const span = $derived(player.cacheTime - player.cacheStart);
+  const pos = $derived(scrub ?? player.time);
+  const pct = (s: number) => (span > 0 ? Math.min(100, Math.max(0, ((s - player.cacheStart) / span) * 100)) : 0);
+
+  function bufferAt(e: PointerEvent) {
+    const { left, width } = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return player.cacheStart + span * Math.min(1, Math.max(0, (e.clientX - left) / width));
+  }
+
+  function scrubStart(e: PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    scrub = bufferAt(e);
+  }
+
+  function scrubEnd() {
+    if (scrub !== null) player.seekTo(scrub);
+    scrub = null;
+  }
+
+  /** A double click on the picture leaves fullscreen; not one on a control (two quick -10 s). */
+  function ondblclick(e: MouseEvent) {
+    if ((e.target as Element).closest('button, input, [role=slider], aside')) return;
+    if (player.mini) void player.expand();
+    else void reduce();
+  }
+
   function seekAt(e: MouseEvent) {
     const { left, width } = (e.currentTarget as HTMLElement).getBoundingClientRect();
     player.seekTo((player.duration * (e.clientX - left)) / width);
@@ -104,7 +133,7 @@
   use:videoHole={0}
   onmousemove={poke}
   onmousedown={poke}
-  ondblclick={() => (player.mini ? player.expand() : reduce())}
+  {ondblclick}
   {onwheel}
   role="presentation"
 >
@@ -136,6 +165,9 @@
           {/if}
         </div>
         <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
+        {#if np.now && !player.mini}
+          <p class="when mono">{hm(np.now.start)} – {hm(np.now.end)} · {t('{n} min left', { n: left })}</p>
+        {/if}
       </div>
       <div class="tools">
       {#if !player.mini}
@@ -168,11 +200,29 @@
 
     <footer>
       {#if item}
-        {#if np.now}
-          <div class="timeline mono">
-            <span>{hm(np.now.start)}</span>
-            <span class="track"><span class="fill" style:width="{progress(np.now, store.now) * 100}%"></span></span>
-            <span>{hm(np.now.end)}</span>
+        {#if player.current?.live && span > 1}
+          <div class="buffer mono">
+            <span title={t('Oldest moment kept in memory')}>−{clock(player.liveEdge - player.cacheStart)}</span>
+            <div
+              class="bar"
+              class:dragging={scrub !== null}
+              role="slider"
+              tabindex="-1"
+              aria-label={t('Buffer: drag to go back or forward')}
+              title={t('Buffer: drag to go back or forward')}
+              aria-valuemin={0}
+              aria-valuemax={Math.round(span)}
+              aria-valuenow={Math.round(pos - player.cacheStart)}
+              onpointerdown={scrubStart}
+              onpointermove={(e) => scrub !== null && (scrub = bufferAt(e))}
+              onpointerup={scrubEnd}
+              onpointercancel={() => (scrub = null)}
+            >
+              <span class="ahead" style:left="{pct(pos)}%" style:width="{100 - pct(pos)}%"></span>
+              <span class="fill" style:width="{pct(pos)}%"></span>
+              <span class="knob" style:left="{pct(pos)}%"></span>
+            </div>
+            <span class="edge">{(scrub ?? player.time) >= player.liveEdge - 3 || (scrub === null && !player.behind) ? t('Live') : '−' + clock(scrub !== null ? player.liveEdge - scrub : player.behind)}</span>
           </div>
         {/if}
         <div class="controls">
@@ -181,7 +231,6 @@
           <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>{@html player.paused ? '&#xE768;' : '&#xE769;'}</button>
           <button class="icon tool" onclick={() => zap(1)} title={t('Next channel (↓)')} aria-label={t('Next channel (↓)')}>&#xE70D;</button>
           <Volume />
-          <span class="state">{player.behind ? t('{time} behind live', { time: clock(player.behind) }) : t('Live')}</span>
           {#if player.behind}
             <button class="pill accent" onclick={() => player.goLive()} title={t('Back to live (L)')}>{t('Go live')}</button>
           {/if}
@@ -204,6 +253,9 @@
           <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>{@html player.paused ? '&#xE768;' : '&#xE769;'}</button>
           <span class="mono time">{clock(player.time)}</span>
           <button class="seek" onclick={seekAt} aria-label={t('Seek')}>
+            {#if player.duration > 0 && player.cacheTime > player.time}
+              <span class="ahead" style:left="{(player.time / player.duration) * 100}%" style:width="{(Math.min(player.cacheTime, player.duration) - player.time) / player.duration * 100}%"></span>
+            {/if}
             <span class="fill" style:width="{player.duration > 0 ? (player.time / player.duration) * 100 : 0}%"></span>
           </button>
           <span class="mono time">{clock(player.duration)}</span>
@@ -287,6 +339,11 @@
   .meta b {
     color: #fff;
     font-weight: 600;
+  }
+  .when {
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: var(--soft);
   }
   h1 {
     margin: 8px 0 0;
@@ -488,24 +545,10 @@
     padding: 60px 36px 30px;
     background: linear-gradient(to top, rgb(3 4 6 / 0.95), transparent);
   }
-  .timeline {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    font-size: 13px;
-    color: var(--soft);
-  }
-  .track,
   .seek {
     position: relative;
     flex: 1;
-    height: 6px;
-    border-radius: 3px;
-    background: rgb(255 255 255 / 0.14);
-  }
-  .seek {
     height: 18px;
-    background: none;
   }
   .seek::before {
     content: '';
@@ -525,9 +568,53 @@
     border-radius: 3px;
     background: var(--accent);
   }
-  .seek .fill {
+  .seek .fill,
+  .seek .ahead,
+  .bar .fill,
+  .bar .ahead {
     top: 6px;
     bottom: 6px;
+  }
+  /* Arrived, not played yet. */
+  .ahead {
+    position: absolute;
+    border-radius: 3px;
+    background: rgb(255 255 255 / 0.32);
+  }
+  .buffer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--soft);
+  }
+  .bar {
+    position: relative;
+    flex: 1;
+    height: 18px;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .knob {
+    position: absolute;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    border-radius: 50%;
+    background: #fff;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .bar:hover .knob,
+  .bar.dragging .knob {
+    opacity: 1;
+  }
+  .buffer > span {
+    width: 52px;
+  }
+  .edge {
+    text-align: right;
   }
   .controls {
     display: flex;
@@ -545,11 +632,6 @@
   }
   .play:hover {
     background: #fff;
-  }
-  .state {
-    margin-left: 10px;
-    font-size: 13px;
-    color: var(--muted);
   }
   .time {
     font-size: 13px;

@@ -60,6 +60,8 @@ class Player {
   error = $state<string | null>(null);
   /** End of what the cache holds, in the timeline of `time`: on live TV, the live edge. */
   cacheTime = $state(0);
+  /** Start of what the cache holds: how far back the picture can go. */
+  cacheStart = $state(0);
   /** The file a recording goes to, while it records. */
   recording = $state<string | null>(null);
   /** The small always-on-top window. */
@@ -137,6 +139,7 @@ class Player {
     this.started = false;
     this.time = 0;
     this.cacheTime = 0;
+    this.cacheStart = 0;
     this.edgeLag = 0;
     this.atLive = true;
     this.duration = 0;
@@ -314,7 +317,18 @@ class Player {
     this.bounds = null;
   }
 
+  /** Live TV: where following live plays, in the timeline of `time`. */
+  get liveEdge(): number {
+    return this.cacheTime - this.edgeLag;
+  }
+
+  /** Films: anywhere. Live TV: within the cache; near the live edge is back to live. */
   seekTo(seconds: number) {
+    if (this.current?.live) {
+      if (seconds >= this.liveEdge - 3) return this.goLive();
+      seconds = Math.max(seconds, this.cacheStart);
+      this.atLive = false;
+    }
     void invoke('mpv_command', { args: ['seek', String(seconds), 'absolute'] });
   }
 
@@ -420,6 +434,9 @@ class Player {
         break;
       case 'duration':
         this.duration = n;
+        break;
+      case 'cache-start':
+        this.cacheStart = n;
         break;
       case 'demuxer-cache-time':
         this.cacheTime = n;

@@ -60,6 +60,8 @@ const OBSERVED: &[(&str, c_int)] = &[
     ("demuxer-cache-time", FORMAT_DOUBLE),
     // Node properties read as a string come back as JSON.
     ("track-list", FORMAT_STRING),
+    // Only its oldest seekable second goes on, as `cache-start`: the start of the buffer bar.
+    ("demuxer-cache-state", FORMAT_STRING),
 ];
 
 struct Api {
@@ -182,6 +184,7 @@ impl Mpv {
     pub fn pump(&self, app: &AppHandle, event_name: &str, tile: Option<usize>) {
         let mut last_time = f64::NEG_INFINITY;
         let mut last_cache = f64::NEG_INFINITY;
+        let mut last_start = f64::NEG_INFINITY;
         loop {
             let event = unsafe { &*(self.api.wait_event)(self.handle, -1.0) };
             let payload = match event.event_id {
@@ -224,7 +227,16 @@ impl Mpv {
                         }
                         last_cache = t;
                     }
-                    json!({ "event": "property", "name": name, "value": value })
+                    if name == "demuxer-cache-state" {
+                        let Some(start) = cache_start(&value) else { continue };
+                        if (start - last_start).abs() < 1.0 {
+                            continue;
+                        }
+                        last_start = start;
+                        json!({ "event": "property", "name": "cache-start", "value": start })
+                    } else {
+                        json!({ "event": "property", "name": name, "value": value })
+                    }
                 }
                 _ => continue,
             };
@@ -265,6 +277,16 @@ fn property(event: &Event) -> (String, Value) {
         }
     };
     (name, value)
+}
+
+/// Where the seekable range that reaches furthest (the live edge, after a seek outside the cache) starts.
+fn cache_start(state: &Value) -> Option<f64> {
+    state["seekable-ranges"]
+        .as_array()?
+        .iter()
+        .filter_map(|r| Some((r["start"].as_f64()?, r["end"].as_f64()?)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(start, _)| start)
 }
 
 /// A bare child window at the bottom of the main window's z-order, for mpv to draw into.
@@ -315,5 +337,18 @@ pub fn destroy_host(host: isize) {
 pub fn resize_host(host: isize, width: u32, height: u32) {
     unsafe {
         SetWindowPos(host as _, std::ptr::null_mut(), 0, 0, width as i32, height as i32, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_start_is_that_of_the_range_reaching_furthest() {
+        let state = json!({ "seekable-ranges": [{ "start": 5.0, "end": 40.0 }, { "start": 90.0, "end": 120.0 }] });
+        assert_eq!(cache_start(&state), Some(90.0));
+        assert_eq!(cache_start(&json!({ "seekable-ranges": [] })), None);
+        assert_eq!(cache_start(&json!(null)), None);
     }
 }
