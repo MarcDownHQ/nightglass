@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
+  import CategoryPicker from './CategoryPicker.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
   import { organizer } from './dialogs.svelte';
@@ -82,6 +83,28 @@
     const key = tab.slice(4);
     return store.lineup.filter((c) => c.channel.group && categoryKey(c.channel.group) === key);
   });
+
+  /** Channels per category key, for the counts in the category picker. */
+  const perCategory = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (const c of store.lineup) if (c.channel.group) map.set(categoryKey(c.channel.group), (map.get(categoryKey(c.channel.group)) ?? 0) + 1);
+    return map;
+  });
+
+  function tabCount(id: string): number {
+    if (id === 'all') return store.lineup.length;
+    if (id === 'recent') return recent.length;
+    if (id === 'hidden') return hidden.length;
+    if (id.startsWith('list:')) return listRows(id.slice(5)).length;
+    return perCategory.get(id.slice(4)) ?? 0;
+  }
+
+  /** The strip has no scrollbar: the wheel scrolls it sideways. */
+  function tabsWheel(e: WheelEvent) {
+    if (!e.deltaY || e.shiftKey) return;
+    e.preventDefault();
+    tabsEl.scrollLeft += e.deltaY;
+  }
 
   const caption = $derived(tab === 'all' ? t('All channels') : (tabs.find((x) => x.id === tab)?.label ?? ''));
 
@@ -217,7 +240,8 @@
 <div class="live">
   <div class="left">
     <div class="bar">
-      <div class="tabs" bind:this={tabsEl}>
+      <CategoryPicker {tabs} selected={tab} count={tabCount} onpick={(id) => (tab = id)} />
+      <div class="tabs" bind:this={tabsEl} onwheel={tabsWheel}>
         {#each tabs as tb (tb.id)}
           <NeonTab title={tb.label} selected={tb.id === tab} onclick={() => (tab = tb.id)} oncontextmenu={(e) => tabMenu(e, tb)} />
         {/each}
@@ -321,6 +345,7 @@
     padding: 4px 28px 20px;
   }
   .left {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 10px;
