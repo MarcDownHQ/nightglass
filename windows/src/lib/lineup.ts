@@ -30,13 +30,17 @@ export function channelKey(name: string): string {
     .trim();
 }
 
-/** How good a feed is, from its name: 4K 4, FHD 3, HD or nothing said 2, SD 1. */
+/**
+ * How good a feed is, from its name: 4K 4, FHD 3, HD or nothing said 2, SD 1. HEVC feeds lose half a
+ * point, behind their equals: providers use them to save bandwidth, sound included (17 kbit/s seen).
+ */
 export function qualityRank(name: string): number {
-  const n = name.toLowerCase();
-  if (/\b(4k|uhd|2160p)\b/.test(n)) return 4;
-  if (/\b(fhd|1080p)\b/.test(n)) return 3;
-  if (/\b(sd|480p|576p|360p|lq)\b/.test(n)) return 1;
-  return 2;
+  const n = name.normalize('NFKC').toLowerCase();
+  const hevc = /\b(hevc|h\.?265)\b/.test(n) ? 0.5 : 0;
+  if (/\b(4k|uhd|2160p)\b/.test(n)) return 4 - hevc;
+  if (/\b(fhd|1080p)\b/.test(n)) return 3 - hevc;
+  if (/\b(sd|480p|576p|360p|lq)\b/.test(n)) return 1 - hevc;
+  return 2 - hevc;
 }
 
 /** "FR | Sport", "|FR| SPORT ", "Sport" → "sport": categories of several sources and prefixes become one. */
