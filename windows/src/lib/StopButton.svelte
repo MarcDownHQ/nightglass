@@ -1,37 +1,50 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import { player } from './player.svelte';
+
+  /** Smaller, for the corner of the Live preview. */
+  let { compact = false }: { compact?: boolean } = $props();
 </script>
 
-<!-- Stops playback entirely (Esc in Live, Ctrl+. anywhere). -->
-<button class="stop" onclick={() => player.stop()} title={t('Stop playback (Ctrl+.)')}><i class="square"></i>{t('Stop')}</button>
+<!-- Stops playback entirely (Esc in Live, Ctrl+. anywhere). Same shape as the player header's pills. -->
+<button class="stop" class:compact onclick={() => player.stop()} title={t('Stop playback (Ctrl+.)')}><i class="square"></i>{t('Stop')}</button>
 
 <style>
   .stop {
+    flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    /* 28 px: the 10 px capitals and the 8 px square, both even, share its exact middle. */
-    height: 28px;
-    padding: 0 12px;
-    border-radius: 999px;
-    background: rgb(10 12 17 / 0.85);
-    border: 1.5px solid rgb(143 168 255 / 0.6);
-    color: #fff;
-    font-size: 14px;
+    gap: 8px;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 11px;
+    background: rgb(20 24 33 / 0.8);
+    color: var(--text);
+    font-size: 13px;
     font-weight: 600;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+    transition: background 0.15s;
   }
   .stop:hover {
-    border-color: var(--magenta);
+    background: rgb(255 90 78 / 0.22);
+  }
+  .stop.compact {
+    height: 32px;
+    padding: 0 11px;
+    border-radius: 9px;
+    gap: 7px;
+    font-size: 12px;
   }
   /* Drawn, not the icon font's glyph: that one sits low in its box and missed the text's middle. */
   .square {
     flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--live);
+  }
+  .compact .square {
     width: 8px;
     height: 8px;
-    box-sizing: border-box;
-    border: 1.5px solid currentColor;
-    border-radius: 2px;
   }
 </style>

@@ -249,7 +249,7 @@
         {/if}
         <div class="corner">
           {#if player.recording}<span class="rec" title={player.recording}>● REC</span>{/if}
-          <StopButton />
+          <StopButton compact />
         </div>
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
         <div class="controls">
