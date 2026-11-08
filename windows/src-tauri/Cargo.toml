@@ -1,6 +1,6 @@
 [package]
 name = "nightglass"
-version = "0.2.1"
+version = "0.3.0"
 description = "Nightglass IPTV player for Windows"
 authors = ["MarcDownHQ"]
 edition = "2024"
