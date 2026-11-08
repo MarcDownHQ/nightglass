@@ -381,4 +381,14 @@ export const FR: Record<string, string> = {
   'Fullscreen (F)': 'Plein écran (F)',
   'Remove from favorites': 'Retirer des favoris',
   'Add to favorites': 'Ajouter aux favoris',
+  // Fullscreen player (redesign)
+  "Reduce": "Réduire",
+  "Esc": "Échap",
+  "Change channel": "Changer de chaîne",
+  "↑ ↓: previous or next channel · C: this list": "↑ ↓ : chaîne précédente ou suivante · C : cette liste",
+  "Previous channel (↑)": "Chaîne précédente (↑)",
+  "Back 10 seconds (←)": "Reculer de 10 secondes (←)",
+  "Next channel (↓)": "Chaîne suivante (↓)",
+  "{time} behind live": "En différé de {time}",
+  "Channels": "Chaînes",
 };

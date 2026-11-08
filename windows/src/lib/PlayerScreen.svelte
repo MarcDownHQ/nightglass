@@ -1,30 +1,46 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
+  import ChannelLogo from './ChannelLogo.svelte';
   import { dial, nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
-  import ProgressLine from './ProgressLine.svelte';
   import SignalBars from './SignalBars.svelte';
   import StopButton from './StopButton.svelte';
   import { store } from './store.svelte';
-  import { clock, displayName, hm, progress } from './theme';
+  import { clock, displayName, hm, progress, qualityTag } from './theme';
   import TrackMenus from './TrackMenus.svelte';
   import { videoHole } from './video.svelte';
+  import VirtualList from './VirtualList.svelte';
   import Volume from './Volume.svelte';
   import { library } from './library.svelte';
+  import { categoryKey, categoryLabel } from './lineup';
+  import type { LiveItem } from './models';
   import { friendly } from './errors';
 
-  /** Fullscreen playback: nothing on the picture but a thin HUD that fades when the pointer rests. */
+  /** Fullscreen playback (and the mini player): the picture, with bars that fade when the pointer rests. */
   let idle = $state(false);
+  let drawer = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const item = $derived(player.current?.item);
   const np = $derived(item ? store.nowNext(item.channel) : {});
+  const quality = $derived(item ? qualityTag(item.channel.name) : null);
+  const isRow = (row: LiveItem) => row.id === item?.id || !!row.variants?.some((v) => v.id === item?.id);
+  /** What the arrows and the drawer zap through: the playing channel's category, else every channel. */
+  const zapList = $derived.by(() => {
+    const key = item?.channel.group ? categoryKey(item.channel.group) : null;
+    const same = key ? store.lineup.filter((c) => c.channel.group && categoryKey(c.channel.group) === key) : [];
+    return same.length > 1 ? same : store.lineup;
+  });
+  const zapTitle = $derived(zapList === store.lineup || !item?.channel.group ? t('All channels') : categoryLabel(item.channel.group));
+  const firstList = $derived(library.favoriteLists[0]);
+  const favorite = $derived(!!item && !!firstList?.items.includes(item.id));
 
   function poke() {
     idle = false;
     clearTimeout(timer);
-    timer = setTimeout(() => (idle = true), 2500);
+    // The bars stay while the drawer is open.
+    timer = setTimeout(() => (idle = !drawer), 2500);
   }
 
   $effect(() => {
@@ -33,20 +49,28 @@
   });
 
   function zap(delta: number) {
-    const list = store.lineup;
-    const i = list.findIndex((c) => c.id === item?.id || c.variants?.some((v) => v.id === item?.id));
-    if (i >= 0) void store.tune(list[(i + delta + list.length) % list.length]);
+    const i = zapList.findIndex(isRow);
+    if (i >= 0) void store.tune(zapList[(i + delta + zapList.length) % zapList.length]);
+  }
+
+  /** Back to the window: live TV comes back in the Live preview, whichever screen started it. */
+  async function reduce() {
+    const live = player.current?.live;
+    if (player.mini) await player.toggleMini();
+    else await player.collapse();
+    if (live && player.current) nav.section = 'live';
   }
 
   function onkeydown(e: KeyboardEvent) {
     poke();
     if (nav.searching || e.ctrlKey || e.altKey || e.metaKey) return;
-    if (e.key === 'Escape' || e.key.toLowerCase() === 'f') void player.collapse();
+    if (e.key === 'Escape' || e.key.toLowerCase() === 'f') void reduce();
     else if (e.key === ' ') player.togglePause();
     else if (e.key === 'ArrowLeft') player.seek(-10);
     else if (e.key === 'ArrowRight') player.seek(10);
     else if (e.key === 'ArrowUp') zap(-1);
     else if (e.key === 'ArrowDown') zap(1);
+    else if (e.key.toLowerCase() === 'c' && item) drawer = !drawer;
     else if (e.key.toLowerCase() === 'n' && player.current?.next) player.current.next.play();
     else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
     else if (e.key.toLowerCase() === 'p') void player.toggleMini();
@@ -80,7 +104,7 @@
   use:videoHole={0}
   onmousemove={poke}
   onmousedown={poke}
-  ondblclick={() => (player.mini ? player.expand() : player.collapse())}
+  ondblclick={() => (player.mini ? player.expand() : reduce())}
   {onwheel}
   role="presentation"
 >
@@ -98,72 +122,112 @@
 
   <div class="hud">
     <header>
-      {#if player.current?.number}<NeonText text={String(player.current.number)} size={player.mini ? 18 : 30} />{/if}
-      <h1>{displayName(player.current?.title ?? '')}</h1>
-      <span class="spacer"></span>
-      {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
+      {#if item && !player.mini}<ChannelLogo channel={item.channel} size={56} />{/if}
+      <div class="title">
+        <div class="meta">
+          {#if player.current?.live}<span class="live-badge"><span></span>{t('LIVE')}</span>{/if}
+          {#if player.recording}<span class="rec" title={player.recording}>● REC</span>{/if}
+          {#if item && !player.mini}
+            {#if item.channel.number}<span class="mono">{item.channel.number}</span><span>·</span>{/if}
+            <b>{displayName(item.channel.name)}</b>
+            {#if quality}<span>·</span><span>{quality}</span>{/if}
+          {:else if !item && player.current?.subtitle && !player.mini}
+            <span>{player.current.subtitle}</span>
+          {/if}
+        </div>
+        <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
+      </div>
       {#if !player.mini}
-        <SignalBars level={player.signal} />
-        <Volume />
         <TrackMenus />
-        {#if player.current?.live}
-          <button class="icon tool" class:on={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? t('Stop recording (R)') : t('Record to Videos\\Nightglass (R)')}
-            >&#xE7C8;</button
-          >
-        {/if}
       {/if}
-      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')}>
-        {@html player.mini ? '&#xE740;' : '&#xE944;'}
+      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')} aria-label={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')}>
+        {@html player.mini ? '&#xE740;' : '&#xE8A7;'}
       </button>
       <StopButton />
       {#if !player.mini}
-        <button class="icon back" onclick={() => player.collapse()} title={t('Back to the list (Esc), playback continues')}>&#xE73F;</button>
+        <button class="pill" onclick={reduce} title={t('Back to the list (Esc), playback continues')}>
+          <span class="icon">&#xE73F;</span>{t('Reduce')}<kbd>{t('Esc')}</kbd>
+        </button>
       {/if}
     </header>
 
+    {#if drawer && item && !player.mini}
+      <aside class="drawer" aria-label={t('Change channel')}>
+        <div class="drawer-head">
+          <h2>{zapTitle}</h2>
+          <span class="mono">{zapList.length}</span>
+          <span class="spacer"></span>
+          <button class="icon tool small" aria-label={t('Close')} onclick={() => (drawer = false)}>&#xE711;</button>
+        </div>
+        <VirtualList items={zapList} rowHeight={60} key={(c) => c.id} row={zapRow} />
+        <p class="hint">{t('↑ ↓: previous or next channel · C: this list')}</p>
+      </aside>
+    {/if}
+
     <footer>
       {#if item}
-        <div class="now">
-          <span class="label mono">{t('Now')}</span>
-          <h2>{np.now?.title ?? displayName(item.channel.name)}</h2>
-          {#if np.now}<div class="bar"><ProgressLine value={progress(np.now, store.now)} height={3} /></div>{/if}
-        </div>
-        {#if player.behind}
-          <button class="live-edge" onclick={() => player.goLive()} title={t('Back to live (L)')}>
-            <span class="mono">−{clock(player.behind)}</span>
-            <span class="label mono">{t('Go live')}</span>
-          </button>
-        {/if}
-        {#if np.next}
-          <div class="next">
-            <span class="label mono">{t('Next')}</span>
-            <span>{hm(np.next.start)} · {np.next.title}</span>
+        {#if np.now}
+          <div class="timeline mono">
+            <span>{hm(np.now.start)}</span>
+            <span class="track"><span class="fill" style:width="{progress(np.now, store.now) * 100}%"></span></span>
+            <span>{hm(np.now.end)}</span>
           </div>
         {/if}
+        <div class="controls">
+          <button class="icon tool" onclick={() => zap(-1)} title={t('Previous channel (↑)')} aria-label={t('Previous channel (↑)')}>&#xE70E;</button>
+          <button class="icon tool" onclick={() => player.seek(-10)} title={t('Back 10 seconds (←)')} aria-label={t('Back 10 seconds (←)')}>&#xED3C;</button>
+          <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>{@html player.paused ? '&#xE768;' : '&#xE769;'}</button>
+          <button class="icon tool" onclick={() => zap(1)} title={t('Next channel (↓)')} aria-label={t('Next channel (↓)')}>&#xE70D;</button>
+          <Volume />
+          <span class="state">{player.behind ? t('{time} behind live', { time: clock(player.behind) }) : t('Live')}</span>
+          {#if player.behind}
+            <button class="pill accent" onclick={() => player.goLive()} title={t('Back to live (L)')}>{t('Go live')}</button>
+          {/if}
+          <span class="spacer"></span>
+          <SignalBars level={player.signal} />
+          {#if firstList}
+            <button class="pill" class:fav={favorite} aria-pressed={favorite} onclick={() => library.toggleFavorite(firstList.id, item.id)}>
+              <span class="icon">{@html favorite ? '&#xE735;' : '&#xE734;'}</span>{favorite ? t('In favorites') : t('Favorite')}
+            </button>
+          {/if}
+          {#if player.current?.live}
+            <button class="pill" class:recording={player.recording} onclick={() => player.toggleRecording()} title={player.recording ? t('Stop recording (R)') : t('Record to Videos\\Nightglass (R)')}>
+              <span class="dot"></span>{player.recording ? t('Stop recording') : t('Record')}
+            </button>
+          {/if}
+          <button class="pill" class:on={drawer} aria-expanded={drawer} onclick={() => (drawer = !drawer)}><span class="icon">&#xE8FD;</span>{t('Channels')}</button>
+        </div>
       {:else}
-        <div class="vod">
-          <span class="label mono dim">{player.current?.subtitle}</span>
-          <div class="transport mono">
-            <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>
-              {@html player.paused ? '&#xE768;' : '&#xE769;'}
-            </button>
-            <span>{clock(player.time)}</span>
-            <button class="track" onclick={seekAt} aria-label={t('Seek')}>
-              <span class="fill" style:width="{player.duration > 0 ? (player.time / player.duration) * 100 : 0}%"></span>
-            </button>
-            <span>{clock(player.duration)}</span>
-          </div>
-        </div>
-        {#if player.current?.next}
-          <button class="next-episode" onclick={() => player.current?.next?.play()} title={t('Next episode (N)')}>
-            <span class="label mono">{t('Next episode')}</span>
-            <span>{player.current.next.title} <span class="icon">&#xE893;</span></span>
+        <div class="controls">
+          <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>{@html player.paused ? '&#xE768;' : '&#xE769;'}</button>
+          <span class="mono time">{clock(player.time)}</span>
+          <button class="seek" onclick={seekAt} aria-label={t('Seek')}>
+            <span class="fill" style:width="{player.duration > 0 ? (player.time / player.duration) * 100 : 0}%"></span>
           </button>
-        {/if}
+          <span class="mono time">{clock(player.duration)}</span>
+          <Volume />
+          {#if player.current?.next}
+            <button class="pill" onclick={() => player.current?.next?.play()} title={t('Next episode (N)')}>
+              {t('Next episode')} · {player.current.next.title}<span class="icon">&#xE893;</span>
+            </button>
+          {/if}
+        </div>
       {/if}
     </footer>
   </div>
 </div>
+
+{#snippet zapRow(row: LiveItem)}
+  {@const now = store.nowNext(row.channel).now}
+  <button class="zap" class:on={isRow(row)} onclick={() => store.tune(row)}>
+    <span class="num mono">{row.channel.number ?? ''}</span>
+    <ChannelLogo channel={row.channel} size={40} />
+    <span class="zap-text">
+      <b>{displayName(row.channel.name)}</b>
+      <small>{now?.title ?? ''}</small>
+    </span>
+  </button>
+{/snippet}
 
 <style>
   .screen {
@@ -173,79 +237,9 @@
   .screen.idle {
     cursor: none;
   }
-  .hud > :global(*) {
-    pointer-events: auto;
-  }
   .drag {
     position: absolute;
     inset: 0;
-  }
-  .mini header {
-    padding: 10px 12px 24px;
-    gap: 10px;
-  }
-  .mini h1 {
-    font-size: 16px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .mini footer,
-  .mini .dial {
-    display: none;
-  }
-  .mini .status {
-    font-size: 13px;
-  }
-  .tool {
-    padding: 6px;
-    font-size: 16px;
-    color: var(--dim);
-  }
-  .tool:hover {
-    color: var(--text);
-  }
-  .tool.on {
-    color: var(--magenta);
-  }
-  .rec {
-    font-size: 12px;
-    color: var(--magenta);
-    animation: blink 1s steps(2) infinite;
-  }
-  @keyframes blink {
-    50% {
-      opacity: 0.4;
-    }
-  }
-  .retry {
-    display: block;
-    margin: 10px auto 0;
-    padding: 5px 16px;
-    border-radius: 999px;
-    border: 1px solid var(--cyan);
-    color: var(--cyan);
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .status {
-    max-width: 60%;
-    text-align: center;
-  }
-  .live-edge {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    border: 1px solid rgb(245 196 81 / 0.5);
-    background: rgb(10 12 17 / 0.6);
-    font-size: 18px;
-  }
-  .live-edge .label {
-    color: var(--acid);
   }
   .hud {
     position: absolute;
@@ -257,144 +251,359 @@
     justify-content: space-between;
     transition: opacity 0.4s ease-out;
   }
+  .hud > :global(*) {
+    pointer-events: auto;
+  }
   .idle .hud {
     opacity: 0;
   }
   header {
     display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 28px 36px 60px;
+    background: linear-gradient(to bottom, rgb(3 4 6 / 0.85), transparent);
+  }
+  .title {
+    flex: 1;
+    min-width: 0;
+  }
+  .meta {
+    display: flex;
     align-items: center;
-    gap: 20px;
-    padding: 34px 34px 40px;
-    background: linear-gradient(to bottom, rgb(10 12 17 / 0.85), transparent);
+    gap: 9px;
+    font-size: 14px;
+    color: var(--soft);
+    white-space: nowrap;
+  }
+  .meta b {
+    color: #fff;
+    font-weight: 600;
   }
   h1 {
-    margin: 0;
-    font-size: 30px;
+    margin: 8px 0 0;
+    font-size: 28px;
     font-weight: 700;
+    letter-spacing: -0.015em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: rgb(255 90 78 / 0.18);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ff9a8d;
+  }
+  .live-badge span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--live);
+  }
+  .rec {
+    font-size: 12px;
+    font-weight: 700;
+    color: #ff9a8d;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .tool {
+    width: 42px;
+    height: 42px;
+    flex: none;
+    border-radius: 11px;
+    font-size: 16px;
+    color: var(--text);
+  }
+  .tool:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+  .tool.small {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+  .pill {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 11px;
+    background: rgb(20 24 33 / 0.8);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .pill:hover {
+    background: rgb(36 42 56 / 0.92);
+  }
+  .pill .icon {
+    font-size: 14px;
+  }
+  .pill.on {
+    background: rgb(143 168 255 / 0.22);
+  }
+  .pill.accent {
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 600;
+  }
+  .pill.fav .icon {
+    color: var(--fav);
+  }
+  kbd {
+    font: inherit;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--live);
+    box-sizing: border-box;
+  }
+  .recording .dot {
+    background: var(--live);
+  }
+  .drawer {
+    position: absolute;
+    top: 120px;
+    right: 36px;
+    bottom: 170px;
+    width: 380px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 18px;
+    background: rgb(12 14 20 / 0.94);
+    border: 1px solid rgb(255 255 255 / 0.08);
+    overflow: hidden;
+  }
+  .drawer-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 12px 8px 18px;
+  }
+  .drawer-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .drawer-head .mono {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .drawer :global(.viewport) {
+    padding: 0 8px;
+  }
+  .hint {
+    flex: none;
+    margin: 0;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .zap {
+    width: 100%;
+    height: 56px;
+    margin: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 10px;
+    border-radius: 12px;
+    text-align: left;
+  }
+  .zap:hover {
+    background: rgb(255 255 255 / 0.06);
+  }
+  .zap.on {
+    background: rgb(143 168 255 / 0.16);
+  }
+  .num {
+    flex: none;
+    width: 34px;
+    text-align: right;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .zap-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .zap-text b,
+  .zap-text small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .zap-text b {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .zap-text small {
+    min-height: 1lh;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  footer {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 60px 36px 30px;
+    background: linear-gradient(to top, rgb(3 4 6 / 0.95), transparent);
+  }
+  .timeline {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--soft);
+  }
+  .track,
+  .seek {
+    position: relative;
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(255 255 255 / 0.14);
+  }
+  .seek {
+    height: 18px;
+    background: none;
+  }
+  .seek::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(255 255 255 / 0.14);
+  }
+  .fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .seek .fill {
+    top: 6px;
+    bottom: 6px;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .play {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 18px;
+  }
+  .play:hover {
+    background: #fff;
+  }
+  .state {
+    margin-left: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .time {
+    font-size: 13px;
+    color: var(--soft);
   }
   .spacer {
     flex: 1;
   }
-  .back {
-    font-size: 16px;
-    padding: 8px;
-  }
-  footer {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 40px;
-    padding: 50px 34px 34px;
-    background: linear-gradient(to top, rgb(10 12 17 / 0.9), transparent);
-  }
-  .now,
-  .next,
-  .vod {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-  }
-  .vod {
-    flex: 1;
-    gap: 10px;
-  }
-  .next {
-    align-items: flex-end;
-    font-size: 17px;
-    font-weight: 500;
-  }
-  .label {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--acid);
-  }
-  .next .label {
-    color: var(--cyan);
-  }
-  .label.dim {
-    color: var(--dim);
-  }
-  h2 {
-    margin: 0;
-    font-size: 30px;
-    font-weight: 700;
-  }
-  .bar {
-    width: 420px;
-    max-width: 100%;
-  }
-  .transport {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    font-size: 12px;
-  }
-  .play {
-    font-size: 20px;
-  }
-  .track {
-    flex: 1;
-    height: 20px;
-    position: relative;
-  }
-  .track::before,
-  .fill {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    height: 3px;
-    margin-top: -1.5px;
-    border-radius: 2px;
-  }
-  .track::before {
-    right: 0;
-    background: rgb(233 236 242 / 0.15);
-  }
-  .fill {
-    background: var(--cyan);
-  }
-  .next-episode {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
-    padding: 10px 16px;
-    border-radius: 10px;
-    border: 1px solid rgb(233 236 242 / 0.1);
-    background: rgb(10 12 17 / 0.6);
-    font-size: 16px;
+  .retry {
+    display: block;
+    margin: 10px auto 0;
+    padding: 6px 16px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 13px;
     font-weight: 600;
-  }
-  .next-episode:hover {
-    border-color: var(--cyan);
-  }
-  .next-episode .label {
-    color: var(--cyan);
-  }
-  .next-episode .icon {
-    font-size: 12px;
   }
   .status {
     position: absolute;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
+    max-width: 60%;
     margin: 0;
     padding: 10px 18px;
     border-radius: 10px;
     background: rgb(10 12 17 / 0.75);
-    font-size: 17px;
-    color: var(--dim);
+    font-size: 16px;
+    text-align: center;
+    color: var(--muted);
   }
   .status.error {
-    color: var(--magenta);
+    color: #ff9a8d;
   }
   .dial {
     position: absolute;
-    top: 110px;
+    top: 120px;
     right: 50px;
+  }
+  /* The mini player: a title strip and the stop button, nothing else. */
+  .mini header {
+    padding: 10px 12px 24px;
+    gap: 8px;
+  }
+  .mini h1 {
+    margin-top: 2px;
+    font-size: 15px;
+  }
+  .mini .meta {
+    font-size: 11px;
+  }
+  .mini .tool {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+  .mini footer,
+  .mini .dial {
+    display: none;
+  }
+  .mini .status {
+    font-size: 13px;
   }
 </style>
