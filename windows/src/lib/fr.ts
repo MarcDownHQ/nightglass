@@ -391,4 +391,12 @@ export const FR: Record<string, string> = {
   "Next channel (↓)": "Chaîne suivante (↓)",
   "{time} behind live": "En différé de {time}",
   "Channels": "Chaînes",
+  // Guide (redesign)
+  "Favorites only": "Favoris seulement",
+  "None of your favorite channels has a guide.": "Aucune de vos chaînes favorites n’a de guide.",
+  "Selected programme": "Programme choisi",
+  "Finished · available in replay": "Terminé · disponible en replay",
+  "Finished": "Terminé",
+  "On now · {n} min left": "En cours · encore {n} min",
+  "Starts in {n} min": "Commence dans {n} min",
 };
