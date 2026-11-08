@@ -50,6 +50,8 @@ export const FR: Record<string, string> = {
   Retry: 'Réessayer',
   'Multi-view: 2 or 4 channels at once': 'Multi-vue : 2 ou 4 chaînes à la fois',
   'Order, feeds, countries, categories': 'Ordre, flux, pays, catégories',
+  'All categories': 'Toutes les catégories',
+  'Find a category': 'Chercher une catégorie',
   Order: 'Ordre',
   'Playlist order': 'Ordre de la playlist',
   Name: 'Nom',
