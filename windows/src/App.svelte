@@ -32,6 +32,7 @@
   import { displayName } from './lib/theme';
   import NavRail from './lib/NavRail.svelte';
   import TitleBar from './lib/TitleBar.svelte';
+  import ResizeEdges from './lib/ResizeEdges.svelte';
   import { updater } from './lib/updater.svelte';
   import { backdropClip, hole } from './lib/video.svelte';
 
@@ -126,6 +127,8 @@
 {#if player.expanded}
   <PlayerScreen />
 {/if}
+
+<ResizeEdges />
 
 {#if nav.searching}
   <SearchPalette />
