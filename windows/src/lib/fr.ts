@@ -412,4 +412,7 @@ export const FR: Record<string, string> = {
   "Library": "Bibliothèque",
   "{n} titles": "{n} titres",
   "Your list is empty. Use “My list” on a title to keep it here.": "Votre liste est vide. Utilisez « Ma liste » sur un titre pour le garder ici.",
+  // Player: buffer bar
+  "Oldest moment kept in memory": "Moment le plus ancien gardé en mémoire",
+  "Buffer: drag to go back or forward": "Mémoire tampon : faites glisser pour reculer ou avancer",
 };
