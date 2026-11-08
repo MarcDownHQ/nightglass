@@ -17,7 +17,7 @@
   import type { LiveItem } from './models';
   import { friendly } from './errors';
 
-  /** Fullscreen playback (and the mini player): the picture, with bars that fade when the pointer rests. */
+  /** Fullscreen playback: the picture, with bars that fade when the pointer rests. */
   let idle = $state(false);
   let drawer = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -57,8 +57,7 @@
   /** Back to the window: live TV comes back in the Live preview, whichever screen started it. */
   async function reduce() {
     const live = player.current?.live;
-    if (player.mini) await player.toggleMini();
-    else await player.collapse();
+    await player.collapse();
     if (live && player.current) nav.section = 'live';
   }
 
@@ -74,7 +73,7 @@
     else if (e.key.toLowerCase() === 'c' && item) drawer = !drawer;
     else if (e.key.toLowerCase() === 'n' && player.current?.next) player.current.next.play();
     else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
-    else if (e.key.toLowerCase() === 'p') void player.toggleMini();
+    else if (e.key.toLowerCase() === 'p') void player.togglePip();
     else if (e.key.toLowerCase() === 'l' && player.behind) player.goLive();
     else if (/^[0-9]$/.test(e.key)) {
       dial.type(e.key, (n) => {
@@ -114,8 +113,7 @@
   /** A double click on the picture leaves fullscreen; not one on a control (two quick -10 s). */
   function ondblclick(e: MouseEvent) {
     if ((e.target as Element).closest('button, input, [role=slider], aside')) return;
-    if (player.mini) void player.expand();
-    else void reduce();
+    void reduce();
   }
 
   function seekAt(e: MouseEvent) {
@@ -129,7 +127,6 @@
 <div
   class="screen"
   class:idle
-  class:mini={player.mini}
   use:videoHole={0}
   onmousemove={poke}
   onmousedown={poke}
@@ -137,10 +134,6 @@
   {onwheel}
   role="presentation"
 >
-  {#if player.mini}
-    <!-- The small window has no title bar: the picture moves it. -->
-    <div class="drag" data-tauri-drag-region></div>
-  {/if}
   {#if player.loading || player.error}
     <div class="status" class:error={player.error}>
       {player.error ? friendly(player.error) : player.reconnecting ? t('Signal lost: reconnecting (attempt {n})…', { n: player.reconnecting }) : t('Loading {name}…', { name: displayName(player.current?.title ?? '') })}
@@ -151,41 +144,35 @@
 
   <div class="hud">
     <header>
-      {#if item && !player.mini}<ChannelLogo channel={item.channel} size={56} />{/if}
+      {#if item}<ChannelLogo channel={item.channel} size={56} />{/if}
       <div class="title">
         <div class="meta">
           {#if player.current?.live}<span class="live-badge"><span></span>{t('LIVE')}</span>{/if}
           {#if player.recording}<span class="rec" title={player.recording}>● REC</span>{/if}
-          {#if item && !player.mini}
+          {#if item}
             {#if item.channel.number}<span class="mono">{item.channel.number}</span><span>·</span>{/if}
             <b>{displayName(item.channel.name)}</b>
             {#if quality}<span>·</span><span>{quality}</span>{/if}
-          {:else if !item && player.current?.subtitle && !player.mini}
+          {:else if !item && player.current?.subtitle}
             <span>{player.current.subtitle}</span>
           {/if}
         </div>
         <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
-        {#if np.now && !player.mini}
+        {#if np.now}
           <p class="when mono">{hm(np.now.start)} – {hm(np.now.end)} · {t('{n} min left', { n: left })}</p>
         {/if}
       </div>
       <div class="tools">
-      {#if !player.mini}
-        <TrackMenus />
-      {/if}
-      <button class="icon tool" onclick={() => player.toggleMini()} title={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')} aria-label={player.mini ? t('Back to the full window (P)') : t('Mini player, always on top (P)')}>
-        {@html player.mini ? '&#xE740;' : '&#xE8A7;'}
-      </button>
+      <TrackMenus />
+      <button class="icon tool" onclick={() => player.togglePip()} title={t('Mini player above the other windows (P)')} aria-label={t('Mini player above the other windows (P)')}>&#xE8A7;</button>
       <StopButton />
-      {#if !player.mini}
-        <button class="pill" onclick={reduce} title={t('Back to the list (Esc), playback continues')}>
-          <span class="icon">&#xE73F;</span>{t('Reduce')}<kbd>{t('Esc')}</kbd>
-        </button>
-      {/if}
+      <button class="pill" onclick={reduce} title={t('Back to the list (Esc), playback continues')}>
+        <span class="icon">&#xE73F;</span>{t('Reduce')}<kbd>{t('Esc')}</kbd>
+      </button>
       </div>
     </header>
 
-    {#if drawer && item && !player.mini}
+    {#if drawer && item}
       <aside class="drawer" aria-label={t('Change channel')}>
         <div class="drawer-head">
           <h2>{zapTitle}</h2>
@@ -291,14 +278,10 @@
   .screen.idle {
     cursor: none;
   }
-  .drag {
-    position: absolute;
-    inset: 0;
-  }
   .hud {
     position: absolute;
     inset: 0;
-    /* Only the bars take clicks: the picture under them is the screen (double-click, dragging the mini player). */
+    /* Only the bars take clicks: the picture under them is the screen (double-click). */
     pointer-events: none;
     display: flex;
     flex-direction: column;
@@ -671,29 +654,5 @@
     position: absolute;
     top: 120px;
     right: 50px;
-  }
-  /* The mini player: a title strip and the stop button, nothing else. */
-  .mini header {
-    padding: 10px 12px 24px;
-    gap: 8px;
-  }
-  .mini h1 {
-    margin-top: 2px;
-    font-size: 15px;
-  }
-  .mini .meta {
-    font-size: 11px;
-  }
-  .mini .tool {
-    width: 34px;
-    height: 34px;
-    font-size: 13px;
-  }
-  .mini footer,
-  .mini .dial {
-    display: none;
-  }
-  .mini .status {
-    font-size: 13px;
   }
 </style>

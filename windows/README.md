@@ -30,7 +30,7 @@ En plus de la version macOS :
 - **rappels** : clic sur un programme à venir dans le guide ; notification Windows et bandeau « Watch » quand il commence ;
 - **enregistrement** du direct (`R`) dans `VidéosNightglass` ;
 - **multi-vue** 2 ou 4 chaînes (bouton à côté des onglets, ou clic droit « Add to multi-view »), une instance mpv par tuile, le son sur la tuile choisie ;
-- **mini-lecteur** toujours au-dessus (`P`), dans le coin de l'écran ;
+- **mini-lecteur** (`P`) : la vidéo dans sa propre petite fenêtre au-dessus des autres, l'app reste utilisable derrière (changer de chaîne, parcourir le guide) ;
 - **contrôle parental** : un PIN pour cacher des catégories (direct, films, séries), déverrouillables pour la session avec le cadenas de la barre de titre ;
 - **export / import** des sources et réglages dans un fichier JSON (écran Sources ; le fichier contient les mots de passe en clair) ;
 - **correspondance EPG à la main** (clic droit « Match the guide… ») pour une chaîne que le guide ne reconnaît pas ;

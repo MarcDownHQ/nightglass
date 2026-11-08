@@ -129,8 +129,6 @@ export const FR: Record<string, string> = {
 
   // Player
   'Back to the list (Esc), playback continues': 'Retour à la liste (Échap), la lecture continue',
-  'Mini player, always on top (P)': 'Mini-lecteur, toujours au premier plan (P)',
-  'Back to the full window (P)': 'Revenir à la fenêtre entière (P)',
   'Record to Videos\\Nightglass (R)': 'Enregistrer dans Vidéos\\Nightglass (R)',
   'Stop recording (R)': 'Arrêter l’enregistrement (R)',
   'Go live': 'Direct',
@@ -377,7 +375,6 @@ export const FR: Record<string, string> = {
   'Click the star of a channel to add it here.': 'Cliquez sur l’étoile d’une chaîne pour l’ajouter ici.',
   'No channels here.': 'Aucune chaîne ici.',
   'LIVE': 'EN DIRECT',
-  'Mini player (P)': 'Mini-lecteur (P)',
   'Fullscreen (F)': 'Plein écran (F)',
   'Remove from favorites': 'Retirer des favoris',
   'Add to favorites': 'Ajouter aux favoris',
@@ -415,4 +412,10 @@ export const FR: Record<string, string> = {
   // Player: buffer bar
   "Oldest moment kept in memory": "Moment le plus ancien gardé en mémoire",
   "Buffer: drag to go back or forward": "Mémoire tampon : faites glisser pour reculer ou avancer",
+  // Mini player in its own window (PiP)
+  "Mini player above the other windows (P)": "Mini-lecteur au-dessus des autres fenêtres (P)",
+  "Playing in the mini player": "En lecture dans le mini-lecteur",
+  "Bring it back here": "Revenir ici",
+  "Back to the app": "Revenir dans l’app",
+  "Close the mini player": "Fermer le mini-lecteur",
 };

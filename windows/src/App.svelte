@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from './lib/i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { emitTo, listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
   import { runAutomation } from './lib/automation';
   import { startGamepad } from './lib/gamepad';
@@ -28,6 +29,7 @@
   import SeriesView from './lib/SeriesView.svelte';
   import SourcesView from './lib/SourcesView.svelte';
   import { store } from './lib/store.svelte';
+  import { displayName } from './lib/theme';
   import NavRail from './lib/NavRail.svelte';
   import TitleBar from './lib/TitleBar.svelte';
   import { updater } from './lib/updater.svelte';
@@ -37,6 +39,12 @@
   let W = $state(innerWidth);
   let H = $state(innerHeight);
   let ready = $state(false);
+
+  /** The mini player's window shows what plays; it asks once it opens. */
+  function sendPip() {
+    if (player.pip) void emitTo('pip', 'pip-info', { title: displayName(player.current?.title ?? ''), paused: player.paused });
+  }
+  $effect(sendPip);
 
   async function onkeydown(e: KeyboardEvent) {
     const n = Number(e.key);
@@ -60,6 +68,7 @@
   }
 
   onMount(async () => {
+    void listen('pip-ready', sendPip);
     void updater.check();
     void options.applyZoom();
     startGamepad();

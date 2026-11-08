@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter};
 use windows_sys::Win32::Foundation::RECT;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, GetClientRect, HWND_BOTTOM, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetWindowPos, ShowWindow, WS_CHILD, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
+    CreateWindowExW, DestroyWindow, GetClientRect, GetParent, HWND_BOTTOM, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SetParent, SetWindowPos, ShowWindow, WS_CHILD, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
 };
 
 type Handle = *mut c_void;
@@ -333,7 +333,22 @@ pub fn destroy_host(host: isize) {
     unsafe { DestroyWindow(host as _) };
 }
 
-/// Keeps the video window the size of the main window's client area.
+/// Moves the video window into `parent` (the main window, or the PiP one), filling it, under its webview.
+pub fn adopt_host(host: isize, parent: isize) {
+    unsafe {
+        SetParent(host as _, parent as _);
+        let mut r: RECT = std::mem::zeroed();
+        GetClientRect(parent as _, &mut r);
+        SetWindowPos(host as _, HWND_BOTTOM, 0, 0, r.right, r.bottom, SWP_NOACTIVATE);
+    }
+}
+
+/// The window the video window is in now.
+pub fn host_parent(host: isize) -> isize {
+    unsafe { GetParent(host as _) as isize }
+}
+
+/// Keeps the video window the size of its window's client area.
 pub fn resize_host(host: isize, width: u32, height: u32) {
     unsafe {
         SetWindowPos(host as _, std::ptr::null_mut(), 0, 0, width as i32, height as i32, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
