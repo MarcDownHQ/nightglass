@@ -354,7 +354,7 @@
     background: rgb(20 24 33 / 0.8);
     color: var(--text);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
   }
   .pill:hover {

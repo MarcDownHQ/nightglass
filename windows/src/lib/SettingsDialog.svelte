@@ -120,7 +120,7 @@
   h3 {
     margin: 0;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--acid);
   }
   .choice {

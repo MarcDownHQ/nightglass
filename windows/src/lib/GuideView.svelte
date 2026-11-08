@@ -287,7 +287,7 @@
   .day {
     margin-left: 10px;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--soft);
     display: inline-block;
   }
@@ -308,7 +308,7 @@
     background: var(--raised);
     color: var(--soft);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
   }
   .chip:hover {

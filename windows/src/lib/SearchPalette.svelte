@@ -226,7 +226,7 @@
     min-width: 0;
     font: inherit;
     font-size: 20px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text);
     background: none;
     border: 0;
@@ -277,7 +277,7 @@
   }
   li button.more .title {
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--cyan);
   }
   .title {

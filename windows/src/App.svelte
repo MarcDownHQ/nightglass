@@ -193,7 +193,7 @@
     background: rgb(10 12 17 / 0.85);
     border: 1px solid rgb(233 236 242 / 0.1);
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 600;
     pointer-events: none;
   }
 </style>

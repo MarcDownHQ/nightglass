@@ -9,7 +9,7 @@
   .tag {
     flex: none;
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 600;
     padding: 2px 6px;
     border-radius: 4px;
     color: var(--c);

@@ -71,7 +71,7 @@
     border-radius: 12px;
     color: var(--muted);
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     transition: background 0.15s, color 0.15s;
   }
   .item .icon {

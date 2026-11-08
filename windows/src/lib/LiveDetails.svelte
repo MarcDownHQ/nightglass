@@ -184,7 +184,7 @@
     background: var(--raised);
     color: var(--soft);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
   }
   .chip:hover {
