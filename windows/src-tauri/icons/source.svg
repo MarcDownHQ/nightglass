@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Nightglass app icon: the crescent of the navigation rail, moonlight blue on a night tile. `npm run tauri icon` makes every size from a 1024 px render of this. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c2232"/>
+      <stop offset="1" stop-color="#0b0d13"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b6c6ff"/>
+      <stop offset="1" stop-color="#7f99f5"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="208" fill="url(#tile)"/>
+  <rect x="50" y="50" width="924" height="924" rx="206" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="4"/>
+  <path transform="translate(500 528) scale(25) translate(-11.75 -12.5)" d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="url(#moon)"/>
+  <path transform="translate(700 300)" d="M0 -64 C8 -18 18 -8 64 0 C18 8 8 18 0 64 C-8 18 -18 8 -64 0 C-18 -8 -8 -18 0 -64Z" fill="#e9ecf2"/>
+</svg>
