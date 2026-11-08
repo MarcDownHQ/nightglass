@@ -399,4 +399,17 @@ export const FR: Record<string, string> = {
   "Finished": "Terminé",
   "On now · {n} min left": "En cours · encore {n} min",
   "Starts in {n} min": "Commence dans {n} min",
+  // Home, films and series (redesign)
+  "Hello": "Bonjour",
+  "Good evening": "Bonsoir",
+  "Pick up where you left off": "Reprendre",
+  "last channel watched": "dernière chaîne regardée",
+  "No favorite channel yet. In Live, click the star of a channel to find it here.": "Aucune chaîne favorite pour l’instant. Dans le Direct, cliquez sur l’étoile d’une chaîne pour la retrouver ici.",
+  "Remove from my list": "Retirer de ma liste",
+  "Add to my list": "Ajouter à ma liste",
+  "My list": "Ma liste",
+  "In my list": "Dans ma liste",
+  "Library": "Bibliothèque",
+  "{n} titles": "{n} titres",
+  "Your list is empty. Use “My list” on a title to keep it here.": "Votre liste est vide. Utilisez « Ma liste » sur un titre pour le garder ici.",
 };

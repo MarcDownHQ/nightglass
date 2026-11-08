@@ -24,6 +24,13 @@
     ]);
   }
 
+  function seriesMenu(e: MouseEvent, item: SeriesItem) {
+    contextMenu.open(e, [
+      { label: t('Open the series'), icon: '', action: () => (nav.openSeries = item) },
+      { label: library.myList.has(item.id) ? t('Remove from my list') : t('Add to my list'), icon: '', action: () => library.toggleHidden(library.myList, item.id) },
+    ]);
+  }
+
   const continuing = $derived(
     library.continuing.flatMap(([id, p]): ContinueCard[] => {
       const r = p.resume;
@@ -53,6 +60,7 @@
     onpick={(i) => {
       nav.openSeries = i;
     }}
+    menu={seriesMenu}
     {continuing}
   />
 </div>

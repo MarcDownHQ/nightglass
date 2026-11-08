@@ -54,6 +54,8 @@ class Library {
   hiddenGroups = new SvelteSet<string>(prefs.json('hiddenGroups', []));
   /** Category keys pinned at the top of the Live sidebar. */
   pinnedGroups = new SvelteSet<string>(prefs.json('pinnedGroups', []));
+  /** Films and series kept for later (Ma liste). */
+  myList = new SvelteSet<string>(prefs.json('myList', []));
   favoriteLists = $state<FavoriteList[]>(initialLists());
   /** Category keys in the order the user set; the others follow in playlist order. */
   categoryOrder = $state<string[]>(prefs.json('categoryOrder', []));
@@ -196,7 +198,8 @@ class Library {
 
   toggleHidden(set: SvelteSet<string>, value: string) {
     if (!set.delete(value)) set.add(value);
-    prefs.setJson(set === this.hiddenGroups ? 'hiddenGroups' : set === this.pinnedGroups ? 'pinnedGroups' : 'hiddenChannels', [...set]);
+    const key = set === this.hiddenGroups ? 'hiddenGroups' : set === this.pinnedGroups ? 'pinnedGroups' : set === this.myList ? 'myList' : 'hiddenChannels';
+    prefs.setJson(key, [...set]);
   }
 
   /** Saved every few seconds of playback, and at the end. */
