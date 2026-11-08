@@ -21,5 +21,8 @@ describe('qualityTag', () => {
     ['TF1 SD', 'SD'],
     ['TF1', null],
     ['HDMI Channel', null],
+    ['VIP: RMC STORY ᴴᴰ', 'HD'],
+    ['4K: V SPORT ᵁᴴᴰ ³⁸⁴⁰ᴾ', '4K'],
+    ['RMC SPORT 2 ᴿᴬᵂ', null],
   ])('%s → %s', (name, tag) => expect(qualityTag(name)).toBe(tag));
 });

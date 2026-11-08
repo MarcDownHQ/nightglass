@@ -1,22 +1,69 @@
+<script module lang="ts">
+  import type { LiveItem, MovieItem, Programme, SeriesItem } from './models';
+  import { column, type Column, type Stale } from './search';
+  import { store } from './store.svelte';
+
+  /** Folded names of everything searchable: built once, kept while the lists stay the same. */
+  interface Index {
+    from: unknown[];
+    live: Column<LiveItem>;
+    tv: Column<{ item: LiveItem; p: Programme }>;
+    movies: Column<MovieItem>;
+    series: Column<SeriesItem>;
+  }
+  let cached: Index | null = null;
+  let building: Promise<Index | null> | null = null;
+
+  function getIndex(closed: Stale): Promise<Index | null> {
+    const from = [store.channels, store.lineup, store.movies, store.series, store.guide];
+    if (cached && cached.from.every((x, i) => x === from[i])) return Promise.resolve(cached);
+    building ??= build(from, closed).finally(() => (building = null));
+    return building;
+  }
+
+  async function build(from: unknown[], closed: Stale): Promise<Index | null> {
+    const lineup = store.lineup;
+    const programmes: { item: LiveItem; p: Programme }[] = [];
+    for (let i = 0; i < lineup.length; i++) {
+      for (const p of store.programmes(lineup[i].channel)) programmes.push({ item: lineup[i], p });
+      if (i % 2000 === 1999) {
+        await new Promise((r) => setTimeout(r));
+        if (closed()) return null;
+      }
+    }
+    const live = await column(store.channels, (i) => i.channel.name, closed);
+    const tv = live && (await column(programmes, (x) => x.p.title, closed));
+    const movies = tv && (await column(store.movies, (i) => i.movie.name, closed));
+    const series = movies && (await column(store.series, (i) => i.series.name, closed));
+    if (!live || !tv || !movies || !series) return null;
+    cached = { from, live, tv, movies, series };
+    return cached;
+  }
+</script>
+
 <script lang="ts">
   import { t } from './i18n.svelte';
+  import { onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
+  import ChannelLogo from './ChannelLogo.svelte';
   import { library } from './library.svelte';
-  import type { LiveItem, MovieItem, Programme, SeriesItem } from './models';
+  import { categoryLabel, fold } from './lineup';
   import { nav } from './nav.svelte';
   import { player } from './player.svelte';
-  import { store } from './store.svelte';
+  import { find, type Found } from './search';
   import Tag from './Tag.svelte';
-  import { displayName, hm } from './theme';
+  import { displayName, hm, qualityTag } from './theme';
 
-  /** Ctrl+K: one field across channels, guide programmes, movies and series. */
+  /** Ctrl+K: one field across channels, guide programmes, movies and series. Typing never waits for the search. */
   type Kind = 'Live' | 'TV' | 'Movie' | 'Series';
-  type Hit =
-    | { kind: 'Live'; key: string; item: LiveItem; title: string; detail?: string }
-    | { kind: 'TV'; key: string; item: LiveItem; programme: Programme; title: string; detail: string }
-    | { kind: 'Movie'; key: string; item: MovieItem; title: string; detail?: string }
-    | { kind: 'Series'; key: string; item: SeriesItem; title: string; detail?: string }
-    | { kind: 'More'; key: string; of: Kind; count: number; title: string; detail?: string };
+  /** `sub`: a second line (number, category, what is on); `badge`: the picture quality. */
+  type Hit = { key: string; title: string; detail?: string; sub?: string; badge?: string | null } & (
+    | { kind: 'Live'; item: LiveItem }
+    | { kind: 'TV'; item: LiveItem; programme: Programme }
+    | { kind: 'Movie'; item: MovieItem }
+    | { kind: 'Series'; item: SeriesItem }
+    | { kind: 'More'; of: Kind; count: number }
+  );
 
   const COLORS: Record<Kind | 'More', string> = {
     Live: 'var(--magenta)',
@@ -36,41 +83,52 @@
   let input: HTMLInputElement;
   let listEl: HTMLElement | undefined = $state();
 
-  /** Case and accents don't matter, like Finder's search: "ete" finds "Été". */
-  const folded = new Map<string, string>();
-  function fold(s: string): string {
-    let f = folded.get(s);
-    if (f === undefined) {
-      f = s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-      folded.set(s, f);
-    }
-    return f;
+  interface Results {
+    live: Found<LiveItem>;
+    tv: Found<{ item: LiveItem; p: Programme }>;
+    movies: Found<MovieItem>;
+    series: Found<SeriesItem>;
   }
+  /** The last search that finished: shown until the next one has. */
+  let results = $state.raw<Results | null>(null);
+  let busy = $state(false);
+  /** Each search has a number; an older one stops as soon as a newer began. */
+  let run = 0;
+  let closed = false;
+  onDestroy(() => (closed = true));
 
-  /** The matches, up to the kind's limit, and how many there are in all. */
-  function matches<T>(kind: Kind, items: Iterable<T>, name: (i: T) => string, q: string): { list: T[]; count: number } {
-    const limit = expanded.includes(kind) ? ALL : LIMITS[kind];
-    const list: T[] = [];
-    let count = 0;
-    for (const i of items) {
-      if (!fold(name(i)).includes(q)) continue;
-      count++;
-      if (list.length < limit) list.push(i);
+  $effect(() => {
+    const q = fold(query.trim());
+    const kinds = [...expanded];
+    const id = ++run;
+    if (!q) {
+      results = null;
+      busy = false;
+      return;
     }
-    return { list, count };
-  }
+    busy = true;
+    // A short pause after the last key: typing a word runs one search, not one per letter.
+    const timer = setTimeout(() => void search(q, kinds, id), 120);
+    return () => clearTimeout(timer);
+  });
 
-  /** Programmes on now, coming, or past and replayable. */
-  function* programmes(): Generator<{ item: LiveItem; p: Programme }> {
+  async function search(q: string, kinds: Kind[], id: number) {
+    const stale = () => closed || id !== run;
+    const ix = await getIndex(() => closed);
+    if (!ix || stale()) return;
+    const limit = (k: Kind) => (kinds.includes(k) ? ALL : LIMITS[k]);
     const now = store.now;
-    for (const item of store.lineup) {
-      for (const p of store.programmes(item.channel)) {
-        if (p.end > now || store.canReplay(item, p)) yield { item, p };
-      }
-    }
+    const live = await find(ix.live, q, limit('Live'), stale);
+    // Programmes on now, coming, or past and replayable.
+    const tv = live && (await find(ix.tv, q, limit('TV'), stale, ({ item, p }) => p.end > now || store.canReplay(item, p)));
+    const movies = tv && (await find(ix.movies, q, limit('Movie'), stale));
+    const series = movies && (await find(ix.series, q, limit('Series'), stale));
+    if (!live || !tv || !movies || !series) return;
+    results = { live, tv, movies, series };
+    busy = false;
   }
 
-  function group<T>(kind: Kind, found: { list: T[]; count: number }, hit: (t: T) => Hit): Hit[] {
+  function group<T>(kind: Kind, found: Found<T>, hit: (t: T) => Hit): Hit[] {
     const out = found.list.map(hit);
     if (found.count > found.list.length) {
       out.push({ kind: 'More', key: `more-${kind}`, of: kind, count: found.count, title: t('Show all {n}', { n: found.count }) });
@@ -78,33 +136,56 @@
     return out;
   }
 
+  const join = (...parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(' · ');
+  const stars = (rating: number | null) => (rating ? `★ ${rating.toFixed(1)}` : null);
+
   const hits = $derived.by((): Hit[] => {
-    const q = fold(query.trim());
-    if (!q) return [];
+    if (!results) return [];
     const now = store.now;
+    // Several sources can carry the same name: say which one.
+    const many = store.sources.length > 1;
     return [
-      ...group('Live', matches('Live', store.channels, (i) => i.channel.name, q), (item) => ({
+      ...group('Live', results.live, (item) => ({
         kind: 'Live',
         key: item.id,
         item,
         title: displayName(item.channel.name),
-        // Several sources can carry a channel of the same name: say which one.
-        detail: store.sources.length > 1 ? item.source.name : undefined,
+        sub: join(item.channel.number !== null && String(item.channel.number), item.channel.group && categoryLabel(item.channel.group), store.nowNext(item.channel).now?.title),
+        badge: qualityTag(item.channel.name),
+        detail: many ? item.source.name : undefined,
       })),
-      ...group('TV', matches('TV', programmes(), (x) => x.p.title, q), ({ item, p }) => ({
+      ...group('TV', results.tv, ({ item, p }) => ({
         kind: 'TV',
         key: `${item.id}@${p.start}`,
         item,
         programme: p,
         title: p.title,
-        detail: `${p.start <= now && p.end > now ? t('now') : p.end <= now ? t('replay') : new Date(p.start * 1000).toDateString() === new Date(now * 1000).toDateString() ? hm(p.start) : new Date(p.start * 1000).toLocaleDateString([], { weekday: 'short' }) + ' ' + hm(p.start)} · ${displayName(item.channel.name)}`,
+        sub: join(displayName(item.channel.name), item.channel.group && categoryLabel(item.channel.group)),
+        badge: qualityTag(item.channel.name),
+        detail:
+          p.start <= now && p.end > now
+            ? t('now')
+            : p.end <= now
+              ? t('replay')
+              : new Date(p.start * 1000).toDateString() === new Date(now * 1000).toDateString()
+                ? hm(p.start)
+                : new Date(p.start * 1000).toLocaleDateString([], { weekday: 'short' }) + ' ' + hm(p.start),
       })),
-      ...group('Movie', matches('Movie', store.movies, (i) => i.movie.name, q), (item) => ({ kind: 'Movie', key: item.id, item, title: item.movie.name })),
-      ...group('Series', matches('Series', store.series, (i) => i.series.name, q), (item) => ({
+      ...group('Movie', results.movies, (item) => ({
+        kind: 'Movie',
+        key: item.id,
+        item,
+        title: item.movie.name,
+        sub: join(item.movie.group && categoryLabel(item.movie.group), stars(item.movie.rating)),
+        detail: many ? item.source.name : undefined,
+      })),
+      ...group('Series', results.series, (item) => ({
         kind: 'Series',
         key: item.id,
         item,
         title: item.series.name,
+        sub: join(item.series.group && categoryLabel(item.series.group), stars(item.series.rating)),
+        detail: many ? item.source.name : undefined,
       })),
     ];
   });
@@ -173,6 +254,7 @@
     <label class="field">
       <span class="icon">&#xE721;</span>
       <input bind:this={input} bind:value={query} {onkeydown} placeholder={t('Channels, programmes, movies, series')} spellcheck="false" />
+      {#if busy}<span class="spinner" role="status" aria-label={t('Searching…')}></span>{/if}
     </label>
     {#if hits.length}
       <ul bind:this={listEl} role="listbox">
@@ -180,13 +262,18 @@
           <li role="option" aria-selected={i === index}>
             <button class:on={i === index} class:more={hit.kind === 'More'} onclick={() => open(hit)} onmousemove={() => (index = i)}>
               <span class="kind">{#if hit.kind !== 'More'}<Tag text={hit.kind === 'Live' ? t('Live') : hit.kind === 'Movie' ? t('Movie') : hit.kind === 'Series' ? t('Series') : t('TV')} color={COLORS[hit.kind]} />{/if}</span>
-              <span class="title">{hit.title}</span>
+              {#if hit.kind === 'Live' || hit.kind === 'TV'}<ChannelLogo channel={hit.item.channel} size={34} />{/if}
+              <span class="text">
+                <span class="title">{hit.title}</span>
+                {#if hit.sub}<small>{hit.sub}</small>{/if}
+              </span>
+              {#if hit.badge}<Tag text={hit.badge} color="var(--soft)" />{/if}
               {#if hit.detail}<span class="detail mono">{hit.detail}</span>{/if}
             </button>
           </li>
         {/each}
       </ul>
-    {:else if query.trim()}
+    {:else if query.trim() && results && !busy}
       <p class="none">{t('Nothing matches.')}</p>
     {/if}
   </div>
@@ -204,7 +291,7 @@
     background: rgb(10 12 17 / 0.6);
   }
   .palette {
-    width: 680px;
+    width: 760px;
     max-width: calc(100% - 32px);
     background: var(--ink);
     border: 1px solid rgb(233 236 242 / 0.1);
@@ -235,11 +322,25 @@
   input::placeholder {
     color: var(--dim);
   }
+  .spinner {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgb(255 255 255 / 0.15);
+    border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
   ul {
     margin: 0;
     padding: 0;
     list-style: none;
-    max-height: 420px;
+    max-height: 480px;
     overflow-y: auto;
     border-top: 1px solid rgb(233 236 242 / 0.06);
     scrollbar-width: thin;
@@ -248,8 +349,8 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 9px 18px;
+    gap: 12px;
+    padding: 8px 18px;
     text-align: left;
   }
   li button.on {
@@ -257,18 +358,32 @@
   }
   .kind {
     flex: none;
-    width: 70px;
+    width: 64px;
+  }
+  .text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   .title {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  small {
+    font-size: 12px;
+    color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .detail {
     flex: none;
-    max-width: 45%;
+    max-width: 30%;
     font-size: 12px;
     color: var(--dim);
     white-space: nowrap;
@@ -277,11 +392,7 @@
   }
   li button.more .title {
     font-size: 14px;
-    font-weight: 600;
     color: var(--cyan);
-  }
-  .title {
-    flex: 1;
   }
   .none {
     margin: 0;
