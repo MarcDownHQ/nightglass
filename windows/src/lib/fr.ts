@@ -418,4 +418,6 @@ export const FR: Record<string, string> = {
   "Bring it back here": "Revenir ici",
   "Back to the app": "Revenir dans l’app",
   "Close the mini player": "Fermer le mini-lecteur",
+  // Search
+  "Searching…": "Recherche…",
 };

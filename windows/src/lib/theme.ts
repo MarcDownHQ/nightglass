@@ -20,7 +20,9 @@ export function displayName(name: string): string {
 
 /** The quality a name announces, as a tag: 4K, FHD, HD or SD; nothing when it says nothing. */
 export function qualityTag(name: string): string | null {
-  const m = name.match(/\((\d{3,4})p\)|\b(\d{3,4})p\b/);
+  // Some providers write it in superscript (« RMC ᴴᴰ », « ³⁸⁴⁰ᴾ »): NFKC turns those into plain letters and digits.
+  name = name.normalize('NFKC');
+  const m = name.match(/\((\d{3,4})p\)|\b(\d{3,4})p\b/i);
   if (m) {
     const n = Number(m[1] ?? m[2]);
     return n >= 2160 ? '4K' : n >= 1080 ? 'FHD' : n >= 720 ? 'HD' : 'SD';
