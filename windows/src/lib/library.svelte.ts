@@ -64,6 +64,8 @@ class Library {
   sort = $state<SortMode>(prefs.json('sort', 'playlist'));
   /** One row per channel, its HD/SD/backup feeds behind it. */
   mergeDuplicates = $state<boolean>(prefs.json('mergeDuplicates', true));
+  /** Channel key → id of the feed the user picked: it leads its row from then on. */
+  feeds = $state<Record<string, string>>(prefs.json('feeds', {}));
   /** Only the channels of this country or language prefix. */
   country = $state<string | null>(prefs.json('country', null));
   /** Seconds of live TV watched per channel, for the “Most watched” order. */
@@ -89,7 +91,7 @@ class Library {
 
   /** Saves one of the settings above under its own name. */
   persist(
-    key: 'categoryOrder' | 'categoryNames' | 'sort' | 'mergeDuplicates' | 'country' | 'favoriteLists' | 'watchTime' | 'reminders' | 'epgOverrides' | 'pinHash',
+    key: 'categoryOrder' | 'categoryNames' | 'sort' | 'mergeDuplicates' | 'feeds' | 'country' | 'favoriteLists' | 'watchTime' | 'reminders' | 'epgOverrides' | 'pinHash',
   ) {
     prefs.setJson(key, this[key]);
   }

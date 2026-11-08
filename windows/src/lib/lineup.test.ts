@@ -42,6 +42,11 @@ describe('qualityRank', () => {
   it('orders 4K, FHD, HD, SD', () => {
     expect(['TF1 SD', 'TF1', 'TF1 HD', 'TF1 FHD', 'TF1 4K'].map(qualityRank)).toEqual([1, 2, 2, 3, 4]);
     expect(qualityRank('TF1 (1080p)')).toBe(3);
+    expect(qualityRank('TF1 ᴴᴰ')).toBe(2);
+  });
+  it('puts HEVC feeds behind their equals', () => {
+    const groups = groupDuplicates(['FR: CNEWS HEVC', 'FR: CNEWS HD', 'FR: CNEWS', 'CNEWS 4K ʰᵉᵛᶜ'], (s) => s);
+    expect(groups[0].variants).toEqual(['CNEWS 4K ʰᵉᵛᶜ', 'FR: CNEWS HD', 'FR: CNEWS', 'FR: CNEWS HEVC']);
   });
 });
 

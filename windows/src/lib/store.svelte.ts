@@ -2,7 +2,7 @@ import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
 import { episodeKey, library } from './library.svelte';
-import { categoryKey, categoryLabel, fold, groupDuplicates, splitCountry } from './lineup';
+import { categoryKey, categoryLabel, channelKey, fold, groupDuplicates, splitCountry } from './lineup';
 import {
   epgKey,
   type Catalog,
@@ -83,7 +83,14 @@ class Store {
     const country = library.country;
     if (country && this.countries.includes(country)) list = list.filter((c) => countryOf(c) === country);
     if (library.mergeDuplicates) {
-      list = groupDuplicates(list, (c) => c.channel.name).map(({ lead, variants }) => (variants.length > 1 ? { ...lead, variants } : lead));
+      const picked = library.feeds;
+      list = groupDuplicates(list, (c) => c.channel.name).map(({ lead, variants }) => {
+        if (variants.length < 2) return lead;
+        // The feed the user picked leads, the others stay behind it in quality order as fallbacks.
+        const chosen = variants.find((v) => v.id === picked[channelKey(lead.channel.name)]);
+        if (chosen) variants = [chosen, ...variants.filter((v) => v !== chosen)];
+        return { ...variants[0], variants };
+      });
     }
     switch (library.sort) {
       case 'name':
@@ -357,6 +364,13 @@ class Store {
       player.notify(t('Feed failed: trying {name}', { name: next.channel.name }));
       void this.tune({ ...next, variants });
     };
+  }
+
+  /** A feed picked by hand: played now, and the one its channel plays from then on. */
+  chooseFeed(v: LiveItem, variants: LiveItem[] | undefined) {
+    library.feeds[channelKey(v.channel.name)] = v.id;
+    library.persist('feeds');
+    void this.tune({ ...v, variants });
   }
 
   private tunedAt = 0;
