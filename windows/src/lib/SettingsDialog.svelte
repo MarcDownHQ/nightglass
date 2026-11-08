@@ -159,7 +159,7 @@
   select {
     padding: 5px 8px;
     border-radius: 6px;
-    border: 1px solid rgb(243 238 255 / 0.2);
+    border: 1px solid rgb(233 236 242 / 0.2);
     background: var(--night);
     color: var(--text);
     font: inherit;
@@ -173,7 +173,7 @@
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    border: 1px solid rgb(243 238 255 / 0.2);
+    border: 1px solid rgb(233 236 242 / 0.2);
     font-size: 12px;
   }
   .zoom .link {

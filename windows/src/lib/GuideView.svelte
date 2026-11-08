@@ -233,7 +233,7 @@
     flex: none;
     height: 34px;
     display: flex;
-    border-bottom: 1px solid rgb(5 217 232 / 0.1);
+    border-bottom: 1px solid rgb(233 236 242 / 0.04);
   }
   .paging {
     flex: none;
@@ -273,13 +273,12 @@
   .row {
     height: 100%;
     display: flex;
-    border-bottom: 1px solid rgb(5 217 232 / 0.08);
+    border-bottom: 1px solid rgb(233 236 242 / 0.03);
     box-sizing: border-box;
   }
   .programme.cursor {
     outline: 2px solid var(--acid);
     outline-offset: -1px;
-    box-shadow: 0 0 12px rgb(249 240 2 / 0.4);
     z-index: 1;
   }
   .programme .mark {
@@ -329,12 +328,12 @@
     padding: 0 10px 2px;
     border-radius: 6px;
     text-align: left;
-    background: rgb(5 1 15 / 0.5);
-    border: 1px solid rgb(243 238 255 / 0.15);
+    background: rgb(10 12 17 / 0.5);
+    border: 1px solid rgb(233 236 242 / 0.15);
     overflow: hidden;
   }
   .programme:hover {
-    border-color: rgb(243 238 255 / 0.35);
+    border-color: rgb(233 236 242 / 0.35);
   }
   .programme.live {
     background: color-mix(in srgb, var(--c) 20%, transparent);
@@ -360,7 +359,6 @@
     bottom: 0;
     width: 2px;
     background: var(--cyan);
-    box-shadow: 0 0 6px var(--cyan);
     pointer-events: none;
   }
 </style>

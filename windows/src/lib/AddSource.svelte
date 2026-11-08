@@ -106,22 +106,21 @@
     color: var(--dim);
   }
   input {
-    font-family: var(--mono);
+
     font-size: 13px;
     color: var(--text);
     padding: 9px;
     border-radius: 8px;
-    background: rgb(5 1 15 / 0.6);
-    border: 1px solid rgb(5 217 232 / 0.25);
+    background: rgb(10 12 17 / 0.6);
+    border: 1px solid rgb(233 236 242 / 0.1);
     outline: none;
     user-select: text;
   }
   input:focus {
     border-color: var(--cyan);
-    box-shadow: 0 0 8px rgb(5 217 232 / 0.35);
   }
   input::placeholder {
-    color: rgb(243 238 255 / 0.3);
+    color: rgb(233 236 242 / 0.3);
   }
   .preset {
     align-self: flex-start;
@@ -137,11 +136,7 @@
     color: var(--ink);
     font-size: 18px;
     font-weight: 700;
-    box-shadow: 0 0 14px rgb(255 42 109 / 0.6);
     transition: opacity 0.15s, box-shadow 0.15s;
-  }
-  .connect:hover:not(:disabled) {
-    box-shadow: 0 0 24px rgb(255 42 109 / 0.85);
   }
   .connect:disabled {
     opacity: 0.5;

@@ -57,7 +57,7 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
   .content {
     position: relative;

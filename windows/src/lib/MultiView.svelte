@@ -153,7 +153,7 @@
     gap: 6px;
     padding: 0 12px;
     border-radius: 999px;
-    border: 1px solid rgb(243 238 255 / 0.15);
+    border: 1px solid rgb(233 236 242 / 0.15);
     font-size: 15px;
     font-weight: 600;
     color: var(--dim);
@@ -164,10 +164,9 @@
   .tools button.on {
     color: #fff;
     border-color: var(--magenta);
-    box-shadow: 0 0 6px var(--magenta);
   }
   .tools .close {
-    border-color: rgb(5 217 232 / 0.4);
+    border-color: rgb(233 236 242 / 0.1);
     color: var(--cyan);
   }
   .spacer {
@@ -176,7 +175,7 @@
   .filter {
     padding: 8px 12px;
     border-radius: 8px;
-    border: 1px solid rgb(243 238 255 / 0.15);
+    border: 1px solid rgb(233 236 242 / 0.15);
     background: var(--night);
     color: var(--text);
     font: inherit;
@@ -196,7 +195,7 @@
     text-align: left;
   }
   .row:hover {
-    background: rgb(243 238 255 / 0.05);
+    background: rgb(233 236 242 / 0.05);
   }
   .row b {
     font-size: 16px;
@@ -225,12 +224,11 @@
     display: flex;
     flex-direction: column;
     border-radius: 12px;
-    outline: 1.5px solid rgb(243 238 255 / 0.15);
+    outline: 1.5px solid rgb(233 236 242 / 0.15);
     cursor: pointer;
   }
   .tile.active {
     outline-color: var(--cyan);
-    box-shadow: 0 0 14px rgb(5 217 232 / 0.45);
   }
   .video {
     flex: 1;
@@ -247,7 +245,7 @@
     margin: 0;
     padding: 8px 14px;
     border-radius: 8px;
-    background: rgb(5 1 15 / 0.7);
+    background: rgb(10 12 17 / 0.7);
     text-align: center;
     font-size: 16px;
     color: var(--dim);

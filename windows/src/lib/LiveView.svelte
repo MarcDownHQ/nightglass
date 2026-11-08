@@ -402,8 +402,7 @@
     aspect-ratio: 16 / 9;
     border-radius: 14px;
     /* Glow on the frame only, never on the picture. */
-    outline: 1.5px solid rgb(5 217 232 / 0.7);
-    box-shadow: 0 0 14px rgb(5 217 232 / 0.45);
+    outline: 1.5px solid rgb(233 236 242 / 0.1);
   }
   .preview.empty {
     display: grid;
@@ -419,7 +418,7 @@
     padding: 10px 18px;
     max-width: 80%;
     border-radius: 10px;
-    background: rgb(5 1 15 / 0.75);
+    background: rgb(10 12 17 / 0.75);
     font-size: 16px;
     font-weight: 500;
     text-align: center;
@@ -452,7 +451,7 @@
     position: relative;
   }
   .row:hover {
-    background: rgb(243 238 255 / 0.04);
+    background: rgb(233 236 242 / 0.04);
   }
   .row.on {
     background: color-mix(in srgb, var(--c) 14%, transparent);
@@ -466,7 +465,6 @@
     width: 3px;
     border-radius: 2px;
     background: var(--c);
-    box-shadow: 0 0 6px var(--c);
   }
   .num {
     flex: none;
@@ -494,7 +492,6 @@
   }
   .row.on b {
     color: #fff;
-    text-shadow: 0 0 6px var(--c);
   }
   /* Kept when empty, so rows without a programme line up with the others. */
   .text small {
@@ -536,7 +533,6 @@
   .rec {
     font-size: 12px;
     color: var(--magenta);
-    text-shadow: 0 0 6px var(--magenta);
   }
   .star {
     color: var(--acid);

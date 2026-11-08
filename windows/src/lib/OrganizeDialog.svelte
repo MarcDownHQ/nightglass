@@ -173,7 +173,7 @@
     /* Centred on a whole pixel (see .dialog): a half-pixel offset blurs text and moves it off centre. */
     place-items: start center;
     padding-top: round(down, 50vh, 1px);
-    background: rgb(5 1 15 / 0.6);
+    background: rgb(10 12 17 / 0.6);
   }
   .dialog {
     translate: 0 round(down, -50%, 1px);
@@ -185,8 +185,7 @@
     padding: 22px 24px;
     border-radius: 14px;
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.4);
-    box-shadow: 0 0 24px rgb(5 217 232 / 0.2);
+    border: 1px solid rgb(233 236 242 / 0.1);
   }
   header {
     display: flex;
@@ -243,7 +242,7 @@
     padding: 0;
     list-style: none;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
   li {
     display: flex;
@@ -253,7 +252,7 @@
     border-radius: 8px;
   }
   li:hover {
-    background: rgb(243 238 255 / 0.04);
+    background: rgb(233 236 242 / 0.04);
   }
   li.dragging {
     opacity: 0.4;
@@ -287,7 +286,7 @@
     font-size: 15px;
   }
   input:hover {
-    border-color: rgb(243 238 255 / 0.12);
+    border-color: rgb(233 236 242 / 0.12);
   }
   input:focus {
     outline: none;

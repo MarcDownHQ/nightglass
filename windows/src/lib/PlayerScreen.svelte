@@ -211,7 +211,6 @@
   .rec {
     font-size: 12px;
     color: var(--magenta);
-    text-shadow: 0 0 6px var(--magenta);
     animation: blink 1s steps(2) infinite;
   }
   @keyframes blink {
@@ -241,8 +240,8 @@
     gap: 4px;
     padding: 8px 14px;
     border-radius: 10px;
-    border: 1px solid rgb(249 240 2 / 0.5);
-    background: rgb(5 1 15 / 0.6);
+    border: 1px solid rgb(245 196 81 / 0.5);
+    background: rgb(10 12 17 / 0.6);
     font-size: 18px;
   }
   .live-edge .label {
@@ -266,7 +265,7 @@
     align-items: center;
     gap: 20px;
     padding: 34px 34px 40px;
-    background: linear-gradient(to bottom, rgb(5 1 15 / 0.85), transparent);
+    background: linear-gradient(to bottom, rgb(10 12 17 / 0.85), transparent);
   }
   h1 {
     margin: 0;
@@ -286,7 +285,7 @@
     justify-content: space-between;
     gap: 40px;
     padding: 50px 34px 34px;
-    background: linear-gradient(to top, rgb(5 1 15 / 0.9), transparent);
+    background: linear-gradient(to top, rgb(10 12 17 / 0.9), transparent);
   }
   .now,
   .next,
@@ -351,11 +350,10 @@
   }
   .track::before {
     right: 0;
-    background: rgb(243 238 255 / 0.15);
+    background: rgb(233 236 242 / 0.15);
   }
   .fill {
     background: var(--cyan);
-    box-shadow: 0 0 8px var(--cyan);
   }
   .next-episode {
     flex: none;
@@ -365,14 +363,13 @@
     gap: 6px;
     padding: 10px 16px;
     border-radius: 10px;
-    border: 1px solid rgb(5 217 232 / 0.4);
-    background: rgb(5 1 15 / 0.6);
+    border: 1px solid rgb(233 236 242 / 0.1);
+    background: rgb(10 12 17 / 0.6);
     font-size: 16px;
     font-weight: 600;
   }
   .next-episode:hover {
     border-color: var(--cyan);
-    box-shadow: 0 0 12px rgb(5 217 232 / 0.35);
   }
   .next-episode .label {
     color: var(--cyan);
@@ -388,7 +385,7 @@
     margin: 0;
     padding: 10px 18px;
     border-radius: 10px;
-    background: rgb(5 1 15 / 0.75);
+    background: rgb(10 12 17 / 0.75);
     font-size: 17px;
     color: var(--dim);
   }

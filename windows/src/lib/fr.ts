@@ -9,6 +9,8 @@ export const FR: Record<string, string> = {
   Sources: 'Sources',
   Search: 'Rechercher',
   Settings: 'Réglages',
+  'Main navigation': 'Navigation principale',
+  'Multi-view': 'Multi-vue',
   Source: 'Source',
   'All sources': 'Toutes les sources',
   'Choose the source to show': 'Choisir la source affichée',

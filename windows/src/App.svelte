@@ -28,6 +28,7 @@
   import SeriesView from './lib/SeriesView.svelte';
   import SourcesView from './lib/SourcesView.svelte';
   import { store } from './lib/store.svelte';
+  import NavRail from './lib/NavRail.svelte';
   import TitleBar from './lib/TitleBar.svelte';
   import { updater } from './lib/updater.svelte';
   import { backdropClip, hole } from './lib/video.svelte';
@@ -82,6 +83,8 @@
 
 <!-- Stays mounted under the fullscreen player, so the screens keep their category and scroll. -->
 <div class="app" class:hidden={player.expanded}>
+  <NavRail />
+  <div class="main">
   <TitleBar />
   {#if multiview.open}
     <MultiView />
@@ -106,6 +109,7 @@
       <SeriesView />
     {/if}
   {/if}
+  </div>
 </div>
 
 {#if player.expanded}
@@ -132,11 +136,16 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: linear-gradient(to bottom, var(--ink), var(--night));
+    background: var(--bg);
   }
   .app {
     position: relative;
     height: 100vh;
+    display: flex;
+  }
+  .main {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
   }
@@ -160,12 +169,11 @@
   .primary {
     margin-top: 8px;
     padding: 10px 22px;
-    border-radius: 999px;
-    background: var(--magenta);
+    border-radius: 10px;
+    background: var(--accent);
     color: var(--ink);
     font-size: 18px;
     font-weight: 700;
-    box-shadow: 0 0 14px rgb(255 42 109 / 0.6);
   }
   .toast {
     position: fixed;
@@ -175,13 +183,10 @@
     transform: translateX(-50%);
     padding: 9px 18px;
     border-radius: 999px;
-    background: rgb(5 1 15 / 0.85);
-    border: 1px solid rgb(5 217 232 / 0.4);
+    background: rgb(10 12 17 / 0.85);
+    border: 1px solid rgb(233 236 242 / 0.1);
     font-size: 15px;
     font-weight: 500;
     pointer-events: none;
-  }
-  .primary:hover {
-    box-shadow: 0 0 24px rgb(255 42 109 / 0.85);
   }
 </style>

@@ -119,7 +119,7 @@
 <style>
   .detail {
     position: absolute;
-    inset: 65px 0 0;
+    inset: 61px 0 0 85px;
     overflow: hidden;
   }
   .blur {
@@ -136,7 +136,7 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: rgb(5 1 15 / 0.55);
+    background: rgb(10 12 17 / 0.55);
   }
   .body {
     position: relative;
@@ -155,7 +155,6 @@
     border-radius: 8px;
     overflow: hidden;
     background: var(--night);
-    box-shadow: 0 0 30px rgb(255 42 109 / 0.3);
   }
   .cover img {
     width: 100%;
@@ -205,7 +204,7 @@
     padding: 0 12px;
     line-height: 17px;
     border-radius: 5px;
-    border: 1.5px solid rgb(243 238 255 / 0.2);
+    border: 1.5px solid rgb(233 236 242 / 0.2);
     font-size: 16px;
     font-weight: 600;
     color: var(--dim);
@@ -216,7 +215,6 @@
   .seasons button.on {
     color: #fff;
     border-color: var(--magenta);
-    box-shadow: 0 0 6px var(--magenta);
   }
   .info :global(.episodes) {
     flex: 0 1 auto;
@@ -227,7 +225,7 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
   .note {
     margin: 0;
@@ -253,7 +251,7 @@
   }
   .episode:hover,
   .episode:focus-within {
-    background: rgb(243 238 255 / 0.05);
+    background: rgb(233 236 242 / 0.05);
   }
   .episode.watched .text {
     opacity: 0.55;
@@ -264,7 +262,7 @@
     padding: 6px;
     border-radius: 50%;
     font-size: 13px;
-    color: rgb(243 238 255 / 0.25);
+    color: rgb(233 236 242 / 0.25);
   }
   .seen:hover {
     color: var(--text);
@@ -277,7 +275,7 @@
     height: 3px;
     margin-top: 4px;
     max-width: 320px;
-    background: rgb(243 238 255 / 0.12);
+    background: rgb(233 236 242 / 0.12);
     border-radius: 2px;
   }
   .bar span {

@@ -63,7 +63,7 @@
     border-radius: 6px;
     overflow: hidden;
     background: linear-gradient(to bottom, var(--night), var(--ink));
-    outline: 1px solid rgb(243 238 255 / 0.12);
+    outline: 1px solid rgb(233 236 242 / 0.12);
     outline-offset: -1px;
     transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1), box-shadow 0.3s, outline-color 0.2s;
   }
@@ -71,7 +71,6 @@
   .poster:focus-visible .art {
     transform: scale(1.03);
     outline: 2px solid var(--c);
-    box-shadow: 0 0 18px color-mix(in srgb, var(--c) 55%, transparent);
   }
   .poster:focus-visible {
     outline: none;
@@ -92,7 +91,7 @@
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    background: rgb(5 1 15 / 0.8);
+    background: rgb(10 12 17 / 0.8);
     color: var(--acid);
     font-size: 13px;
   }
@@ -102,13 +101,12 @@
     right: 0;
     bottom: 0;
     height: 4px;
-    background: rgb(5 1 15 / 0.7);
+    background: rgb(10 12 17 / 0.7);
   }
   .bar span {
     display: block;
     height: 100%;
     background: var(--magenta);
-    box-shadow: 0 0 6px var(--magenta);
   }
   .subtitle {
     margin-top: -4px;

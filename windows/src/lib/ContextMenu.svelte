@@ -67,9 +67,8 @@
     padding: 6px;
     list-style: none;
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.35);
+    border: 1px solid rgb(233 236 242 / 0.1);
     border-radius: 10px;
-    box-shadow: 0 0 18px rgb(5 217 232 / 0.18);
   }
   button {
     width: 100%;
@@ -88,7 +87,7 @@
   button:hover,
   button:focus-visible {
     outline: none;
-    background: rgb(243 238 255 / 0.07);
+    background: rgb(233 236 242 / 0.07);
     color: var(--text);
   }
   .heading {
@@ -99,7 +98,7 @@
   }
   li:not(:first-child) > .heading {
     margin-top: 4px;
-    border-top: 1px solid rgb(243 238 255 / 0.08);
+    border-top: 1px solid rgb(233 236 242 / 0.08);
   }
   .icon {
     width: 16px;

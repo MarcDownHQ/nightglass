@@ -122,7 +122,7 @@
   kbd {
     padding: 2px 7px;
     border-radius: 5px;
-    border: 1px solid rgb(243 238 255 / 0.25);
+    border: 1px solid rgb(233 236 242 / 0.25);
     font-size: 12px;
   }
   dd {

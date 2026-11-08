@@ -1,13 +1,9 @@
 import { splitCountry } from './lineup';
 import type { Programme } from './models';
 
-const NEONS = ['var(--magenta)', 'var(--cyan)', 'var(--acid)'];
-
-/** Stable neon for a name, the same hash as the macOS app so a channel keeps its colour everywhere. */
-export function neon(name: string): string {
-  let h = 5381n;
-  for (const ch of name) h = BigInt.asIntN(64, h * 33n + BigInt(ch.codePointAt(0)!));
-  return NEONS[Number((h < 0n ? -h : h) % 3n)];
+/** The colour a channel or title is drawn with: one accent everywhere now, kept as a function for the callers. */
+export function neon(_name: string): string {
+  return 'var(--accent)';
 }
 
 /**
