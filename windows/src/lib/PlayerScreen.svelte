@@ -137,6 +137,7 @@
         </div>
         <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
       </div>
+      <div class="tools">
       {#if !player.mini}
         <TrackMenus />
       {/if}
@@ -149,6 +150,7 @@
           <span class="icon">&#xE73F;</span>{t('Reduce')}<kbd>{t('Esc')}</kbd>
         </button>
       {/if}
+      </div>
     </header>
 
     {#if drawer && item && !player.mini}
@@ -263,6 +265,12 @@
     gap: 14px;
     padding: 28px 36px 60px;
     background: linear-gradient(to bottom, rgb(3 4 6 / 0.85), transparent);
+  }
+  /* Buttons of different heights: one middle line for all. */
+  .tools {
+    display: flex;
+    align-items: center;
+    gap: 14px;
   }
   .title {
     flex: 1;

@@ -11,9 +11,9 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    /* 28 px: the 10 px capitals and the 8 px square, both even, share its exact middle. */
+    /* Segoe UI's capitals sit 1 px below the line box's middle: 2 px less at the bottom puts them on the button's middle. */
     height: 28px;
-    padding: 0 12px;
+    padding: 0 12px 2px;
     border-radius: 999px;
     background: rgb(10 12 17 / 0.85);
     border: 1.5px solid rgb(143 168 255 / 0.6);
@@ -33,5 +33,8 @@
     box-sizing: border-box;
     border: 1.5px solid currentColor;
     border-radius: 2px;
+    /* Back down onto the capitals' middle. */
+    position: relative;
+    top: 1px;
   }
 </style>
