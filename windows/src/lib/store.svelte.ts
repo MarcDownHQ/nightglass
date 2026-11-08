@@ -16,6 +16,7 @@ import {
 } from './models';
 import { options } from './options.svelte';
 import { player, type Playable } from './player.svelte';
+import { withoutOverlaps } from './epg';
 import { prefs } from './prefs';
 
 class Store {
@@ -198,7 +199,7 @@ class Store {
   private mergeGuide(incoming: Record<string, Programme[]>) {
     const merged = { ...this.guide };
     for (const [key, list] of Object.entries(incoming)) {
-      merged[key] = merged[key] ? withoutRepeats([...merged[key], ...list]) : list;
+      merged[key] = withoutOverlaps(merged[key] ? [...merged[key], ...list] : list);
     }
     this.guide = merged;
   }
@@ -390,12 +391,6 @@ function categoriesOf(items: LiveItem[]): { key: string; label: string }[] {
 /** The country of a channel: its own prefix, or its category's. */
 function countryOf(c: LiveItem): string | null {
   return splitCountry(c.channel.name).country ?? (c.channel.group ? splitCountry(c.channel.group).country : null);
-}
-
-/** Two guides for one channel (or one loaded twice): one programme per start time, or the grid stacks them. */
-function withoutRepeats(list: Programme[]): Programme[] {
-  list.sort((a, b) => a.start - b.start);
-  return list.filter((p, i) => i === 0 || p.start !== list[i - 1].start);
 }
 
 export const store = new Store();

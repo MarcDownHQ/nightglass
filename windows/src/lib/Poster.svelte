@@ -1,16 +1,19 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import Tag from './Tag.svelte';
-  import { neon } from './theme';
 
-  /** Poster card; lights up in its neon on hover and keyboard focus. */
+  /** Poster card. Without artwork, a muted tile with the title; a name always gets the same tone. */
+  const TONES = ['#3a2b3f', '#24403c', '#2b354f', '#4a3428', '#33303f', '#2a3f4a', '#40302f', '#283a2e'];
   let {
     title,
     url,
     rating,
     onclick,
+    ondblclick,
     oncontextmenu,
     subtitle,
+    saved = false,
+    selected = false,
     progress = 0,
     watched = false,
   }: {
@@ -18,6 +21,11 @@
     url: string | null;
     rating: number | null;
     onclick: () => void;
+    ondblclick?: () => void;
+    /** In Ma liste. */
+    saved?: boolean;
+    /** Shown in the detail panel. */
+    selected?: boolean;
     oncontextmenu?: (e: MouseEvent) => void;
     /** Under the title: the episode, on a Continue card. */
     subtitle?: string;
@@ -26,16 +34,18 @@
     watched?: boolean;
   } = $props();
   let failed = $state(false);
+  const tone = $derived(TONES[[...title].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TONES.length]);
 </script>
 
-<button class="poster" style:--c={neon(title)} {onclick} {oncontextmenu} {title}>
-  <span class="art">
+<button class="poster" class:selected {onclick} {ondblclick} {oncontextmenu} {title}>
+  <span class="art" style:background={url && !failed ? null : tone}>
     {#if url && !failed}
       <img src={url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror={() => (failed = true)} />
     {:else}
       <span class="fallback">{title}</span>
     {/if}
     {#if watched}<span class="watched icon" title={t('Watched')}>&#xE73E;</span>{/if}
+    {#if saved}<span class="saved icon" title={t('In my list')}>&#xEB52;</span>{/if}
     {#if progress > 0}<span class="bar"><span style:width="{progress * 100}%"></span></span>{/if}
   </span>
   <span class="caption">
@@ -60,17 +70,21 @@
     aspect-ratio: 2 / 3;
     display: grid;
     place-items: center;
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
-    background: linear-gradient(to bottom, var(--night), var(--ink));
-    outline: 1px solid rgb(233 236 242 / 0.12);
+    background: var(--raised);
+    outline: 1px solid var(--border);
     outline-offset: -1px;
     transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1), box-shadow 0.3s, outline-color 0.2s;
   }
   .poster:hover .art,
   .poster:focus-visible .art {
-    transform: scale(1.03);
-    outline: 2px solid var(--c);
+    transform: scale(1.02);
+    outline: 1px solid rgb(255 255 255 / 0.25);
+  }
+  .selected .art,
+  .selected:hover .art {
+    outline: 2px solid var(--accent);
   }
   .poster:focus-visible {
     outline: none;
@@ -92,8 +106,21 @@
     height: 26px;
     border-radius: 50%;
     background: rgb(10 12 17 / 0.8);
-    color: var(--acid);
+    color: var(--soft);
     font-size: 13px;
+  }
+  .saved {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: rgb(10 12 17 / 0.8);
+    color: var(--accent);
+    font-size: 12px;
   }
   .bar {
     position: absolute;
@@ -106,7 +133,7 @@
   .bar span {
     display: block;
     height: 100%;
-    background: var(--magenta);
+    background: var(--accent);
   }
   .subtitle {
     margin-top: -4px;

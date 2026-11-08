@@ -21,6 +21,7 @@
     onpick,
     onmenu,
     onnewlist,
+    listsTitle,
   }: {
     lists: SideEntry[];
     pinned: SideEntry[];
@@ -29,7 +30,9 @@
     selected: string;
     onpick: (id: string) => void;
     onmenu: (e: MouseEvent, entry: SideEntry) => void;
-    onnewlist: () => void;
+    onnewlist?: () => void;
+    /** The first heading; « Mes listes » by default. */
+    listsTitle?: string;
   } = $props();
 
   let query = $state('');
@@ -60,8 +63,8 @@
   <div class="scroll" bind:this={listEl}>
     {#if !q}
       <div class="heading">
-        <span>{t('My lists')}</span>
-        <button class="icon add" title={t('New favorites list…')} aria-label={t('New favorites list…')} onclick={onnewlist}>&#xE710;</button>
+        <span>{listsTitle ?? t('My lists')}</span>
+        {#if onnewlist}<button class="icon add" title={t('New favorites list…')} aria-label={t('New favorites list…')} onclick={onnewlist}>&#xE710;</button>{/if}
       </div>
       {#each lists as e (e.id)}{@render entry(e)}{/each}
       {#if pinned.length}

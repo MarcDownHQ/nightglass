@@ -108,6 +108,8 @@
     {:else}
       <SeriesView />
     {/if}
+  {:else}
+    <p class="starting">{t('Loading…')}</p>
   {/if}
   </div>
 </div>
@@ -151,6 +153,11 @@
   }
   .app.hidden {
     visibility: hidden;
+  }
+  .starting {
+    margin: auto;
+    font-size: 15px;
+    color: var(--muted);
   }
   .empty {
     flex: 1;

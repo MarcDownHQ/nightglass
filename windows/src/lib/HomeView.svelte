@@ -4,21 +4,18 @@
   import { library, listLabel } from './library.svelte';
   import type { LiveItem } from './models';
   import { nav } from './nav.svelte';
-  import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
   import Poster from './Poster.svelte';
   import ProgressLine from './ProgressLine.svelte';
   import { store } from './store.svelte';
-  import { clock, displayName, hm, neon, progress } from './theme';
+  import { clock, displayName, hm, progress } from './theme';
 
-  /** Where the app opens: back to the last channel, the recent ones, the favourites, what was left half-watched, what is coming. */
+  /** Where the app opens: back to the last channel, what was left half-watched, the favourites, the recent ones, what is coming. */
   const byId = $derived(new Map(store.lineup.flatMap((row) => [row, ...(row.variants ?? [])].map((c) => [c.id, row] as const))));
   const recent = $derived([...new Set(library.recents.flatMap((id) => byId.get(id) ?? []))]);
   const last = $derived(recent[0]);
-  const favorites = $derived.by(() => {
-    const list = library.favoriteLists[0]?.items ?? [];
-    return [...new Set(list.flatMap((id) => byId.get(id) ?? []))].slice(0, 12);
-  });
+  const firstList = $derived(library.favoriteLists[0]);
+  const favorites = $derived([...new Set((firstList?.items ?? []).flatMap((id) => byId.get(id) ?? []))].slice(0, 10));
   const movies = $derived(new Map(store.movies.map((m) => [m.id, m])));
   const shows = $derived(new Map(store.series.map((s) => [s.id, s])));
   const continuing = $derived(
@@ -35,83 +32,127 @@
     }),
   );
   const upcoming = $derived(library.reminders.filter((r) => r.end > store.now).slice(0, 6));
+  const greeting = $derived.by(() => {
+    const h = new Date(store.now * 1000).getHours();
+    return h >= 5 && h < 18 ? t('Hello') : t('Good evening');
+  });
+  const today = $derived(new Date(store.now * 1000).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }));
 
+  /** In Live, with its preview: the channel plays there. */
   function watch(item: LiveItem) {
     nav.focusChannel = item.id;
     nav.section = 'live';
   }
 
   function watchFullscreen(item: LiveItem) {
+    nav.focusChannel = item.id;
+    nav.section = 'live';
     void store.tune(item).then(() => player.expand());
   }
 </script>
 
-<div class="home">
-  {#if last}
-    {@const np = store.nowNext(last.channel)}
-    {@const c = neon(last.channel.name)}
-    <button class="hero" style:--c={c} onclick={() => watchFullscreen(last)} title={t('Watch fullscreen')}>
-      <ChannelLogo channel={last.channel} color={c} size={84} />
-      <div class="hero-text">
-        <span class="label mono">{t('Back to')}</span>
-        <NeonText text={displayName(last.channel.name)} size={44} />
-        <span class="now">{np.now ? `${hm(np.now.start)} · ${np.now.title}` : (last.channel.group ?? '')}</span>
-        {#if np.now}<div class="bar"><ProgressLine value={progress(np.now, store.now)} color={c} height={3} /></div>{/if}
-      </div>
-      <span class="play"><span class="icon">&#xE768;</span> {t('Watch')}</span>
-    </button>
-  {:else}
-    <div class="hello">
-      <NeonText text={t('Welcome')} size={44} />
-      <p>{t('Pick a channel in Live: the last one you watch comes back here.')}</p>
-      <button class="go" onclick={() => (nav.section = 'live')}>{t('Open Live')}</button>
+{#snippet tile(item: LiveItem, removable: boolean)}
+  {@const np = store.nowNext(item.channel)}
+  <div class="tile">
+    <div class="tile-head">
+      <ChannelLogo channel={item.channel} size={40} />
+      <button class="tile-name" onclick={() => watch(item)} ondblclick={() => watchFullscreen(item)}>{displayName(item.channel.name)}</button>
+      {#if removable && firstList}
+        <button class="star" title={t('Remove from favorites')} aria-label={t('Remove from favorites')} onclick={() => library.toggleFavorite(firstList.id, item.id)}>&#xE735;</button>
+      {/if}
     </div>
-  {/if}
+    <small>{np.now?.title ?? item.channel.group ?? ''}</small>
+    <ProgressLine value={np.now ? progress(np.now, store.now) : 0} />
+  </div>
+{/snippet}
 
-  {#snippet channelCards(title: string, items: LiveItem[])}
+<div class="home">
+  <header>
+    <h1>{greeting}</h1>
+    <span class="today">{today}</span>
+  </header>
+
+  {#if last || continuing.length}
     <section>
-      <h3 class="mono">{title}</h3>
-      <div class="strip">
-        {#each items as item (item.id)}
-          {@const np = store.nowNext(item.channel)}
-          {@const c = neon(item.channel.name)}
-          <button class="card" style:--c={c} onclick={() => watch(item)} ondblclick={() => watchFullscreen(item)}>
-            <ChannelLogo channel={item.channel} color={c} size={40} />
-            <b>{displayName(item.channel.name)}</b>
-            <small>{np.now?.title ?? item.channel.group ?? ''}</small>
-            <ProgressLine value={np.now ? progress(np.now, store.now) : 0} color={c} />
+      <h2>{t('Pick up where you left off')}</h2>
+      <div class="resume" style:grid-template-columns={last && continuing.length ? 'minmax(0, 1.6fr) repeat(2, minmax(0, 0.55fr))' : last ? 'minmax(0, 760px)' : 'repeat(4, minmax(0, 1fr))'}>
+        {#if last}
+          {@const np = store.nowNext(last.channel)}
+          <button class="hero" onclick={() => watch(last)} ondblclick={() => watchFullscreen(last)} title={t('Watch')}>
+            <span class="hero-top">
+              <ChannelLogo channel={last.channel} size={72} />
+              <span class="live-badge"><span></span>{t('LIVE')}</span>
+            </span>
+            <span class="hero-bottom">
+              <span class="hero-text">
+                <span class="meta">{last.channel.number ? `${last.channel.number} · ` : ''}{displayName(last.channel.name)} · {t('last channel watched')}</span>
+                <b>{np.now?.title ?? displayName(last.channel.name)}</b>
+                {#if np.now}<span class="bar"><ProgressLine value={progress(np.now, store.now)} /></span>{/if}
+              </span>
+              <span class="play"><span class="icon">&#xE768;</span>{t('Watch')}</span>
+            </span>
           </button>
+        {/if}
+        {#each continuing.slice(0, last ? 2 : 4) as c (c.id)}
+          <div class="poster"><Poster title={c.title} subtitle={c.subtitle} url={c.poster} rating={null} progress={c.progress} onclick={c.play} /></div>
         {/each}
       </div>
     </section>
-  {/snippet}
+  {:else}
+    <section class="hello">
+      <h2>{t('Welcome')}</h2>
+      <p>{t('Pick a channel in Live: the last one you watch comes back here.')}</p>
+      <button class="primary" onclick={() => (nav.section = 'live')}>{t('Open Live')}</button>
+    </section>
+  {/if}
 
-  {#if recent.length > 1}{@render channelCards(t('Recent'), recent.slice(1, 13))}{/if}
-  {#if favorites.length}{@render channelCards(listLabel(library.favoriteLists[0]), favorites)}{/if}
-
-  {#if continuing.length}
+  {#if favorites.length}
     <section>
-      <h3 class="mono">{t('Continue watching')}</h3>
-      <div class="strip posters">
-        {#each continuing as c (c.id)}
-          <div class="poster"><Poster title={c.title} subtitle={c.subtitle} url={c.poster} rating={null} progress={c.progress} onclick={c.play} /></div>
+      <div class="section-head">
+        <h2>{firstList ? listLabel(firstList) : ''}</h2>
+        <span class="count mono">{favorites.length}</span>
+      </div>
+      <div class="tiles">
+        {#each favorites as item (item.id)}{@render tile(item, true)}{/each}
+      </div>
+    </section>
+  {:else if firstList}
+    <section>
+      <h2>{listLabel(firstList)}</h2>
+      <p class="hint">{t('No favorite channel yet. In Live, click the star of a channel to find it here.')}</p>
+    </section>
+  {/if}
+
+  {#if recent.length > 1}
+    <section>
+      <h2>{t('Recent')}</h2>
+      <div class="tiles">
+        {#each recent.slice(1, 6) as item (item.id)}{@render tile(item, false)}{/each}
+      </div>
+    </section>
+  {/if}
+
+  {#if continuing.length > (last ? 2 : 4)}
+    <section>
+      <h2>{t('Continue watching')}</h2>
+      <div class="posters">
+        {#each continuing.slice(last ? 2 : 4) as c (c.id)}
+          <div class="poster small"><Poster title={c.title} subtitle={c.subtitle} url={c.poster} rating={null} progress={c.progress} onclick={c.play} /></div>
         {/each}
       </div>
     </section>
   {/if}
 
   {#if upcoming.length}
-    <section>
-      <h3 class="mono">{t('Reminders')}</h3>
-      <ul class="reminders">
-        {#each upcoming as r (r.channel + r.start)}
-          <li>
-            <span class="mono time">{hm(r.start)}</span>
-            <b>{r.title}</b>
-            <small>{r.channelName}</small>
-          </li>
-        {/each}
-      </ul>
+    <section class="panel">
+      <h2>{t('Reminders')}</h2>
+      {#each upcoming as r (r.channel + r.start)}
+        <div class="reminder">
+          <span class="mono time">{hm(r.start)}</span>
+          <span class="what"><b>{r.title}</b><small>{r.channelName}</small></span>
+          <button class="chip" onclick={() => library.toggleReminder(r)}>{t('Cancel')}</button>
+        </div>
+      {/each}
     </section>
   {/if}
 </div>
@@ -123,146 +164,276 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 28px;
-    padding: 12px 28px 28px;
-    scrollbar-width: thin;
-    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
+    gap: 30px;
+    padding: 26px 36px 36px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .today {
+    font-size: 14px;
+    color: var(--muted);
+    display: inline-block;
+  }
+  .today::first-letter {
+    text-transform: uppercase;
+  }
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .count {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .resume {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 0.55fr));
+    gap: 16px;
+    align-items: stretch;
   }
   .hero {
     display: flex;
-    align-items: center;
-    gap: 28px;
-    padding: 26px 30px;
-    border-radius: 18px;
+    flex-direction: column;
+    min-height: 260px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
     text-align: left;
-    background: linear-gradient(110deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%);
-    outline: 1.5px solid color-mix(in srgb, var(--c) 60%, transparent);
-    transition: box-shadow 0.2s;
   }
-  .hero:hover,
+  .hero:hover {
+    background: #151922;
+  }
+  .hero-top {
+    position: relative;
+    flex: 1;
+    display: grid;
+    place-items: center;
+    background: #1a2030;
+  }
+  .live-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: rgb(10 12 17 / 0.75);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ff9a8d;
+  }
+  .live-badge span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--live);
+  }
+  .hero-bottom {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+  }
   .hero-text {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
   }
-  .label {
-    font-size: 11px;
-    color: var(--acid);
-  }
-  .now {
-    font-size: 19px;
-    font-weight: 600;
-    color: var(--dim);
-  }
-  .bar {
-    max-width: 480px;
-  }
-  .play {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 22px;
-    border-radius: 999px;
-    background: var(--c);
-    color: var(--ink);
-    font-size: 18px;
-    font-weight: 700;
-  }
-  .hello {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 26px 30px;
-  }
-  .hello p {
-    margin: 0;
-    color: var(--dim);
-    font-size: 17px;
-  }
-  .go {
-    padding: 9px 20px;
-    border-radius: 999px;
-    border: 1px solid var(--cyan);
-    color: var(--cyan);
-    font-weight: 600;
-  }
-  section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  h3 {
-    margin: 0;
+  .meta {
     font-size: 12px;
-    font-weight: 500;
-    color: var(--acid);
-  }
-  .strip {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 230px;
-    gap: 16px;
-    overflow-x: auto;
-    /* Room for the hover glow, without moving the cards off the page margin. */
-    padding: 6px 4px 10px;
-    margin: 0 -4px;
-    scrollbar-width: thin;
-    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
-  }
-  .strip.posters {
-    grid-auto-columns: 170px;
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 14px;
-    border-radius: 12px;
-    text-align: left;
-    outline: 1px solid rgb(233 236 242 / 0.12);
-    transition: outline-color 0.15s, box-shadow 0.2s;
-  }
-  .card:hover,
-  .card:focus-visible {
-    outline: 1.5px solid var(--c);
-  }
-  .card b,
-  .card small {
+    color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .card b {
-    font-size: 17px;
+  .hero-text b {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  /* Kept when empty, so every card's progress line sits at the same height. */
-  .card small {
-    min-height: 1lh;
-    font-size: 14px;
-    color: var(--dim);
+  .bar {
+    margin-top: 6px;
+    max-width: 320px;
   }
-  .reminders {
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .play {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .play .icon {
+    font-size: 12px;
+  }
+  .poster {
+    min-width: 0;
+  }
+  .posters {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+  }
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .tile {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    min-width: 0;
   }
-  .reminders li {
+  .tile:hover {
+    background: #151922;
+  }
+  .tile-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .tile-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tile-name:hover {
+    color: var(--accent);
+  }
+  .tile small {
+    min-height: 1lh;
+    font-size: 13px;
+    color: var(--soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .star {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-family: var(--icons);
+    font-size: 14px;
+    color: var(--fav);
+  }
+  .star:hover {
+    background: var(--hover);
+  }
+  .hint {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .panel {
+    gap: 4px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .panel h2 {
+    margin-bottom: 8px;
+  }
+  .reminder {
+    display: flex;
+    align-items: center;
     gap: 14px;
-    font-size: 16px;
+    padding: 6px 0;
   }
   .time {
-    color: var(--acid);
+    flex: none;
+    width: 52px;
     font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
   }
-  .reminders small {
-    color: var(--dim);
+  .what {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .what b {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .what small {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .chip {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 9px;
+    background: var(--raised);
+    color: var(--soft);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .chip:hover {
+    background: var(--hover);
+    color: #fff;
+  }
+  .hello p {
+    margin: 0;
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .primary {
+    align-self: flex-start;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 14px;
+    font-weight: 600;
   }
 </style>
