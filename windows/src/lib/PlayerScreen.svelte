@@ -9,6 +9,7 @@
   import { store } from './store.svelte';
   import { clock, displayName, hm, qualityTag } from './theme';
   import TrackMenus from './TrackMenus.svelte';
+  import Menu from './Menu.svelte';
   import { videoHole } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
   import Volume from './Volume.svelte';
@@ -27,6 +28,8 @@
   const quality = $derived(item ? qualityTag(item.channel.name) : null);
   const left = $derived(np.now ? Math.max(0, Math.round((np.now.end - store.now) / 60)) : 0);
   const isRow = (row: LiveItem) => row.id === item?.id || !!row.variants?.some((v) => v.id === item?.id);
+  /** The playing channel's feeds, to switch between them here too. */
+  const feeds = $derived(item ? (item.variants ?? store.lineup.find(isRow)?.variants ?? []) : []);
   /** What the arrows and the drawer zap through: the playing channel's category, else every channel. */
   const zapList = $derived.by(() => {
     const key = item?.channel.group ? categoryKey(item.channel.group) : null;
@@ -163,6 +166,13 @@
         {/if}
       </div>
       <div class="tools">
+      {#if feeds.length > 1}
+        <Menu
+          label={t('Feeds')}
+          items={feeds.map((v) => ({ id: v, name: `${v.channel.name} · ${v.source.name}`, selected: v.id === item?.id }))}
+          onpick={(v) => store.chooseFeed(v, feeds)}
+        />
+      {/if}
       <TrackMenus />
       <button class="icon tool" onclick={() => player.togglePip()} title={t('Mini player above the other windows (P)')} aria-label={t('Mini player above the other windows (P)')}>&#xE8A7;</button>
       <StopButton />

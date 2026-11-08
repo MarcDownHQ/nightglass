@@ -89,7 +89,7 @@ export function openVariantMenu(e: MouseEvent, row: LiveItem) {
     ...(row.variants ?? [row]).map((v) => ({
       label: `${v.channel.name} · ${v.source.name}`,
       checked: v.id === playing,
-      action: () => void store.tune({ ...v, variants: row.variants }),
+      action: () => store.chooseFeed(v, row.variants),
     })),
   ]);
 }
