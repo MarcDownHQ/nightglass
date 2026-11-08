@@ -7,7 +7,7 @@
   import SignalBars from './SignalBars.svelte';
   import StopButton from './StopButton.svelte';
   import { store } from './store.svelte';
-  import { clock, displayName, hm, progress, qualityTag } from './theme';
+  import { clock, displayName, hm, qualityTag } from './theme';
   import TrackMenus from './TrackMenus.svelte';
   import { videoHole } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
@@ -25,6 +25,7 @@
   const item = $derived(player.current?.item);
   const np = $derived(item ? store.nowNext(item.channel) : {});
   const quality = $derived(item ? qualityTag(item.channel.name) : null);
+  const left = $derived(np.now ? Math.max(0, Math.round((np.now.end - store.now) / 60)) : 0);
   const isRow = (row: LiveItem) => row.id === item?.id || !!row.variants?.some((v) => v.id === item?.id);
   /** What the arrows and the drawer zap through: the playing channel's category, else every channel. */
   const zapList = $derived.by(() => {
@@ -164,6 +165,9 @@
           {/if}
         </div>
         <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
+        {#if np.now && !player.mini}
+          <p class="when mono">{hm(np.now.start)} – {hm(np.now.end)} · {t('{n} min left', { n: left })}</p>
+        {/if}
       </div>
       <div class="tools">
       {#if !player.mini}
@@ -196,13 +200,6 @@
 
     <footer>
       {#if item}
-        {#if np.now}
-          <div class="timeline mono">
-            <span>{hm(np.now.start)}</span>
-            <span class="track"><span class="fill" style:width="{progress(np.now, store.now) * 100}%"></span></span>
-            <span>{hm(np.now.end)}</span>
-          </div>
-        {/if}
         {#if player.current?.live && span > 1}
           <div class="buffer mono">
             <span title={t('Oldest moment kept in memory')}>−{clock(player.liveEdge - player.cacheStart)}</span>
@@ -342,6 +339,11 @@
   .meta b {
     color: #fff;
     font-weight: 600;
+  }
+  .when {
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: var(--soft);
   }
   h1 {
     margin: 8px 0 0;
@@ -543,24 +545,10 @@
     padding: 60px 36px 30px;
     background: linear-gradient(to top, rgb(3 4 6 / 0.95), transparent);
   }
-  .timeline {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    font-size: 13px;
-    color: var(--soft);
-  }
-  .track,
   .seek {
     position: relative;
     flex: 1;
-    height: 6px;
-    border-radius: 3px;
-    background: rgb(255 255 255 / 0.14);
-  }
-  .seek {
     height: 18px;
-    background: none;
   }
   .seek::before {
     content: '';
@@ -622,12 +610,9 @@
   .bar.dragging .knob {
     opacity: 1;
   }
-  /* Both bars between labels of one width: they line up. */
-  .timeline > span:not(.track),
   .buffer > span {
     width: 52px;
   }
-  .timeline > span:last-child,
   .edge {
     text-align: right;
   }
