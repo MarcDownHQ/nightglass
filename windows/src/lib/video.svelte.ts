@@ -42,18 +42,26 @@ export const hole = new VideoHole();
 
 /** Action: the element becomes the window onto the video. */
 export function videoHole(node: HTMLElement, radius = 0) {
+  let last = '';
   const update = () => {
     const r = node.getBoundingClientRect();
+    // Scrolling anywhere calls this: only a real move goes further.
+    const key = [r.left, r.top, r.width, r.height].join();
+    if (key === last && hole.rect) return;
+    last = key;
     hole.set(node, { x: r.left, y: r.top, w: r.width, h: r.height, radius });
   };
   const observer = new ResizeObserver(update);
   observer.observe(node);
   addEventListener('resize', update);
+  // Capture: a scrolling page (Home) moves the element without resizing it.
+  addEventListener('scroll', update, true);
   update();
   return {
     destroy() {
       observer.disconnect();
       removeEventListener('resize', update);
+      removeEventListener('scroll', update, true);
       hole.release(node);
     },
   };

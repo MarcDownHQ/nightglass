@@ -9,6 +9,7 @@
   import ProgressLine from './ProgressLine.svelte';
   import { store } from './store.svelte';
   import { clock, displayName, hm, progress } from './theme';
+  import { videoHole } from './video.svelte';
 
   /** Where the app opens: back to the last channel, what was left half-watched, the favourites, the recent ones, what is coming. */
   const byId = $derived(new Map(store.lineup.flatMap((row) => [row, ...(row.variants ?? [])].map((c) => [c.id, row] as const))));
@@ -38,6 +39,20 @@
   });
   const today = $derived(new Date(store.now * 1000).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }));
 
+  /** The last channel is the one playing: its card shows the picture, not just the sound. */
+  const playingId = $derived(player.current?.live && !player.expanded && !player.pip ? player.current.item?.id : undefined);
+  const live = $derived(!!last && !!playingId && (last.id === playingId || !!last.variants?.some((v) => v.id === playingId)));
+  let scroller = $state<HTMLElement>();
+  let screen = $state<HTMLElement>();
+  /** Only while the whole picture is in view: the video window can't be cut by the scroll area's edge. */
+  let inView = $state(false);
+  $effect(() => {
+    if (!scroller || !screen) return;
+    const io = new IntersectionObserver(([e]) => (inView = e.intersectionRatio > 0.99), { root: scroller, threshold: [0.99, 1] });
+    io.observe(screen);
+    return () => io.disconnect();
+  });
+
   /** In Live, with its preview: the channel plays there. */
   function watch(item: LiveItem) {
     nav.focusChannel = item.id;
@@ -66,7 +81,7 @@
   </div>
 {/snippet}
 
-<div class="home">
+<div class="home" bind:this={scroller}>
   <header>
     <h1>{greeting}</h1>
     <span class="today">{today}</span>
@@ -78,9 +93,13 @@
       <div class="resume" style:grid-template-columns={last && continuing.length ? 'minmax(0, 1.6fr) repeat(2, minmax(0, 0.55fr))' : last ? 'minmax(0, 760px)' : 'repeat(4, minmax(0, 1fr))'}>
         {#if last}
           {@const np = store.nowNext(last.channel)}
-          <button class="hero" onclick={() => watch(last)} ondblclick={() => watchFullscreen(last)} title={t('Watch')}>
-            <span class="hero-top">
-              <ChannelLogo channel={last.channel} size={72} />
+          <button class="hero" class:live={live && inView} onclick={() => watch(last)} ondblclick={() => watchFullscreen(last)} title={t('Watch')}>
+            <span class="hero-top" bind:this={screen}>
+              {#if live && inView}
+                <span class="screen" use:videoHole={13}></span>
+              {:else}
+                <ChannelLogo channel={last.channel} size={72} />
+              {/if}
               <span class="live-badge"><span></span>{t('LIVE')}</span>
             </span>
             <span class="hero-bottom">
@@ -230,6 +249,18 @@
     display: grid;
     place-items: center;
     background: #1a2030;
+  }
+  /* Playing: the card lets the video through above its caption. */
+  .hero.live,
+  .hero.live .hero-top {
+    background: transparent;
+  }
+  .hero.live .hero-bottom {
+    background: var(--surface);
+  }
+  .screen {
+    position: absolute;
+    inset: 0;
   }
   .live-badge {
     position: absolute;
