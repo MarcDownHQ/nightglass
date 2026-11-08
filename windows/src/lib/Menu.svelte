@@ -45,7 +45,7 @@
   }
   .trigger {
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 600;
     padding: 6px 4px;
   }
   .trigger.custom {

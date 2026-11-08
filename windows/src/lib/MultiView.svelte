@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import HudPanel from './HudPanel.svelte';
@@ -35,7 +36,8 @@
     const observer = new ResizeObserver(measure);
     observer.observe(grid);
     addEventListener('resize', measure);
-    measure();
+    // Untracked: measuring writes the rects it reads, which would run this effect again and again.
+    untrack(measure);
     return () => {
       observer.disconnect();
       removeEventListener('resize', measure);
@@ -81,6 +83,7 @@
         class="tile"
         class:active={multiview.active === i}
         class:empty={!tile.item}
+        class:dark={!multiview.playing(i)}
         role="button"
         tabindex="0"
         onclick={() => multiview.focus(i)}
@@ -237,9 +240,12 @@
     place-items: center;
     border-radius: 12px 12px 0 0;
   }
+  /* No picture yet: black, not the page. */
+  .tile.dark .video {
+    background: #000;
+  }
   .tile.empty .video {
     border-radius: 12px;
-    background: #000;
   }
   .hint {
     margin: 0;

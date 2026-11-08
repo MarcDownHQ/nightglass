@@ -102,7 +102,7 @@
   }
   label span {
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--dim);
   }
   input {
@@ -126,7 +126,7 @@
     align-self: flex-start;
     font-size: 14px;
     line-height: 18px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--cyan);
   }
   .connect {
@@ -145,7 +145,7 @@
   .message {
     margin: 0;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--cyan);
   }
   .message.error {

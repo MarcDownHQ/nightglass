@@ -141,7 +141,7 @@
     border-radius: 10px;
     background: var(--raised);
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
   }
   .btn:hover {
     background: var(--hover);

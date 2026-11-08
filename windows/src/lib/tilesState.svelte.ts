@@ -94,6 +94,12 @@ class MultiView {
     await invoke('tile_close', { index });
   }
 
+  /** Showing pictures: until then its hole stays shut, or the desktop behind the window shows through. */
+  playing(index: number) {
+    const t = this.tiles[index];
+    return !!t.item && !t.loading && !t.error;
+  }
+
   /** The tile that is heard. */
   async focus(index: number) {
     this.active = index;

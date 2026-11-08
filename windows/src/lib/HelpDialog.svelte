@@ -103,7 +103,7 @@
   h3 {
     margin: 0 0 8px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--acid);
   }
   /* One key column for every group, so all the descriptions start at the same place. */

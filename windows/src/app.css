@@ -24,11 +24,50 @@
   --panel: var(--surface);
 
   /* Segoe UI Variable ships with Windows 11; Segoe UI is its Windows 10 fallback. */
-  --title: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+  --title: 'NG Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', monospace;
   --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 
   color-scheme: dark;
+}
+
+/* Segoe UI, with its line box moved up: as shipped, its capitals sit 0.065 em below the middle of every line
+   (ascent 1.08, descent 0.25, capitals 0.70). Same line height, capitals centred. One face per named
+   instance: local() of the variable font only gives its regular. */
+@font-face {
+  font-family: 'NG Text';
+  src: local('Segoe UI Variable Text Light'), local('Segoe UI Light');
+  font-weight: 100 300;
+  ascent-override: 101.5%;
+  descent-override: 31.5%;
+}
+@font-face {
+  font-family: 'NG Text';
+  src: local('Segoe UI Variable Text Semilight'), local('Segoe UI Semilight');
+  font-weight: 350;
+  ascent-override: 101.5%;
+  descent-override: 31.5%;
+}
+@font-face {
+  font-family: 'NG Text';
+  src: local('Segoe UI Variable Text'), local('Segoe UI');
+  font-weight: 400;
+  ascent-override: 101.5%;
+  descent-override: 31.5%;
+}
+@font-face {
+  font-family: 'NG Text';
+  src: local('Segoe UI Variable Text Semibold'), local('Segoe UI Semibold');
+  font-weight: 500 600;
+  ascent-override: 101.5%;
+  descent-override: 31.5%;
+}
+@font-face {
+  font-family: 'NG Text';
+  src: local('Segoe UI Variable Text Bold'), local('Segoe UI Bold');
+  font-weight: 700 900;
+  ascent-override: 101.5%;
+  descent-override: 31.5%;
 }
 
 html,

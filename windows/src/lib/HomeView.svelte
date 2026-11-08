@@ -415,7 +415,7 @@
     background: var(--raised);
     color: var(--soft);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
   }
   .chip:hover {
     background: var(--hover);
