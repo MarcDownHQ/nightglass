@@ -1,38 +1,31 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
-  import CategoryPicker from './CategoryPicker.svelte';
+  import CategorySidebar, { type SideEntry } from './CategorySidebar.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
   import { organizer } from './dialogs.svelte';
-  import HudPanel from './HudPanel.svelte';
   import { friendly } from './errors';
   import { library, listLabel } from './library.svelte';
+  import LiveDetails from './LiveDetails.svelte';
   import { multiview } from './tilesState.svelte';
   import { categoryKey, categoryLabel, type SortMode } from './lineup';
   import { contextMenu, type MenuEntry } from './menuState.svelte';
   import type { LiveItem } from './models';
   import { dial, nav, typing } from './nav.svelte';
-  import NeonTab from './NeonTab.svelte';
   import NeonText from './NeonText.svelte';
-  import NowNextPanel from './NowNextPanel.svelte';
   import { player } from './player.svelte';
   import ProgressLine from './ProgressLine.svelte';
   import StopButton from './StopButton.svelte';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
-  import { displayName, neon, progress, qualityTag } from './theme';
+  import { displayName, progress, qualityTag } from './theme';
   import { videoHole } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
+  import Volume from './Volume.svelte';
 
-  /** A tab: `list:<id>` a favourites list, `cat:<key>` a category, or all / recent / hidden. */
-  interface Tab {
-    id: string;
-    label: string;
-  }
-
+  /** The shown list: `list:<id>` a favourites list, `cat:<key>` a category, or all / recent / hidden. */
   let tab = $state('all');
   let listView: { reveal: (index: number) => void } | undefined = $state();
-  let tabsEl: HTMLElement;
   let dragged = $state<string | null>(null);
 
   const playingId = $derived(player.current?.item?.id);
@@ -62,20 +55,23 @@
     return [...new Set(items.flatMap((id) => byId.get(id) ?? []))];
   }
 
-  const tabs = $derived.by((): Tab[] => [
-    // The first list shows once it has something; the lists made on purpose show even empty.
-    ...library.favoriteLists
-      .filter((l, i) => i > 0 || l.items.length)
-      .map((l) => ({ id: `list:${l.id}`, label: `★ ${listLabel(l)}` })),
-    ...(recent.length ? [{ id: 'recent', label: t('↺ Recent') }] : []),
-    { id: 'all', label: t('All') },
-    ...store.categories.map((c) => ({ id: `cat:${c.key}`, label: c.label })),
-    ...(hidden.length ? [{ id: 'hidden', label: t('Hidden') }] : []),
-  ]);
+  /** Channels per category key, for the counts in the sidebar. */
+  const perCategory = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (const c of store.lineup) if (c.channel.group) map.set(categoryKey(c.channel.group), (map.get(categoryKey(c.channel.group)) ?? 0) + 1);
+    return map;
+  });
 
-  /** Past this many categories the strip keeps only the shortcuts and the category shown; the ☰ list has them all. */
-  const STRIP_MAX = 30;
-  const stripTabs = $derived(store.categories.length <= STRIP_MAX ? tabs : tabs.filter((x) => !x.id.startsWith('cat:') || x.id === tab));
+  const lists = $derived.by((): SideEntry[] => [
+    ...library.favoriteLists.map((l) => ({ id: `list:${l.id}`, label: listLabel(l), count: listRows(l.id).length, glyph: '', tint: 'var(--fav)' })),
+    ...(recent.length ? [{ id: 'recent', label: t('Recent'), count: recent.length, glyph: '' }] : []),
+    { id: 'all', label: t('All channels'), count: store.lineup.length, glyph: '' },
+  ]);
+  const categories = $derived(store.categories.map((c): SideEntry => ({ id: `cat:${c.key}`, label: c.label, count: perCategory.get(c.key) ?? 0 })));
+  const pinned = $derived(categories.filter((c) => library.pinnedGroups.has(c.id.slice(4))).map((c) => ({ ...c, glyph: '' })));
+  const hiddenEntry = $derived<SideEntry | undefined>(hidden.length ? { id: 'hidden', label: t('Hidden'), count: hidden.length, glyph: '' } : undefined);
+  /** Every entry once, in sidebar order: what ← → step through. */
+  const tabs = $derived([...lists, ...categories, ...(hiddenEntry ? [hiddenEntry] : [])]);
 
   const listId = $derived(tab.startsWith('list:') ? tab.slice(5) : undefined);
 
@@ -88,29 +84,12 @@
     return store.lineup.filter((c) => c.channel.group && categoryKey(c.channel.group) === key);
   });
 
-  /** Channels per category key, for the counts in the category picker. */
-  const perCategory = $derived.by(() => {
-    const map = new Map<string, number>();
-    for (const c of store.lineup) if (c.channel.group) map.set(categoryKey(c.channel.group), (map.get(categoryKey(c.channel.group)) ?? 0) + 1);
-    return map;
-  });
+  const caption = $derived(tabs.find((x) => x.id === tab)?.label ?? '');
 
-  function tabCount(id: string): number {
-    if (id === 'all') return store.lineup.length;
-    if (id === 'recent') return recent.length;
-    if (id === 'hidden') return hidden.length;
-    if (id.startsWith('list:')) return listRows(id.slice(5)).length;
-    return perCategory.get(id.slice(4)) ?? 0;
-  }
-
-  /** The strip has no scrollbar: the wheel scrolls it sideways. */
-  function tabsWheel(e: WheelEvent) {
-    if (!e.deltaY || e.shiftKey) return;
-    e.preventDefault();
-    tabsEl.scrollLeft += e.deltaY;
-  }
-
-  const caption = $derived(tab === 'all' ? t('All channels') : (tabs.find((x) => x.id === tab)?.label ?? ''));
+  /** The list the star adds to: the one shown, else the first. */
+  const starList = $derived(listId ?? library.favoriteLists[0]?.id);
+  const starred = (id: string) => !!starList && !!library.favoriteLists.find((l) => l.id === starList)?.items.includes(id);
+  const toggleStar = (id: string) => starList && library.toggleFavorite(starList, id);
 
   $effect(() => {
     if (!tabs.some((x) => x.id === tab)) tab = 'all';
@@ -120,11 +99,6 @@
   $effect(() => {
     const i = list.findIndex(isPlaying);
     if (i >= 0) listView?.reveal(i);
-  });
-
-  $effect(() => {
-    void tab;
-    tabsEl?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 
   // A channel picked in the guide or the search: show it in All and tune it.
@@ -148,16 +122,18 @@
     tab = tabs[(i + delta + tabs.length) % tabs.length].id;
   }
 
-  function tabMenu(e: MouseEvent, tb: Tab) {
+  function sideMenu(e: MouseEvent, entry: SideEntry) {
     const entries: MenuEntry[] = [];
-    if (tb.id.startsWith('cat:')) {
-      const key = tb.id.slice(4);
+    if (entry.id.startsWith('cat:')) {
+      const key = entry.id.slice(4);
+      const isPinned = library.pinnedGroups.has(key);
       entries.push(
-        { label: t('Hide “{name}”', { name: tb.label }), icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
-        { label: t('Organize categories…'), icon: '', action: () => (organizer.open = true) },
+        { label: isPinned ? t('Unpin') : t('Pin to the top'), icon: '', action: () => library.toggleHidden(library.pinnedGroups, key) },
+        { label: t('Hide “{name}”', { name: entry.label }), icon: '', action: () => library.toggleHidden(library.hiddenGroups, key) },
+        { label: t('Organize categories…'), icon: '', action: () => (organizer.open = true) },
       );
-    } else if (tb.id.startsWith('list:')) {
-      entries.push({ label: t('Organize lists…'), icon: '', action: () => (organizer.open = true) });
+    } else if (entry.id.startsWith('list:')) {
+      entries.push({ label: t('Organize lists…'), icon: '', action: () => (organizer.open = true) });
     } else return;
     contextMenu.open(e, entries);
   }
@@ -187,15 +163,9 @@
           ]
         : []),
       { heading: t('Organize') },
-      { label: t('Categories and lists…'), icon: '', action: () => (organizer.open = true) },
+      { label: t('Categories and lists…'), icon: '', action: () => (organizer.open = true) },
       { label: t('New favorites list…'), icon: '', action: () => void newList() },
     ]);
-  }
-
-  /** `S`: the first list, or the list shown. */
-  function toggleFavorite() {
-    const item = player.current?.item;
-    if (item) library.toggleFavorite(listId ?? library.favoriteLists[0]?.id ?? '', item.id);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -211,8 +181,9 @@
     else if (e.key === 'Enter' || e.key.toLowerCase() === 'f') void player.expand();
     else if (e.key === 'Escape') player.stop();
     else if (e.key === ' ') player.togglePause();
-    else if (e.key.toLowerCase() === 's') toggleFavorite();
-    else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
+    else if (e.key.toLowerCase() === 's') {
+      if (player.current?.item) toggleStar(player.current.item.id);
+    } else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
     else if (e.key.toLowerCase() === 'p') void player.toggleMini();
     else if (/^[0-9]$/.test(e.key)) {
       // In a favourites list the numbers are the list's own: 1 is its first channel.
@@ -242,27 +213,27 @@
 <svelte:window {onkeydown} />
 
 <div class="live">
-  <div class="left">
-    <div class="bar">
-      <CategoryPicker {tabs} selected={tab} count={tabCount} onpick={(id) => (tab = id)} />
-      <div class="tabs" bind:this={tabsEl} onwheel={tabsWheel}>
-        {#each stripTabs as tb (tb.id)}
-          <NeonTab title={tb.label} selected={tb.id === tab} onclick={() => (tab = tb.id)} oncontextmenu={(e) => tabMenu(e, tb)} />
-        {/each}
-      </div>
-      <button class="icon view" title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
-      <button class="icon view filter" title={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
-    </div>
-    <HudPanel {caption} trailing={String(list.length)} class="channels">
-      {#key tab}
-        <VirtualList items={list} rowHeight={66} key={(c) => c.id} row={channelRow} bind:this={listView} />
-      {/key}
-    </HudPanel>
-  </div>
+  <CategorySidebar {lists} {pinned} {categories} hidden={hiddenEntry} selected={tab} onpick={(id) => (tab = id)} onmenu={sideMenu} onnewlist={() => void newList()} />
 
-  <div class="right">
+  <section class="channels" aria-label={caption}>
+    <header>
+      <h2>{caption}</h2>
+      <span class="count mono">{list.length}</span>
+      <span class="spacer"></span>
+      <button class="icon tool" title={t('Order, feeds, countries, categories')} aria-label={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
+    </header>
+    {#key tab}
+      <VirtualList items={list} rowHeight={68} key={(c) => c.id} row={channelRow} bind:this={listView} />
+    {/key}
+    {#if !list.length}
+      <p class="none">{listId ? t('Click the star of a channel to add it here.') : t('No channels here.')}</p>
+    {/if}
+  </section>
+
+  <section class="right">
     {#if player.current && !player.expanded}
-      <div class="preview" use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
+      <div class="preview" class:paused={player.paused} use:videoHole={14} ondblclick={() => player.expand()} {onwheel} role="presentation">
+        {#if player.current.live}<span class="live-badge"><span></span>{t('LIVE')}</span>{/if}
         {#if player.loading || player.error}
           <div class="status" class:error={player.error}>
             {player.error ? friendly(player.error) : player.reconnecting ? t('Signal lost: reconnecting (attempt {n})…', { n: player.reconnecting }) : t('Loading {name}…', { name: displayName(player.current.title) })}
@@ -270,10 +241,18 @@
           </div>
         {/if}
         <div class="corner">
-          {#if player.recording}<span class="rec mono" title={player.recording}>● REC</span>{/if}
+          {#if player.recording}<span class="rec" title={player.recording}>● REC</span>{/if}
           <StopButton />
         </div>
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
+        <div class="controls">
+          <button class="icon ctl" aria-label={player.paused ? t('Play') : t('Pause')} title={player.paused ? t('Play') : t('Pause')} onclick={() => player.togglePause()}>{player.paused ? '' : ''}</button>
+          <Volume />
+          <span class="spacer"></span>
+          <button class="icon ctl" aria-label={t('Multi-view: 2 or 4 channels at once')} title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
+          <button class="icon ctl" aria-label={t('Mini player (P)')} title={t('Mini player (P)')} onclick={() => player.toggleMini()}>&#xE8A7;</button>
+          <button class="icon ctl" aria-label={t('Fullscreen (F)')} title={t('Fullscreen (F)')} onclick={() => player.expand()}>&#xE740;</button>
+        </div>
       </div>
     {:else}
       <div class="preview empty">
@@ -281,133 +260,268 @@
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
       </div>
     {/if}
-    <NowNextPanel item={player.current?.item} />
-  </div>
+    <LiveDetails
+      item={player.current?.item}
+      favorite={!!player.current?.item && starred(player.current.item.id)}
+      ontogglefavorite={() => player.current?.item && toggleStar(player.current.item.id)}
+    />
+  </section>
 </div>
 
 {#snippet channelRow(item: LiveItem)}
   {@const ch = item.channel}
-  {@const c = neon(ch.name)}
   {@const np = store.nowNext(ch)}
   {@const variants = item.variants?.length ?? 0}
   {@const quality = qualityTag(ch.name)}
-  <button
+  {@const star = starred(item.id)}
+  <div
     class="row"
     class:on={isPlaying(item)}
     class:dragging={dragged === item.id}
-    style:--c={c}
-    draggable={!!listId}
-    onclick={() => store.tune(item)}
-    ondblclick={() => player.expand()}
-    oncontextmenu={(e) => openChannelMenu(e, item, listId)}
-    ondragstart={(e) => {
-      dragged = item.id;
-      e.dataTransfer?.setData('text/plain', item.id);
-    }}
-    ondragend={() => (dragged = null)}
+    role="listitem"
     ondragover={(e) => listId && e.preventDefault()}
     ondrop={(e) => {
       e.preventDefault();
       drop(item);
     }}
   >
-    <span class="num mono">{listId ? list.indexOf(item) + 1 : (ch.number ?? '')}</span>
-    <ChannelLogo channel={ch} color={c} />
-    <span class="text">
-      <b>{displayName(ch.name)}</b>
-      <small>{np.now?.title ?? (ch.group ? categoryLabel(ch.group) : '')}</small>
-      <span class="progress"><ProgressLine value={np.now ? progress(np.now, store.now) : 0} color={c} /></span>
-    </span>
-    <span class="side">
-    {#if library.isFavorite(item.id)}<span class="star">★</span>{/if}
-    {#if variants > 1}
-      <span
-        class="feeds"
-        role="button"
-        tabindex="-1"
-        title={t('{n} feeds of this channel', { n: variants })}
-        onclick={(e) => {
-          e.stopPropagation();
-          openVariantMenu(e, item);
-        }}
-        onkeydown={() => {}}
-      >
-        <Tag text={quality ? `${quality} · ${variants}` : t('{n} feeds', { n: variants })} />
+    <button
+      class="main"
+      draggable={!!listId}
+      onclick={() => store.tune(item)}
+      ondblclick={() => player.expand()}
+      oncontextmenu={(e) => openChannelMenu(e, item, listId)}
+      ondragstart={(e) => {
+        dragged = item.id;
+        e.dataTransfer?.setData('text/plain', item.id);
+      }}
+      ondragend={() => (dragged = null)}
+    >
+      <span class="num mono">{listId ? list.indexOf(item) + 1 : (ch.number ?? '')}</span>
+      <ChannelLogo channel={ch} size={44} />
+      <span class="text">
+        <span class="name"><b>{displayName(ch.name)}</b>{#if quality && variants <= 1}<Tag text={quality} />{/if}</span>
+        <small>{np.now?.title ?? (ch.group ? categoryLabel(ch.group) : '')}</small>
+        <span class="progress"><ProgressLine value={np.now ? progress(np.now, store.now) : 0} /></span>
       </span>
-    {:else if quality}<Tag text={quality} />{/if}
+    </button>
+    <span class="side">
+    {#if variants > 1}
+      <button class="feeds" title={t('{n} feeds of this channel', { n: variants })} onclick={(e) => openVariantMenu(e, item)}>
+        <Tag text={quality ? `${quality} · ${variants}` : t('{n} feeds', { n: variants })} />
+      </button>
+    {/if}
+    {#if starList}
+      <button class="star" class:fav={star} aria-pressed={star} title={star ? t('Remove from favorites') : t('Add to favorites')} aria-label={star ? t('Remove from favorites') : t('Add to favorites')} onclick={() => toggleStar(item.id)}>{star ? '' : ''}</button>
+    {/if}
     </span>
-  </button>
+  </div>
 {/snippet}
 
 <style>
   .live {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(440px, 1fr) minmax(0, 820px);
-    gap: 32px;
-    padding: 4px 28px 20px;
+    display: flex;
   }
-  .left {
-    position: relative;
+  .channels {
+    width: 420px;
+    flex: none;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-width: 0;
     min-height: 0;
+    border-right: 1px solid var(--border);
   }
-  /* The tabs keep 8 px of room for their glow; the bar gives it back so they line up with the preview. */
-  .bar {
+  .channels header {
+    flex: none;
+    height: 62px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-width: 0;
-    margin-top: -8px;
+    gap: 10px;
+    padding: 0 12px 0 20px;
   }
-  .view {
-    flex: none;
-    padding: 8px;
+  h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .count {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .spacer {
+    flex: 1;
+  }
+  .tool {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
     font-size: 15px;
-    color: var(--dim);
+    color: var(--muted);
   }
-  .view:hover {
-    color: var(--cyan);
+  .tool:hover {
+    background: var(--raised);
+    color: var(--text);
   }
-  /* The funnel glyph sits on the baseline, a pixel lower than the grid one: lifted so both look centred. */
-  .view.filter {
-    padding: 7px 8px 9px;
+  .channels :global(.viewport) {
+    padding: 0 10px;
   }
-  .tabs {
+  .none {
+    margin: 0 20px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .row {
+    height: 64px;
+    margin: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 6px;
+    border-radius: 12px;
+  }
+  .row:hover {
+    background: #141821;
+  }
+  .row.on {
+    background: #1a1f2b;
+  }
+  .row.dragging {
+    opacity: 0.4;
+  }
+  .main {
     flex: 1;
     min-width: 0;
+    height: 100%;
     display: flex;
-    gap: 8px;
-    padding: 8px 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    /* The tabs that don't fit fade out instead of being cut. */
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    align-items: center;
+    gap: 12px;
+    padding-left: 6px;
+    text-align: left;
   }
-  .left :global(.channels) {
+  .main[draggable='true'] {
+    cursor: grab;
+  }
+  .num {
+    flex: none;
+    width: 40px;
+    text-align: right;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .row.on .num {
+    color: var(--accent);
+  }
+  .text {
     flex: 1;
-  }
-  .right {
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 4px;
+  }
+  .name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
+  }
+  .name b {
+    min-width: 0;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Kept when empty, so rows without a programme line up with the others. */
+  .text small {
+    min-height: 1lh;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* A fixed column for the feeds tag and the star, so every progress line ends at the same place. */
+  .side {
+    flex: none;
+    width: 112px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+  .feeds {
+    flex: none;
+    display: flex;
+    padding: 4px;
+    border-radius: 7px;
+  }
+  .feeds:hover {
+    background: var(--hover);
+  }
+  .star {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    font-family: var(--icons);
+    font-size: 16px;
+    color: #5e6678;
+  }
+  .star:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .star.fav {
+    color: var(--fav);
+  }
+  .right {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px 24px;
   }
   .preview {
     position: relative;
+    flex: none;
     aspect-ratio: 16 / 9;
     border-radius: 14px;
-    /* Glow on the frame only, never on the picture. */
-    outline: 1.5px solid rgb(233 236 242 / 0.1);
+    outline: 1px solid var(--border);
   }
   .preview.empty {
     display: grid;
     place-items: center;
-    background: #000;
+    background: #05070b;
+  }
+  .live-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: rgb(10 12 17 / 0.75);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ff9a8d;
+  }
+  .live-badge span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--live);
   }
   .status {
     position: absolute;
@@ -419,131 +533,73 @@
     max-width: 80%;
     border-radius: 10px;
     background: rgb(10 12 17 / 0.75);
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 500;
     text-align: center;
-    color: var(--dim);
+    color: var(--muted);
   }
   .empty .status {
     background: none;
   }
   .status.error {
-    color: var(--magenta);
+    color: #ff9a8d;
+  }
+  .retry {
+    display: block;
+    margin: 10px auto 0;
+    padding: 6px 16px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 13px;
+    font-weight: 600;
   }
   .corner {
     position: absolute;
     top: 10px;
     right: 10px;
-  }
-  .dial {
-    position: absolute;
-    top: 40px;
-    right: 40px;
-  }
-  .row {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 0 16px;
-    text-align: left;
-    position: relative;
-  }
-  .row:hover {
-    background: rgb(233 236 242 / 0.04);
-  }
-  .row.on {
-    background: color-mix(in srgb, var(--c) 14%, transparent);
-  }
-  .row.on::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 10px;
-    bottom: 10px;
-    width: 3px;
-    border-radius: 2px;
-    background: var(--c);
-  }
-  .num {
-    flex: none;
-    width: 32px;
-    text-align: right;
-    font-size: 12px;
-    color: var(--dim);
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .text b,
-  .text small {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .text b {
-    font-size: 18px;
-    font-weight: 600;
-  }
-  .row.on b {
-    color: #fff;
-  }
-  /* Kept when empty, so rows without a programme line up with the others. */
-  .text small {
-    min-height: 1lh;
-    font-size: 14px;
-    color: var(--dim);
-  }
-  .progress {
-    padding-top: 4px;
-  }
-  .row.dragging {
-    opacity: 0.4;
-  }
-  .row[draggable='true'] {
-    cursor: grab;
-  }
-  .feeds {
-    display: flex;
-    cursor: pointer;
-  }
-  .feeds:hover :global(*) {
-    filter: brightness(1.4);
-  }
-  .retry {
-    display: block;
-    margin: 10px auto 0;
-    padding: 5px 16px;
-    border-radius: 999px;
-    border: 1px solid var(--cyan);
-    color: var(--cyan);
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .corner {
     display: flex;
     align-items: center;
     gap: 10px;
   }
   .rec {
     font-size: 12px;
-    color: var(--magenta);
+    font-weight: 700;
+    color: #ff9a8d;
   }
-  .star {
-    color: var(--acid);
+  .dial {
+    position: absolute;
+    top: 40px;
+    right: 40px;
   }
-  /* A fixed column for the star and the tags, so every progress line ends at the same place. */
-  .side {
-    flex: none;
-    width: 76px;
+  /* The controls show on hover, and stay while paused: the picture is not covered otherwise. */
+  .controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
+    gap: 4px;
+    padding: 36px 10px 8px;
+    border-radius: 0 0 14px 14px;
+    background: linear-gradient(to top, rgb(5 7 11 / 0.9), rgb(5 7 11 / 0));
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .preview:hover .controls,
+  .preview:focus-within .controls,
+  .preview.paused .controls {
+    opacity: 1;
+  }
+  .ctl {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .ctl:hover {
+    background: rgb(255 255 255 / 0.12);
   }
 </style>
