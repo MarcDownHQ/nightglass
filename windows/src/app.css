@@ -1,32 +1,30 @@
-/*
- * Bahnschrift with its metrics evened out. As shipped, its ascent leaves more room above the capitals
- * than its descent leaves below the baseline, so every label sat 1–2 px high in its button. These
- * overrides keep the line height (85.5 + 14.5 = 79 + 21) and put the capitals in the middle of it.
- * 87.5% is the width of the Bahnschrift Condensed instance.
- */
-@font-face {
-  font-family: 'Nightglass Title';
-  src: local('Bahnschrift');
-  font-weight: 300 700;
-  font-stretch: 87.5%;
-  ascent-override: 85.5%;
-  descent-override: 14.5%;
-}
-
-/* Nightglass tokens: see DESIGN.md at the repository root. */
+/* Nightglass tokens: a calm night palette, one cool accent. See DESIGN.md at the repository root. */
 :root {
-  --ink: #05010f;
-  --night: #1a0433;
-  --magenta: #ff2a6d;
-  --cyan: #05d9e8;
-  --acid: #f9f002;
-  --text: #f3eeff;
-  --dim: rgb(243 238 255 / 0.55);
-  --line: rgb(243 238 255 / 0.12);
-  --panel: rgb(5 1 15 / 0.72);
+  --bg: #0a0c11;
+  --surface: #10131a;
+  --raised: #161a23;
+  --hover: #1c212c;
+  --border: rgb(255 255 255 / 0.06);
+  --text: #e9ecf2;
+  --soft: #c3c9d4;
+  --muted: #9aa3b2;
+  --accent: #8fa8ff;
+  --accent-hover: #a6baff;
+  --live: #ff5a4e;
+  --fav: #f5c451;
 
-  /* Bahnschrift ships with Windows and has condensed widths, like SF Pro Condensed on macOS. */
-  --title: 'Nightglass Title', 'Bahnschrift Condensed', 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
+  /* Older names, kept while the screens move to the new ones. */
+  --ink: var(--bg);
+  --night: var(--bg);
+  --magenta: var(--accent);
+  --cyan: var(--accent);
+  --acid: var(--soft);
+  --dim: var(--muted);
+  --line: var(--border);
+  --panel: var(--surface);
+
+  /* Segoe UI Variable ships with Windows 11; Segoe UI is its Windows 10 fallback. */
+  --title: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', monospace;
   --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 
@@ -45,7 +43,6 @@ body {
 body {
   color: var(--text);
   font-family: var(--title);
-  font-stretch: condensed;
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -53,7 +50,7 @@ body {
 /* Thin, quiet scrollbars everywhere: lists, menus, dialogs. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+  scrollbar-color: rgb(233 236 242 / 0.15) transparent;
 }
 
 button {
@@ -70,9 +67,9 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+/* Numbers, times and tags: the UI face with aligned digits. */
 .mono {
-  font-family: var(--mono);
-  font-stretch: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .icon {

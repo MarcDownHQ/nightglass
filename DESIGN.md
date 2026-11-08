@@ -2,6 +2,23 @@
 
 Style néon, rien de plus : fond sombre, couleurs vives et lueurs sur ce qui est interactif ou sélectionné. Pas de texte décoratif, pas d'ornement. Chaque élément à l'écran sert à naviguer ou à informer.
 
+
+## Windows : style « nuit » (depuis la 0.3)
+
+L'app Windows abandonne le néon pour un style sombre et calme : surfaces légèrement plus claires que le fond, bordures fines, une seule couleur d'accent.
+
+| Token | Valeur | Usage |
+|---|---|---|
+| `bg` | `#0a0c11` | fond |
+| `surface` / `raised` / `hover` | `#10131a` / `#161a23` / `#1c212c` | panneaux, boutons, survol |
+| `border` | blanc à 6 % | séparations |
+| `text` / `soft` / `muted` | `#e9ecf2` / `#c3c9d4` / `#9aa3b2` | texte, texte secondaire |
+| `accent` | `#8fa8ff` | sélection, action principale, progression |
+| `live` | `#ff5a4e` | « En direct », enregistrement |
+| `fav` | `#f5c451` | favoris |
+
+Police : Segoe UI Variable (Segoe UI sous Windows 10), chiffres alignés pour les heures et les numéros. Icônes : Segoe Fluent Icons. Navigation : barre verticale à gauche ; la barre du haut garde le titre de l'écran, la source, la recherche et les boutons de fenêtre.
+
 ## Règles
 
 1. **La vidéo passe avant tout.** Aucune animation d'ambiance, aucun effet appliqué sur l'image vidéo elle-même.

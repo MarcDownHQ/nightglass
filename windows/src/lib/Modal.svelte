@@ -35,7 +35,7 @@
     /* Centred on a whole pixel (see .dialog): a half-pixel offset blurs text and moves it off centre. */
     place-items: start center;
     padding-top: round(down, 50vh, 1px);
-    background: rgb(5 1 15 / 0.6);
+    background: rgb(10 12 17 / 0.6);
   }
   .dialog {
     translate: 0 round(down, -50%, 1px);
@@ -46,8 +46,7 @@
     padding: 22px 24px;
     border-radius: 14px;
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.4);
-    box-shadow: 0 0 24px rgb(5 217 232 / 0.2);
+    border: 1px solid rgb(233 236 242 / 0.1);
   }
   header {
     display: flex;
@@ -67,6 +66,6 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
 </style>

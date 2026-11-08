@@ -201,15 +201,14 @@
     justify-content: center;
     align-items: flex-start;
     padding-top: 120px;
-    background: rgb(5 1 15 / 0.6);
+    background: rgb(10 12 17 / 0.6);
   }
   .palette {
     width: 680px;
     max-width: calc(100% - 32px);
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.25);
+    border: 1px solid rgb(233 236 242 / 0.1);
     border-radius: 14px;
-    box-shadow: 0 0 40px rgb(255 42 109 / 0.2);
     overflow: hidden;
   }
   .field {
@@ -242,7 +241,7 @@
     list-style: none;
     max-height: 420px;
     overflow-y: auto;
-    border-top: 1px solid rgb(5 217 232 / 0.14);
+    border-top: 1px solid rgb(233 236 242 / 0.06);
     scrollbar-width: thin;
   }
   li button {
@@ -254,7 +253,7 @@
     text-align: left;
   }
   li button.on {
-    background: rgb(255 42 109 / 0.18);
+    background: rgb(143 168 255 / 0.18);
   }
   .kind {
     flex: none;
@@ -287,7 +286,7 @@
   .none {
     margin: 0;
     padding: 14px 18px;
-    border-top: 1px solid rgb(5 217 232 / 0.14);
+    border-top: 1px solid rgb(233 236 242 / 0.06);
     font-size: 15px;
     color: var(--dim);
   }

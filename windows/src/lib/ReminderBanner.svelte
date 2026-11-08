@@ -63,7 +63,7 @@
 <style>
   .banners {
     position: fixed;
-    top: 73px;
+    top: 69px;
     right: 24px;
     z-index: 95;
     display: flex;
@@ -78,8 +78,7 @@
     padding: 12px 14px;
     border-radius: 12px;
     background: var(--ink);
-    border: 1px solid rgb(249 240 2 / 0.5);
-    box-shadow: 0 0 18px rgb(249 240 2 / 0.15);
+    border: 1px solid rgb(245 196 81 / 0.5);
   }
   .bell {
     font-size: 18px;

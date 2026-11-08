@@ -126,7 +126,7 @@
     gap: 28px;
     padding: 12px 28px 28px;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
   .hero {
     display: flex;
@@ -137,13 +137,9 @@
     text-align: left;
     background: linear-gradient(110deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%);
     outline: 1.5px solid color-mix(in srgb, var(--c) 60%, transparent);
-    box-shadow: 0 0 22px color-mix(in srgb, var(--c) 25%, transparent);
     transition: box-shadow 0.2s;
   }
   .hero:hover,
-  .hero:focus-visible {
-    box-shadow: 0 0 34px color-mix(in srgb, var(--c) 45%, transparent);
-  }
   .hero-text {
     flex: 1;
     min-width: 0;
@@ -214,7 +210,7 @@
     padding: 6px 4px 10px;
     margin: 0 -4px;
     scrollbar-width: thin;
-    scrollbar-color: rgb(243 238 255 / 0.15) transparent;
+    scrollbar-color: rgb(233 236 242 / 0.15) transparent;
   }
   .strip.posters {
     grid-auto-columns: 170px;
@@ -226,13 +222,12 @@
     padding: 14px;
     border-radius: 12px;
     text-align: left;
-    outline: 1px solid rgb(243 238 255 / 0.12);
+    outline: 1px solid rgb(233 236 242 / 0.12);
     transition: outline-color 0.15s, box-shadow 0.2s;
   }
   .card:hover,
   .card:focus-visible {
     outline: 1.5px solid var(--c);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--c) 35%, transparent);
   }
   .card b,
   .card small {

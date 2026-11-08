@@ -8,11 +8,10 @@
 
 <style>
   .line {
-    background: rgb(243 238 255 / 0.1);
+    background: rgb(233 236 242 / 0.1);
   }
   .fill {
     height: 100%;
     background: var(--c);
-    box-shadow: 0 0 6px var(--c);
   }
 </style>

@@ -56,7 +56,7 @@
     flex-direction: column;
     gap: 6px;
     padding: 18px;
-    border-left: 1px solid rgb(5 217 232 / 0.14);
+    border-left: 1px solid rgb(233 236 242 / 0.06);
   }
   .label {
     font-size: 11px;
@@ -97,7 +97,7 @@
     gap: 14px;
     min-height: 38px;
     padding: 0 18px;
-    border-top: 1px solid rgb(5 217 232 / 0.14);
+    border-top: 1px solid rgb(233 236 242 / 0.06);
     font-size: 11px;
     color: var(--dim);
   }

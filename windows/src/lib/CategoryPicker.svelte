@@ -111,9 +111,8 @@
     flex-direction: column;
     max-height: min(70vh, 640px);
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.35);
+    border: 1px solid rgb(233 236 242 / 0.1);
     border-radius: 12px;
-    box-shadow: 0 0 24px rgb(5 217 232 / 0.18);
     overflow: hidden;
   }
   .field {
@@ -122,7 +121,7 @@
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
-    border-bottom: 1px solid rgb(5 217 232 / 0.14);
+    border-bottom: 1px solid rgb(233 236 242 / 0.06);
   }
   .field .icon {
     color: var(--cyan);
@@ -163,7 +162,7 @@
     color: var(--dim);
   }
   li button.on {
-    background: rgb(243 238 255 / 0.07);
+    background: rgb(233 236 242 / 0.07);
     color: var(--text);
   }
   li button.current {

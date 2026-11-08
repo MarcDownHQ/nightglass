@@ -2,29 +2,23 @@
   import { t } from './i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Menu from './Menu.svelte';
-  import { nav, SECTIONS, type Section } from './nav.svelte';
-  import NeonText from './NeonText.svelte';
+  import { nav, SECTIONS } from './nav.svelte';
   import { player } from './player.svelte';
   import { store } from './store.svelte';
   import { updater } from './updater.svelte';
-  import { panels, prompt } from './dialogs.svelte';
+  import { prompt } from './dialogs.svelte';
   import { library } from './library.svelte';
   import { multiview } from './tilesState.svelte';
 
   const win = getCurrentWindow();
   const ALL = '';
 
+  const title = $derived(multiview.open ? t('Multi-view') : t(SECTIONS.find((s) => s.id === nav.section)?.title ?? ''));
   const current = $derived(store.visibleSources.length === 1 ? store.visibleSources[0].name : t('All sources'));
   const choices = $derived([
     { id: ALL, name: t('All sources'), selected: store.visibleSources.length !== 1 },
     ...store.sources.map((s) => ({ id: s.id, name: s.name, selected: store.activeSource === s.id })),
   ]);
-
-  function show(section: Section) {
-    if (multiview.open) void multiview.close();
-    nav.section = section;
-    void player.collapse();
-  }
 
   async function lock() {
     if (library.unlocked) {
@@ -38,15 +32,10 @@
   }
 </script>
 
-{#snippet tab(section: Section, title: string)}
-  <button class="nav" class:on={nav.section === section} onclick={() => show(section)}>{title}</button>
-{/snippet}
-
 <header data-tauri-drag-region>
-  <div class="brand"><NeonText text="NIGHTGLASS" size={26} /></div>
-  {#each SECTIONS.slice(0, 5) as s (s.id)}{@render tab(s.id, t(s.title))}{/each}
+  <h1 data-tauri-drag-region>{title}</h1>
+  {#if store.loading.size}<span class="loading">{t('Loading…')}</span>{/if}
   <div class="spacer" data-tauri-drag-region></div>
-  {#if store.loading.size}<span class="loading mono">{t('Loading…')}</span>{/if}
   {#if updater.available}
     <button
       class="pill update"
@@ -58,24 +47,20 @@
     </button>
   {/if}
   {#if library.pinHash && library.lockedGroups.size}
-    <button class="pill lock" class:open={library.unlocked} onclick={lock} title={library.unlocked ? t('Lock the PIN categories again') : t('Show the categories behind the PIN')}>
-      <span class="icon">{library.unlocked ? '\uE785' : '\uE72E'}</span>
+    <button class="pill square" class:open={library.unlocked} onclick={lock} title={library.unlocked ? t('Lock the PIN categories again') : t('Show the categories behind the PIN')}>
+      <span class="icon">{library.unlocked ? '' : ''}</span>
     </button>
   {/if}
   {#if store.sources.length > 1}
-    <div class="picker-menu">
     <Menu label={t('Source')} items={choices} onpick={(id) => store.setActive(id || null)} title={t('Choose the source to show')}>
       {#snippet trigger()}
-        <span class="pill picker"><span class="dot"></span><span class="name">{current}</span><span class="icon chevron">&#xE70D;</span></span>
+        <span class="pill"><span class="dot"></span><span class="name">{current}</span><span class="icon chevron">&#xE70D;</span></span>
       {/snippet}
     </Menu>
-    </div>
   {/if}
-  <button class="pill" onclick={() => (nav.searching = true)}>
-    <span class="icon">&#xE721;</span> {t('Search')} <span class="dim mono">Ctrl K</span>
+  <button class="pill search" onclick={() => (nav.searching = true)}>
+    <span class="icon">&#xE721;</span><span class="hint">{t('Channels, programmes, movies, series')}</span><kbd>Ctrl K</kbd>
   </button>
-  {@render tab('sources', t('Sources'))}
-  <button class="icon gear" title={t('Settings')} onclick={() => (panels.settings = true)}>&#xE713;</button>
   <div class="controls">
     <button class="icon" aria-label={t('Minimize')} onclick={() => win.minimize()}>&#xE921;</button>
     <button class="icon" aria-label={t('Maximize')} onclick={() => win.toggleMaximize()}>&#xE922;</button>
@@ -85,133 +70,96 @@
 
 <style>
   header {
-    /* Odd heights (65 here, 35 for the controls): the capitals, an odd number of pixels tall, then sit
-       exactly in the middle instead of half a pixel off. */
     flex: none;
-    height: 65px;
+    height: 60px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 10px;
     padding-left: 28px;
+    border-bottom: 1px solid var(--border);
   }
-  /* Clicks fall through to the drag region. */
-  .brand {
-    pointer-events: none;
-    margin-right: 24px;
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .spacer {
     flex: 1;
     align-self: stretch;
   }
-  .nav {
-    height: 35px;
-    box-sizing: border-box;
-    padding: 0 12px;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--dim);
-    white-space: nowrap;
-    transition: color 0.15s, text-shadow 0.3s;
-  }
-  .nav:hover {
-    color: var(--text);
-  }
-  .nav.on {
-    color: #fff;
-    text-shadow:
-      0 0 2px var(--magenta),
-      0 0 10px var(--magenta);
-  }
   .loading {
-    margin-right: 12px;
-    font-size: 11px;
-    color: var(--acid);
+    font-size: 12px;
+    color: var(--muted);
     animation: pulse 1.2s ease-in-out infinite alternate;
   }
   @keyframes pulse {
     to {
-      opacity: 0.35;
+      opacity: 0.4;
     }
   }
   .pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-right: 12px;
-    height: 35px;
+    height: 36px;
     box-sizing: border-box;
-    padding: 0 14px;
-    border-radius: 999px;
-    border: 1px solid rgb(243 238 255 / 0.15);
-    font-size: 15px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: var(--raised);
+    color: var(--soft);
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
-    transition: border-color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
   .pill:hover {
-    border-color: rgb(243 238 255 / 0.35);
+    background: var(--hover);
+    color: #fff;
   }
   .pill .icon {
-    font-size: 13px;
+    font-size: 14px;
   }
-  .pill .dim {
-    font-size: 11px;
-    color: var(--dim);
-  }
-  .lock {
-    width: 35px;
+  .square {
+    width: 36px;
     padding: 0;
     justify-content: center;
-    color: var(--dim);
   }
-  .lock.open {
-    color: var(--acid);
-    border-color: rgb(249 240 2 / 0.5);
-  }
+  .square.open,
   .update {
-    color: var(--acid);
-    border-color: rgb(249 240 2 / 0.5);
+    color: var(--accent);
   }
-  .update:hover {
-    border-color: var(--acid);
+  .search {
+    width: 340px;
+    color: var(--muted);
   }
-  /* The pill's margin sits outside the menu, so the list lines up with the pill's right edge. */
-  .picker-menu {
-    margin-right: 12px;
+  .search .hint {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
   }
-  .picker {
-    margin-right: 0;
-    gap: 6px;
-    border-color: rgb(255 42 109 / 0.5);
+  kbd {
+    font: inherit;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--hover);
   }
-  .picker:hover {
-    border-color: var(--magenta);
-  }
-  .picker .name {
-    max-width: 220px;
+  .name {
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .dot {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: var(--magenta);
-    box-shadow: 0 0 4px var(--magenta);
+    background: #5bd69b;
   }
   .chevron {
-    font-size: 9px;
-    color: var(--dim);
-  }
-  .gear {
-    margin-left: 6px;
-    width: 35px;
-    height: 35px;
-    font-size: 16px;
-    color: var(--dim);
-  }
-  .gear:hover {
-    color: var(--text);
+    font-size: 10px;
+    color: var(--muted);
   }
   .controls {
     display: flex;
@@ -221,15 +169,15 @@
   .controls button {
     width: 46px;
     font-size: 10px;
-    color: var(--dim);
+    color: var(--muted);
     transition: background 0.15s, color 0.15s;
   }
   .controls button:hover {
-    background: rgb(243 238 255 / 0.08);
+    background: rgb(255 255 255 / 0.08);
     color: var(--text);
   }
   .controls .close:hover {
-    background: var(--magenta);
+    background: #c42b1c;
     color: #fff;
   }
 </style>

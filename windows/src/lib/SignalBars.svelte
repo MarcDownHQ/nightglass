@@ -20,11 +20,10 @@
   i {
     width: 4px;
     border-radius: 1px;
-    background: rgb(243 238 255 / 0.15);
+    background: rgb(233 236 242 / 0.15);
     transition: background 0.3s;
   }
   i.lit {
     background: var(--c);
-    box-shadow: 0 0 6px var(--c);
   }
 </style>

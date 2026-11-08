@@ -67,9 +67,8 @@
     padding: 6px;
     list-style: none;
     background: var(--ink);
-    border: 1px solid rgb(5 217 232 / 0.35);
+    border: 1px solid rgb(233 236 242 / 0.1);
     border-radius: 10px;
-    box-shadow: 0 0 18px rgb(5 217 232 / 0.18);
   }
   li button {
     width: 100%;
@@ -83,7 +82,7 @@
     white-space: nowrap;
   }
   li button:hover {
-    background: rgb(243 238 255 / 0.07);
+    background: rgb(233 236 242 / 0.07);
     color: var(--text);
   }
   li button.on {

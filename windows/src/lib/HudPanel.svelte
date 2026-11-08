@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  /** Dark glass panel with a faint cyan edge. */
+  /** A surface card with an optional caption row. */
   let { caption, trailing, children, class: cls = '' }: { caption?: string; trailing?: string; children: Snippet; class?: string } =
     $props();
 </script>
@@ -21,8 +21,8 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: var(--panel);
-    border: 1px solid rgb(5 217 232 / 0.2);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 14px;
     overflow: hidden;
   }
@@ -30,11 +30,12 @@
     display: flex;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid rgb(5 217 232 / 0.14);
-    font-size: 15px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
     font-weight: 600;
   }
   .dim {
-    color: var(--dim);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
   }
 </style>

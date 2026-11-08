@@ -127,7 +127,7 @@
     box-sizing: border-box;
     padding: 0 12px;
     border-radius: 999px;
-    border: 1px solid rgb(5 217 232 / 0.35);
+    border: 1px solid rgb(233 236 242 / 0.1);
     font-size: 15px;
     color: var(--cyan);
   }
@@ -149,14 +149,14 @@
     align-items: center;
     gap: 14px;
     padding: 14px 18px;
-    border-bottom: 1px solid rgb(5 217 232 / 0.08);
+    border-bottom: 1px solid rgb(233 236 242 / 0.03);
     cursor: pointer;
   }
   .row:hover {
-    background: rgb(243 238 255 / 0.03);
+    background: rgb(233 236 242 / 0.03);
   }
   .row.on {
-    background: rgb(255 42 109 / 0.12);
+    background: rgb(143 168 255 / 0.12);
   }
   .row.on::before {
     content: '';
@@ -167,7 +167,6 @@
     width: 3px;
     border-radius: 2px;
     background: var(--magenta);
-    box-shadow: 0 0 6px var(--magenta);
   }
   /* One width for M3U, Xtream and Stalker, so the names line up. */
   .kind {
