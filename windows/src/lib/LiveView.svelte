@@ -4,6 +4,7 @@
   import ChannelLogo from './ChannelLogo.svelte';
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
   import { organizer } from './dialogs.svelte';
+  import { options } from './options.svelte';
   import { friendly } from './errors';
   import { library, listLabel } from './library.svelte';
   import LiveDetails from './LiveDetails.svelte';
@@ -138,6 +139,18 @@
     contextMenu.open(e, entries);
   }
 
+  /** Cinema mode has no sidebar: the list's title picks the tab instead. */
+  function tabMenu(e: MouseEvent) {
+    const entry = (x: SideEntry) => ({ label: x.label, checked: x.id === tab, action: () => (tab = x.id) });
+    contextMenu.open(e, [
+      ...lists.map(entry),
+      ...(categories.length ? [{ heading: t('Categories') }, ...categories.map(entry)] : []),
+      ...(hiddenEntry ? [entry(hiddenEntry)] : []),
+    ]);
+  }
+
+  const toggleCinema = () => options.set('cinema', !options.cinema);
+
   const SORTS: [SortMode, string][] = [
     ['playlist', 'Playlist order'],
     ['name', 'Name'],
@@ -185,6 +198,7 @@
       if (player.current?.item) toggleStar(player.current.item.id);
     } else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
     else if (e.key.toLowerCase() === 'p') void player.togglePip();
+    else if (e.key.toLowerCase() === 't') toggleCinema();
     else if (/^[0-9]$/.test(e.key)) {
       // In a favourites list the numbers are the list's own: 1 is its first channel.
       const rows = list;
@@ -212,12 +226,18 @@
 
 <svelte:window {onkeydown} />
 
-<div class="live">
-  <CategorySidebar {lists} {pinned} {categories} hidden={hiddenEntry} selected={tab} onpick={(id) => (tab = id)} onmenu={sideMenu} onnewlist={() => void newList()} />
+<div class="live" class:cinema={options.cinema}>
+  {#if !options.cinema}
+    <CategorySidebar {lists} {pinned} {categories} hidden={hiddenEntry} selected={tab} onpick={(id) => (tab = id)} onmenu={sideMenu} onnewlist={() => void newList()} />
+  {/if}
 
   <section class="channels" aria-label={caption}>
     <header>
-      <h2>{caption}</h2>
+      {#if options.cinema}
+        <button class="pick" title={t('Lists and categories')} onclick={tabMenu}><h2>{caption}</h2><span class="icon">&#xE70D;</span></button>
+      {:else}
+        <h2>{caption}</h2>
+      {/if}
       <span class="count mono">{list.length}</span>
       <span class="spacer"></span>
       <button class="icon tool" title={t('Order, feeds, countries, categories')} aria-label={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
@@ -258,6 +278,7 @@
           <span class="spacer"></span>
           <button class="icon ctl" aria-label={t('Multi-view: 2 or 4 channels at once')} title={t('Multi-view: 2 or 4 channels at once')} onclick={() => multiview.show()}>&#xF0E2;</button>
           <button class="icon ctl" aria-label={t('Mini player above the other windows (P)')} title={t('Mini player above the other windows (P)')} onclick={() => player.togglePip()}>&#xE8A7;</button>
+          <button class="icon ctl" aria-pressed={options.cinema} aria-label={options.cinema ? t('Leave cinema mode (T)') : t('Cinema mode (T)')} title={options.cinema ? t('Leave cinema mode (T)') : t('Cinema mode (T)')} onclick={toggleCinema}>{options.cinema ? '' : ''}</button>
           <button class="icon ctl" aria-label={t('Fullscreen (F)')} title={t('Fullscreen (F)')} onclick={() => player.expand()}>&#xE740;</button>
         </div>
       </div>
@@ -354,6 +375,23 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .pick {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    margin-left: -10px;
+    padding: 0 10px;
+    border-radius: 9px;
+  }
+  .pick:hover {
+    background: var(--raised);
+  }
+  .pick .icon {
+    font-size: 11px;
+    color: var(--muted);
   }
   .count {
     font-size: 13px;
@@ -502,6 +540,15 @@
     aspect-ratio: 16 / 9;
     border-radius: 14px;
     outline: 1px solid var(--border);
+  }
+  /* Cinema: as wide as the column, unless the window's height runs out first; the details below it. */
+  .cinema .right {
+    container-type: size;
+    padding: 16px 20px;
+  }
+  .cinema .preview {
+    width: min(100%, calc(100cqh * 16 / 9));
+    align-self: center;
   }
   .preview.empty {
     display: grid;

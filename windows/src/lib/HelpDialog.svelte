@@ -29,6 +29,7 @@
         ['Alt ↑ ↓', 'Move in the favourites list'],
         ['R', 'Record'],
         ['P', 'Mini player'],
+        ['T', 'Cinema mode'],
         ['Esc', 'Stop'],
       ],
     ],

@@ -419,6 +419,11 @@ export const FR: Record<string, string> = {
   "Bring it back here": "Revenir ici",
   "Back to the app": "Revenir dans l’app",
   "Close the mini player": "Fermer le mini-lecteur",
+  // Cinema mode
+  "Cinema mode (T)": "Mode cinéma (T)",
+  "Leave cinema mode (T)": "Quitter le mode cinéma (T)",
+  "Cinema mode": "Mode cinéma",
+  "Lists and categories": "Listes et catégories",
   // Search
   "Searching…": "Recherche…",
 };

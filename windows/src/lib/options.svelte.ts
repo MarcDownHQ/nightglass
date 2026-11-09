@@ -12,8 +12,10 @@ class Options {
   zoom = $state<number>(prefs.json('zoom', 1));
   /** Hours between two automatic reloads of the catalogs and guides while the app runs; 0: at launch only. */
   refreshHours = $state<number>(prefs.json('refreshHours', 12));
+  /** Live: the picture as large as the window allows, the channel list still beside it. */
+  cinema = $state<boolean>(prefs.json('cinema', false));
 
-  set<K extends 'startScreen' | 'startFullscreen' | 'zoom' | 'refreshHours'>(key: K, value: (typeof this)[K]) {
+  set<K extends 'startScreen' | 'startFullscreen' | 'zoom' | 'refreshHours' | 'cinema'>(key: K, value: (typeof this)[K]) {
     this[key] = value;
     prefs.setJson(key, value);
     if (key === 'zoom') void this.applyZoom();
