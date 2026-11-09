@@ -1,5 +1,5 @@
-//! libmpv, loaded at runtime from libmpv-2.dll. mpv draws into a child window kept under the
-//! transparent webview, so the UI can sit on top of the video.
+//! libmpv, loaded at runtime (libmpv-2.dll, libmpv.2.dylib). mpv draws into a child window (an NSView
+//! on macOS, see `host_macos`) kept under the transparent webview, so the UI can sit on top of the video.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::Path;
@@ -7,7 +7,11 @@ use std::path::Path;
 use libloading::Library;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "macos")]
+pub use crate::host_macos::*;
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::RECT;
+#[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetClientRect, GetParent, HWND_BOTTOM, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
     SWP_NOSIZE, SWP_NOZORDER, SetParent, SetWindowPos, ShowWindow, WS_CHILD, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
@@ -75,6 +79,8 @@ struct Api {
     wait_event: unsafe extern "C" fn(Handle, f64) -> *mut Event,
     error_string: unsafe extern "C" fn(c_int) -> *const c_char,
     terminate_destroy: unsafe extern "C" fn(Handle),
+    #[cfg(target_os = "macos")]
+    render: Option<crate::host_macos::RenderFns>,
     _lib: Library,
 }
 
@@ -97,6 +103,13 @@ impl Api {
             wait_event: symbol(&lib, "mpv_wait_event")?,
             error_string: symbol(&lib, "mpv_error_string")?,
             terminate_destroy: symbol(&lib, "mpv_terminate_destroy")?,
+            #[cfg(target_os = "macos")]
+            render: Some(crate::host_macos::RenderFns {
+                create: symbol(&lib, "mpv_render_context_create")?,
+                render: symbol(&lib, "mpv_render_context_render")?,
+                update: symbol(&lib, "mpv_render_context_update")?,
+                free: symbol(&lib, "mpv_render_context_free")?,
+            }),
             _lib: lib,
         })
     }
@@ -110,6 +123,8 @@ fn c(s: &str) -> CString {
 pub struct Mpv {
     api: Api,
     handle: Handle,
+    #[cfg(target_os = "macos")]
+    renderer: Option<std::sync::Arc<crate::host_macos::Renderer>>,
 }
 
 // The libmpv client API is thread-safe.
@@ -118,15 +133,26 @@ unsafe impl Sync for Mpv {}
 
 impl Mpv {
     pub fn new(dll: &Path, wid: isize) -> Result<Self, String> {
-        let api = Api::load(dll)?;
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+        let mut api = Api::load(dll)?;
         let handle = unsafe { (api.create)() };
         if handle.is_null() {
             return Err("mpv_create failed".into());
         }
-        let mpv = Mpv { api, handle };
+        #[cfg(target_os = "macos")]
+        let render = api.render.take();
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+        let mut mpv = Mpv {
+            api,
+            handle,
+            #[cfg(target_os = "macos")]
+            renderer: None,
+        };
         let wid = wid.to_string();
+        // macOS: no `wid` there; the render API draws into the host view's layer.
+        let (wid_option, vo) = if cfg!(target_os = "macos") { ("vo", "libmpv") } else { ("wid", wid.as_str()) };
         let options = [
-            ("wid", wid.as_str()),
+            (wid_option, vo),
             // Ignore the user's own mpv.conf and scripts: the app owns every setting.
             ("config", "no"),
             ("load-scripts", "no"),
@@ -141,6 +167,7 @@ impl Mpv {
             // Keep the video window alive between streams, so it never pops above the webview.
             ("force-window", "yes"),
             ("idle", "yes"),
+            #[cfg(not(target_os = "macos"))]
             ("vo", "gpu-next"),
             ("hwdec", "auto-safe"),
             ("background-color", "#000000"),
@@ -156,6 +183,10 @@ impl Mpv {
             }
         }
         mpv.check(unsafe { (mpv.api.initialize)(handle) })?;
+        #[cfg(target_os = "macos")]
+        if let Some(fns) = render {
+            mpv.renderer = Some(crate::host_macos::attach(wid.parse().unwrap_or(0), handle, fns));
+        }
         unsafe { (mpv.api.request_log_messages)(handle, c("warn").as_ptr()) };
         for (i, (name, format)) in OBSERVED.iter().enumerate() {
             unsafe { (mpv.api.observe_property)(handle, i as u64, c(name).as_ptr(), *format) };
@@ -256,6 +287,10 @@ impl Mpv {
 
 impl Drop for Mpv {
     fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(renderer) = &self.renderer {
+            renderer.free();
+        }
         unsafe { (self.api.terminate_destroy)(self.handle) };
     }
 }
@@ -290,6 +325,7 @@ fn cache_start(state: &Value) -> Option<f64> {
 }
 
 /// A bare child window at the bottom of the main window's z-order, for mpv to draw into.
+#[cfg(windows)]
 pub fn video_host(parent: isize) -> isize {
     let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
     unsafe {
@@ -315,25 +351,30 @@ pub fn video_host(parent: isize) -> isize {
 }
 
 /// A child window for a multi-view tile, at `rect` (x, y, width, height in physical pixels).
+#[cfg(windows)]
 pub fn tile_host(parent: isize, rect: [i32; 4]) -> isize {
     let host = video_host(parent);
     move_host(host, rect);
     host
 }
 
+#[cfg(windows)]
 pub fn move_host(host: isize, [x, y, w, h]: [i32; 4]) {
     unsafe { SetWindowPos(host as _, std::ptr::null_mut(), x, y, w.max(1), h.max(1), SWP_NOZORDER | SWP_NOACTIVATE) };
 }
 
+#[cfg(windows)]
 pub fn show_host(host: isize, visible: bool) {
     unsafe { ShowWindow(host as _, if visible { SW_SHOWNA } else { SW_HIDE }) };
 }
 
+#[cfg(windows)]
 pub fn destroy_host(host: isize) {
     unsafe { DestroyWindow(host as _) };
 }
 
 /// Moves the video window into `parent` (the main window, or the PiP one), filling it, under its webview.
+#[cfg(windows)]
 pub fn adopt_host(host: isize, parent: isize) {
     unsafe {
         SetParent(host as _, parent as _);
@@ -344,11 +385,13 @@ pub fn adopt_host(host: isize, parent: isize) {
 }
 
 /// The window the video window is in now.
+#[cfg(windows)]
 pub fn host_parent(host: isize) -> isize {
     unsafe { GetParent(host as _) as isize }
 }
 
 /// Keeps the video window the size of its window's client area.
+#[cfg(windows)]
 pub fn resize_host(host: isize, width: u32, height: u32) {
     unsafe {
         SetWindowPos(host as _, std::ptr::null_mut(), 0, 0, width as i32, height as i32, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);

@@ -18,12 +18,26 @@ tauri-build = { version = "2.7.4", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.12.5", features = [] }
+# macos-private-api: the transparent webview over the video on macOS; nothing on Windows.
+tauri = { version = "2.12.5", features = ["macos-private-api"] }
 tauri-plugin-log = "2"
 libloading = "0.9.0"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_UI_WindowsAndMessaging"] }
 nightglass-core = { version = "0.1.0", path = "../core" }
 url = { version = "2.5.8", features = ["serde"] }
 tauri-plugin-updater = "2.14.1"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow", "NSGraphics"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAOpenGLLayer", "objc2-open-gl", "objc2-core-video", "objc2-core-foundation"] }
+objc2-open-gl = { version = "0.3", default-features = false, features = ["std", "CGLTypes", "CGLCurrent"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase"] }
+security-framework = "3"
+ring = "0.17"
+dispatch2 = "0.3"
