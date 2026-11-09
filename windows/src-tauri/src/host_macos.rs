@@ -160,12 +160,13 @@ impl Renderer {
     fn new(mpv: *mut c_void, fns: RenderFns) -> Result<Self, String> {
         let pf = pixel_format();
         let mut cgl = std::ptr::null_mut();
-        unsafe {
-            CGLCreateContext(pf, std::ptr::null_mut(), NonNull::from(&mut cgl));
+        let error = unsafe {
+            let error = CGLCreateContext(pf, std::ptr::null_mut(), NonNull::from(&mut cgl));
             CGLDestroyPixelFormat(pf);
-        }
+            error
+        };
         if cgl.is_null() {
-            return Err("No OpenGL context".into());
+            return Err(format!("No OpenGL context: {error:?}"));
         }
         let mut init = InitParams { get_proc_address, ctx: std::ptr::null_mut() };
         let mut params = [
@@ -287,9 +288,13 @@ pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Result<Arc<Rende
 
 /// A 3.2 core profile: mpv's renderer wants more than the legacy 2.1 one.
 fn pixel_format() -> CGLPixelFormatObj {
-    let attributes: [u32; 8] = [99, 0x3200, 73, 5, 8, 24, 11, 0]; // profile 3.2 core, accelerated, double buffer, 24-bit colour
+    // Profile 3.2 core, accelerated, double buffer, 24-bit colour; zero-terminated.
+    let attributes: [u32; 7] = [99, 0x3200, 73, 5, 8, 24, 0];
     let (mut pf, mut count) = (std::ptr::null_mut(), 0);
-    unsafe { CGLChoosePixelFormat(NonNull::from(&attributes).cast(), NonNull::from(&mut pf), NonNull::from(&mut count)) };
+    let error = unsafe { CGLChoosePixelFormat(NonNull::from(&attributes).cast(), NonNull::from(&mut pf), NonNull::from(&mut count)) };
+    if pf.is_null() {
+        log::error!("CGLChoosePixelFormat: {error:?}");
+    }
     pf
 }
 

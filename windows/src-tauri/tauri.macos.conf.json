@@ -17,14 +17,45 @@
     ]
   },
   "bundle": {
-    "targets": ["app", "dmg"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
     "resources": {
       "lib/libmpv-2.dll": null,
-      "lib/libmpv-version.txt": null
+      "lib/libmpv-version.txt": null,
+      "lib/macos/libmpv-version.txt": "licenses/libmpv-version.txt"
     },
     "macOS": {
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": false,
+      "frameworks": [
+        "lib/macos/libass.dylib",
+        "lib/macos/libavcodec.dylib",
+        "lib/macos/libavfilter.dylib",
+        "lib/macos/libavformat.dylib",
+        "lib/macos/libavutil.dylib",
+        "lib/macos/libdav1d.dylib",
+        "lib/macos/libfreetype.dylib",
+        "lib/macos/libfribidi.dylib",
+        "lib/macos/libharfbuzz.dylib",
+        "lib/macos/libmbedcrypto.dylib",
+        "lib/macos/libmbedtls.dylib",
+        "lib/macos/libmbedx509.dylib",
+        "lib/macos/libmpv.dylib",
+        "lib/macos/libpng16.dylib",
+        "lib/macos/libswresample.dylib",
+        "lib/macos/libswscale.dylib",
+        "lib/macos/libuchardet.dylib",
+        "lib/macos/libxml2.dylib"
+      ]
     }
   }
 }

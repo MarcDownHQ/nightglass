@@ -40,7 +40,9 @@ fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, 
     // M3U playlists may ask for a user agent and a referrer per channel (`#EXTVLCOPT`).
     mpv.set("user-agent", headers.get("User-Agent").map_or("libmpv", String::as_str))?;
     mpv.set("referrer", headers.get("Referer").map_or("", String::as_str))?;
-    mpv.command(&["loadfile", &url, "replace", "-1", options.as_deref().unwrap_or("")])
+    let options = options.as_deref().unwrap_or("");
+    // mpv before 0.38 (the macOS build is 0.36) has no index argument: options come third there.
+    mpv.command(&["loadfile", &url, "replace", "-1", options]).or_else(|_| mpv.command(&["loadfile", &url, "replace", options]))
 }
 
 #[tauri::command(async)]
@@ -267,11 +269,9 @@ pub fn run() {
             let host = mpv::video_host(main);
             #[cfg(windows)]
             let dll = app.path().resource_dir()?.join("libmpv-2.dll");
+            // In Contents/Frameworks, or lib/macos in dev builds: see build.rs.
             #[cfg(target_os = "macos")]
-            let dll = Some(app.path().resource_dir()?.join("libmpv.2.dylib"))
-                .filter(|p| p.exists())
-                // shortcut: dev builds use Homebrew's libmpv (`brew install mpv`); bundled builds carry their own.
-                .unwrap_or_else(|| "/opt/homebrew/lib/libmpv.2.dylib".into());
+            let dll = std::path::PathBuf::from("@rpath/libmpv.dylib");
             app.manage(Mpv::new(&dll, host)?);
             app.manage(VideoHost(host));
             app.manage(MainWindow(main));

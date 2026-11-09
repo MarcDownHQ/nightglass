@@ -57,11 +57,13 @@ src/         # interface Svelte
 
 `nightglass-core` est le pendant du package Swift `NightglassCore` : mêmes protocoles, mêmes modèles, même format JSON pour les sources (`NG_SEED` est compatible entre les deux apps).
 
-Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant, dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
+Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
 
 ### La vidéo sous l'interface
 
 mpv dessine dans une fenêtre enfant placée tout en bas de la fenêtre principale ([src-tauri/src/mpv.rs](src-tauri/src/mpv.rs)). La page web est transparente : là où elle ne peint rien, on voit la vidéo. L'élément qui porte l'action `videoHole` ([src/lib/video.svelte.ts](src/lib/video.svelte.ts)) découpe ce trou dans le fond et donne à mpv les marges où placer l'image.
+
+Sur macOS, mpv ignore `wid` : il dessine via son API de rendu (OpenGL) dans un calque d'une NSView placée sous la WebView ([src-tauri/src/host_macos.rs](src-tauri/src/host_macos.rs)). Le reste (marges, trou, multivue, PiP) est le même.
 
 ## Prérequis
 
@@ -82,16 +84,28 @@ npm run tauri dev
 
 `npm run tauri build` produit l'installeur dans `target/release/bundle/nsis/`. Il installe pour l'utilisateur courant, dans `%LOCALAPPDATA%\Nightglass`, sans droits administrateur.
 
+### macOS
+
+```sh
+brew install rustup node && rustup default stable
+cd windows
+npm install
+npm run fetch-libmpv:mac   # libmpv et ses bibliothèques, LGPL (media-kit/libmpv-darwin-build), dans src-tauri/lib/macos
+npm run tauri dev
+```
+
+`npm run tauri build -- --target universal-apple-darwin` (après `rustup target add x86_64-apple-darwin`) produit `Nightglass.app` et le `.dmg` dans `target/universal-apple-darwin/release/bundle/`. L'app est signée ad hoc, sans hardened runtime (qui refuserait de charger libmpv signé ad hoc) : sans identité Developer ID ni notarisation, macOS demande au premier lancement de l'autoriser dans Réglages Système → Confidentialité et sécurité.
+
 ## Publier une version
 
-Le workflow [Windows](../.github/workflows/windows.yml) vérifie et construit l'app à chaque PR et à chaque push sur `master` ; l'installeur est dans les artefacts du run. Pour une version :
+Les workflows [Windows](../.github/workflows/windows.yml) et [macOS](../.github/workflows/macos.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur et le `.dmg` sont dans les artefacts des runs. Une version sort pour les deux plateformes à la fois ([Release](../.github/workflows/release.yml)) :
 
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
-2. Pousser un tag `windows-v<version>` (par exemple `windows-v0.2.0`).
-3. Le workflow crée une release **brouillon** avec l'installeur et `latest.json` : la relire sur GitHub, puis la publier.
+2. Pousser un tag `v<version>` (par exemple `v0.5.0`). Les anciens tags `windows-v*` ne déclenchent plus rien.
+3. Le workflow construit les deux apps et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`) et `latest.json` : la relire sur GitHub, puis la publier.
 4. Déclarer l'installeur publié à Microsoft (voir [Faux positif Defender](#faux-positif-defender-à-faire-à-chaque-version)).
 
-Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur, vérifie sa signature et s'installe, puis redémarre.
+Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (ou l'archive `.app` sur Mac), vérifie sa signature et s'installe, puis redémarre. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour les deux.
 
 La signature des mises à jour utilise une paire de clés Tauri :
 

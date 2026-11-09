@@ -21,7 +21,7 @@ struct Tile {
 #[derive(Default)]
 pub struct Tiles(Mutex<HashMap<usize, Tile>>);
 
-/// Where libmpv-2.dll is, for the tiles' instances.
+/// Where libmpv is (libmpv-2.dll, @rpath/libmpv.dylib), for the tiles' instances.
 pub struct MpvDll(pub PathBuf);
 
 /// Plays `url` in tile `index`, made on first use, at `rect` (x, y, width, height in physical pixels).

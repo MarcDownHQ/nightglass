@@ -1,0 +1,51 @@
+# A `v<version>` tag builds both apps and attaches them to one draft release, which stays private until
+# someone publishes it on GitHub. One release for both: the apps' updater reads latest.json from the latest
+# release, so it must list every platform.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+  macos:
+    uses: ./.github/workflows/macos.yml
+    secrets: inherit
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          version=$(jq -r .version windows/src-tauri/tauri.conf.json)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then echo "tag $GITHUB_REF_NAME does not match version $version in tauri.conf.json"; exit 1; fi
+          exe=$(find artifacts -name '*-setup.exe')
+          dmg=$(find artifacts -name '*.dmg')
+          app=$(find artifacts -name '*.app.tar.gz')
+          for f in "$exe" "$exe.sig" "$dmg" "$app" "$app.sig"; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          # What the apps' updater reads, at releases/latest/download/latest.json once the release is published.
+          # The macOS app is universal: one archive for both architectures.
+          jq -n --arg version "$version" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg winsig "$(cat "$exe.sig")" --arg winurl "$base/$(basename "$exe")" \
+            --arg macsig "$(cat "$app.sig")" --arg macurl "$base/$(basename "$app")" \
+            '{version: $version, notes: "Nightglass \($version)", pub_date: $date, platforms: {
+              "windows-x86_64": {signature: $winsig, url: $winurl},
+              "darwin-aarch64": {signature: $macsig, url: $macurl},
+              "darwin-x86_64": {signature: $macsig, url: $macurl}}}' > latest.json
+          gh release create "$GITHUB_REF_NAME" "$exe" "$dmg" "$app" latest.json --draft --title "Nightglass $version" \
+            --notes "Windows 10 and 11 (x64): the installer. macOS 13 or later (Apple silicon and Intel): the .dmg; not notarized, so the first launch must be allowed in System Settings > Privacy & Security. Licences and third-party notices come with both. Installed copies offer this update from their title bar."

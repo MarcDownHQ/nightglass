@@ -11,6 +11,7 @@
     "test": "vitest run",
     "tauri": "tauri",
     "fetch-libmpv": "powershell -ExecutionPolicy Bypass -File scripts/fetch-libmpv.ps1",
+    "fetch-libmpv:mac": "sh scripts/fetch-libmpv.sh",
     "licenses": "cargo about generate -m src-tauri/Cargo.toml about.hbs -o licenses/rust-crates.html"
   },
   "dependencies": {
