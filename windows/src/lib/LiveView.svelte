@@ -568,6 +568,10 @@
   .slim .row {
     padding: 0;
   }
+  /* The scrollbar would take its width on the right only: the logos would sit off-centre. The wheel still scrolls. */
+  .slim .channels :global(.viewport) {
+    scrollbar-width: none;
+  }
   .slim .main {
     justify-content: center;
     padding: 0;
