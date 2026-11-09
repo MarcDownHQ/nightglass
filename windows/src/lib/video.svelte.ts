@@ -6,6 +6,8 @@ export interface HoleRect {
   w: number;
   h: number;
   radius: number;
+  /** The side a scroller cuts: a straight edge there, like the page content it scrolls with. */
+  square?: 'top' | 'bottom';
 }
 
 /** The part of the window where the page lets the video through. */
@@ -66,7 +68,8 @@ export function videoHole(node: HTMLElement, radius = 0) {
     if (key === last && hole.rect) return;
     last = key;
     const h = Math.max(0, bottom - top);
-    hole.set(node, { x: r.left, y: top, w: r.width, h, radius }, h < r.height ? { full: r.height, top: top > r.top } : undefined);
+    const square = top > r.top ? 'top' : bottom < r.bottom ? 'bottom' : undefined;
+    hole.set(node, { x: r.left, y: top, w: r.width, h, radius, square }, square ? { full: r.height, top: square === 'top' } : undefined);
   };
   const observer = new ResizeObserver(update);
   observer.observe(node);
@@ -91,8 +94,10 @@ export function backdropClip(W: number, H: number, ...rects: (HoleRect | null)[]
   return `path(evenodd, "M0 0H${W}V${H}H0Z ${holes.map(roundedRect).join(' ')}")`;
 }
 
-function roundedRect({ x, y, w, h, radius }: HoleRect): string {
+function roundedRect({ x, y, w, h, radius, square }: HoleRect): string {
   const r = Math.min(radius, w / 2, h / 2);
-  const a = (dx: number, dy: number) => `A${r} ${r} 0 0 1 ${dx} ${dy}`;
-  return `M${x + r} ${y}H${x + w - r}${a(x + w, y + r)}V${y + h - r}${a(x + w - r, y + h)}H${x + r}${a(x, y + h - r)}V${y + r}${a(x + r, y)}Z`;
+  const t = square === 'top' ? 0 : r;
+  const b = square === 'bottom' ? 0 : r;
+  const a = (r: number, dx: number, dy: number) => `A${r} ${r} 0 0 1 ${dx} ${dy}`;
+  return `M${x + t} ${y}H${x + w - t}${a(t, x + w, y + t)}V${y + h - b}${a(b, x + w - b, y + h)}H${x + b}${a(b, x, y + h - b)}V${y + t}${a(t, x + t, y)}Z`;
 }
