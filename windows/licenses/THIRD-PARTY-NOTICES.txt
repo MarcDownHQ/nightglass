@@ -37,6 +37,16 @@ The Nightglass executable is compiled from Rust crates (Tauri, reqwest, quick-xm
 others). Their licences and copyright notices are in rust-crates.html, next to this file.
 
 
+libmpv on macOS (Frameworks folder of the app)
+----------------------------------------------
+
+libmpv.dylib and the libraries next to it (FFmpeg, libass, FreeType, HarfBuzz, FriBidi,
+dav1d, uchardet, libpng, libxml2, Mbed TLS) come from media-kit/libmpv-darwin-build
+(https://github.com/media-kit/libmpv-darwin-build), "video-full" build: mpv built with
+-Dgpl=false (LGPL-2.1 or later) and FFmpeg without --enable-gpl (LGPL-3.0 or later). The
+exact build and where its sources are: libmpv-version.txt. The other libraries are each
+under their own permissive or LGPL licence.
+
 Web interface
 -------------
 

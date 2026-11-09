@@ -1,0 +1,55 @@
+# Checks and builds the macOS app (the same Tauri app as windows/), universal: Apple silicon and Intel.
+name: macOS
+
+on:
+  pull_request:
+    paths: ['windows/**', '.github/workflows/macos.yml']
+  push:
+    branches: [master]
+    paths: ['windows/**', '.github/workflows/macos.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - run: npm ci
+      # libmpv and its libraries: dev builds and the bundle both load them (see src-tauri/build.rs).
+      - run: npm run fetch-libmpv:mac
+      - run: npm run check
+      - run: npm test
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # With the update key (not on forks), the app is also packed and signed for the in-app updater (.app.tar.gz and .sig).
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then npm run tauri build -- --target universal-apple-darwin --config src-tauri/tauri.updater.conf.json
+          else npm run tauri build -- --target universal-apple-darwin; fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nightglass-macos
+          path: |
+            windows/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            windows/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz*

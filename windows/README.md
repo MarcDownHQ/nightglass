@@ -57,11 +57,13 @@ src/         # interface Svelte
 
 `nightglass-core` est le pendant du package Swift `NightglassCore` : mêmes protocoles, mêmes modèles, même format JSON pour les sources (`NG_SEED` est compatible entre les deux apps).
 
-Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant, dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
+Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
 
 ### La vidéo sous l'interface
 
 mpv dessine dans une fenêtre enfant placée tout en bas de la fenêtre principale ([src-tauri/src/mpv.rs](src-tauri/src/mpv.rs)). La page web est transparente : là où elle ne peint rien, on voit la vidéo. L'élément qui porte l'action `videoHole` ([src/lib/video.svelte.ts](src/lib/video.svelte.ts)) découpe ce trou dans le fond et donne à mpv les marges où placer l'image.
+
+Sur macOS, mpv ignore `wid` : il dessine via son API de rendu (OpenGL) dans un calque d'une NSView placée sous la WebView ([src-tauri/src/host_macos.rs](src-tauri/src/host_macos.rs)). Le reste (marges, trou, multivue, PiP) est le même.
 
 ## Prérequis
 
@@ -81,6 +83,18 @@ npm run tauri dev
 ```
 
 `npm run tauri build` produit l'installeur dans `target/release/bundle/nsis/`. Il installe pour l'utilisateur courant, dans `%LOCALAPPDATA%\Nightglass`, sans droits administrateur.
+
+### macOS
+
+```sh
+brew install rustup node && rustup default stable
+cd windows
+npm install
+npm run fetch-libmpv:mac   # libmpv et ses bibliothèques, LGPL (media-kit/libmpv-darwin-build), dans src-tauri/lib/macos
+npm run tauri dev
+```
+
+`npm run tauri build -- --target universal-apple-darwin` (après `rustup target add x86_64-apple-darwin`) produit `Nightglass.app` et le `.dmg` dans `target/universal-apple-darwin/release/bundle/`. L'app est signée ad hoc, sans hardened runtime (qui refuserait de charger libmpv signé ad hoc) : sans identité Developer ID ni notarisation, macOS demande au premier lancement de l'autoriser dans Réglages Système → Confidentialité et sécurité.
 
 ## Publier une version
 
