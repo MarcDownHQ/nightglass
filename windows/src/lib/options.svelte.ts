@@ -14,8 +14,10 @@ class Options {
   refreshHours = $state<number>(prefs.json('refreshHours', 12));
   /** Live: the picture as large as the window allows, the channel list still beside it. */
   cinema = $state<boolean>(prefs.json('cinema', false));
+  /** Cinema mode: the channel list down to its logos. */
+  slimList = $state<boolean>(prefs.json('slimList', false));
 
-  set<K extends 'startScreen' | 'startFullscreen' | 'zoom' | 'refreshHours' | 'cinema'>(key: K, value: (typeof this)[K]) {
+  set<K extends 'startScreen' | 'startFullscreen' | 'zoom' | 'refreshHours' | 'cinema' | 'slimList'>(key: K, value: (typeof this)[K]) {
     this[key] = value;
     prefs.setJson(key, value);
     if (key === 'zoom') void this.applyZoom();

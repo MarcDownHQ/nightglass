@@ -424,6 +424,8 @@ export const FR: Record<string, string> = {
   "Leave cinema mode (T)": "Quitter le mode cinéma (T)",
   "Cinema mode": "Mode cinéma",
   "Lists and categories": "Listes et catégories",
+  "Logos only": "Logos seuls",
+  "Show channel names": "Afficher les noms des chaînes",
   // Search
   "Searching…": "Recherche…",
 };

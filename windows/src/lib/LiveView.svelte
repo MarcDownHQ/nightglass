@@ -150,6 +150,7 @@
   }
 
   const toggleCinema = () => options.set('cinema', !options.cinema);
+  const slim = $derived(options.cinema && options.slimList);
 
   const SORTS: [SortMode, string][] = [
     ['playlist', 'Playlist order'],
@@ -226,21 +227,28 @@
 
 <svelte:window {onkeydown} />
 
-<div class="live" class:cinema={options.cinema}>
+<div class="live" class:cinema={options.cinema} class:slim>
   {#if !options.cinema}
     <CategorySidebar {lists} {pinned} {categories} hidden={hiddenEntry} selected={tab} onpick={(id) => (tab = id)} onmenu={sideMenu} onnewlist={() => void newList()} />
   {/if}
 
   <section class="channels" aria-label={caption}>
     <header>
-      {#if options.cinema}
-        <button class="pick" title={t('Lists and categories')} onclick={tabMenu}><h2>{caption}</h2><span class="icon">&#xE70D;</span></button>
+      {#if slim}
+        <button class="icon tool" title={t('Show channel names')} aria-label={t('Show channel names')} onclick={() => options.set('slimList', false)}>&#xE76C;</button>
       {:else}
-        <h2>{caption}</h2>
+        {#if options.cinema}
+          <button class="pick" title={t('Lists and categories')} onclick={tabMenu}><h2>{caption}</h2><span class="icon">&#xE70D;</span></button>
+        {:else}
+          <h2>{caption}</h2>
+        {/if}
+        <span class="count mono">{list.length}</span>
+        <span class="spacer"></span>
+        <button class="icon tool" title={t('Order, feeds, countries, categories')} aria-label={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
+        {#if options.cinema}
+          <button class="icon tool" title={t('Logos only')} aria-label={t('Logos only')} onclick={() => options.set('slimList', true)}>&#xE76B;</button>
+        {/if}
       {/if}
-      <span class="count mono">{list.length}</span>
-      <span class="spacer"></span>
-      <button class="icon tool" title={t('Order, feeds, countries, categories')} aria-label={t('Order, feeds, countries, categories')} onclick={viewMenu}>&#xE71C;</button>
     </header>
     {#key tab}
       <VirtualList items={list} rowHeight={68} key={(c) => c.id} row={channelRow} bind:this={listView} />
@@ -315,6 +323,7 @@
   >
     <button
       class="main"
+      title={slim ? `${ch.number ?? ''} ${displayName(ch.name)}`.trim() : undefined}
       draggable={!!listId}
       onclick={() => store.tune(item)}
       ondblclick={() => player.expand()}
@@ -542,6 +551,27 @@
     outline: 1px solid var(--border);
   }
   /* Cinema: as wide as the column, unless the window's height runs out first; the details below it. */
+  /* Slim list: the logos alone, the name in the tooltip. */
+  .slim .channels {
+    width: 80px;
+  }
+  .slim .channels header {
+    justify-content: center;
+    padding: 0;
+  }
+  .slim .num,
+  .slim .text,
+  .slim .side,
+  .slim .none {
+    display: none;
+  }
+  .slim .row {
+    padding: 0;
+  }
+  .slim .main {
+    justify-content: center;
+    padding: 0;
+  }
   .cinema .right {
     container-type: size;
     padding: 16px 20px;
