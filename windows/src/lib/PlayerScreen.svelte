@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { MAC, t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { dial, nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
@@ -146,7 +146,7 @@
   {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
 
   <div class="hud">
-    <header>
+    <header class:mac={MAC}>
       {#if item}<ChannelLogo channel={item.channel} size={56} />{/if}
       <div class="title">
         <div class="meta">
@@ -310,6 +310,10 @@
     gap: 14px;
     padding: 28px 36px 60px;
     background: linear-gradient(to bottom, rgb(3 4 6 / 0.85), transparent);
+  }
+  /* Below the traffic lights. */
+  header.mac {
+    padding-top: 44px;
   }
   /* Buttons of different heights: one middle line for all. */
   .tools {

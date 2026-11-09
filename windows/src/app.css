@@ -26,9 +26,16 @@
   /* Segoe UI Variable ships with Windows 11; Segoe UI is its Windows 10 fallback. */
   --title: 'NG Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', monospace;
-  --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+  /* NG Icons: the same code points from Fluent UI System Icons, where Segoe is missing (macOS). */
+  --icons: 'Segoe Fluent Icons', 'Segoe MDL2 Assets', 'NG Icons';
 
   color-scheme: dark;
+}
+
+/* Built by scripts/build-icons.py. */
+@font-face {
+  font-family: 'NG Icons';
+  src: url('./assets/ng-icons.woff2') format('woff2');
 }
 
 /* Segoe UI, with its line box moved up: as shipped, its capitals sit 0.065 em below the middle of every line

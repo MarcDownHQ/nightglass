@@ -185,7 +185,7 @@ impl Mpv {
         mpv.check(unsafe { (mpv.api.initialize)(handle) })?;
         #[cfg(target_os = "macos")]
         if let Some(fns) = render {
-            mpv.renderer = Some(crate::host_macos::attach(wid.parse().unwrap_or(0), handle, fns));
+            mpv.renderer = Some(crate::host_macos::attach(wid.parse().unwrap_or(0), handle, fns)?);
         }
         unsafe { (mpv.api.request_log_messages)(handle, c("warn").as_ptr()) };
         for (i, (name, format)) in OBSERVED.iter().enumerate() {

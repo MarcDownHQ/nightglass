@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { MAC, t } from './i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Menu from './Menu.svelte';
   import { nav, SECTIONS } from './nav.svelte';
@@ -32,7 +32,7 @@
   }
 </script>
 
-<header data-tauri-drag-region>
+<header class:mac={MAC} data-tauri-drag-region>
   <h1 data-tauri-drag-region>{title}</h1>
   {#if store.loading.size}<span class="loading">{t('Loading…')}</span>{/if}
   <div class="spacer" data-tauri-drag-region></div>
@@ -59,13 +59,13 @@
     </Menu>
   {/if}
   <button class="pill search" onclick={() => (nav.searching = true)}>
-    <span class="icon">&#xE721;</span><span class="hint">{t('Channels, programmes, movies, series')}</span><kbd>Ctrl K</kbd>
+    <span class="icon">&#xE721;</span><span class="hint">{t('Channels, programmes, movies, series')}</span><kbd>{t('Ctrl K')}</kbd>
   </button>
-  <div class="controls">
+  {#if !MAC}<div class="controls">
     <button class="icon" aria-label={t('Minimize')} onclick={() => win.minimize()}>&#xE921;</button>
     <button class="icon" aria-label={t('Maximize')} onclick={() => win.toggleMaximize()}>&#xE922;</button>
     <button class="icon close" aria-label={t('Close')} onclick={() => win.close()}>&#xE8BB;</button>
-  </div>
+  </div>{/if}
 </header>
 
 <style>
@@ -77,6 +77,10 @@
     gap: 10px;
     padding-left: 28px;
     border-bottom: 1px solid var(--border);
+  }
+  /* No window buttons on the right: the traffic lights are on the left. */
+  header.mac {
+    padding-right: 20px;
   }
   h1 {
     margin: 0;

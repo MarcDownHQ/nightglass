@@ -50,3 +50,7 @@ Fonts and icons
 
 Nightglass uses fonts installed with Windows (Bahnschrift, Cascadia Mono, Segoe Fluent
 Icons); none are shipped with it.
+
+Where Segoe Fluent Icons is missing (macOS), icons come from NG Icons, a subset of
+Fluent UI System Icons (MIT, Copyright (c) 2020 Microsoft Corporation;
+https://github.com/microsoft/fluentui-system-icons) shipped with the app.

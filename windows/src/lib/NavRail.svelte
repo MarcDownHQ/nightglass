@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { MAC, t } from './i18n.svelte';
   import { nav, type Section } from './nav.svelte';
   import { panels } from './dialogs.svelte';
   import { player } from './player.svelte';
@@ -27,7 +27,7 @@
   </button>
 {/snippet}
 
-<nav aria-label={t('Main navigation')} data-tauri-drag-region>
+<nav aria-label={t('Main navigation')} class:mac={MAC} data-tauri-drag-region>
   <div class="brand" aria-hidden="true" data-tauri-drag-region>
     <svg width="22" height="22" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="var(--accent)" /></svg>
   </div>
@@ -47,6 +47,10 @@
     gap: 4px;
     padding: 14px 0 16px;
     border-right: 1px solid var(--border);
+  }
+  /* Below the traffic lights. */
+  nav.mac {
+    padding-top: 40px;
   }
   .brand {
     width: 40px;
