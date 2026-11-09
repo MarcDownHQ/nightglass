@@ -17,27 +17,19 @@ class VideoHole {
   private sent = '';
 
   /**
-   * `rect` is the part in view; `cut`, the element's whole height when its scroller cut it, and on which side.
-   * The video then keeps its full size and slides out of view, instead of shrinking into what is left.
+   * `rect`: the part in view, which the backdrop lets through. `full`: the whole element, where the video window
+   * goes; past the edges of what scrolls it, the backdrop covers it.
    */
-  set(owner: HTMLElement | null, rect: HoleRect | null, cut?: { full: number; top: boolean }) {
+  set(owner: HTMLElement | null, rect: HoleRect | null, full: HoleRect | null = rect) {
     this.owner = owner;
     this.rect = rect;
-    if (!rect || rect.h < 1) return;
-    // mpv places the video with margins relative to its window, which is the whole client area.
-    const W = innerWidth;
-    const H = innerHeight;
-    const margins = [rect.x / W, rect.y / H, (W - rect.x - rect.w) / W, (H - rect.y - rect.h) / H];
-    // mpv fits the video in the part in view: zoomed back to the whole element's size, aligned on the edge still in view.
-    // shortcut: assumes the video is no wider than the element (16:9 TV in a 16:9 preview), else it zooms too far.
-    const zoom = cut && rect.h < cut.full ? Math.log2(cut.full / rect.h) : 0;
-    const align = zoom ? (cut!.top ? 1 : -1) : 0;
-    const key = [...margins, zoom, align].map((m) => m.toFixed(4)).join();
+    if (!full) return;
+    const k = devicePixelRatio;
+    const place = [full.x, full.y, full.w, full.h].map((v) => Math.round(v * k));
+    const key = place.join();
     if (key === this.sent) return;
     this.sent = key;
-    void invoke('mpv_video_rect', { margins });
-    void invoke('mpv_command', { args: ['set', 'video-zoom', String(zoom)] });
-    void invoke('mpv_command', { args: ['set', 'video-align-y', String(align)] });
+    void invoke('video_place', { rect: place });
   }
 
   /** The video's window moved (PiP and back): send the place again, even if unchanged. */
@@ -51,6 +43,9 @@ class VideoHole {
 }
 
 export const hole = new VideoHole();
+
+/** The `update` of each element showing the video: what a scroll moved must follow in the same frame. */
+const followers = new Set<() => void>();
 
 /** Action: the element becomes the window onto the video. */
 export function videoHole(node: HTMLElement, radius = 0) {
@@ -69,8 +64,9 @@ export function videoHole(node: HTMLElement, radius = 0) {
     last = key;
     const h = Math.max(0, bottom - top);
     const square = top > r.top ? 'top' : bottom < r.bottom ? 'bottom' : undefined;
-    hole.set(node, { x: r.left, y: top, w: r.width, h, radius, square }, square ? { full: r.height, top: square === 'top' } : undefined);
+    hole.set(node, { x: r.left, y: top, w: r.width, h, radius, square }, { x: r.left, y: r.top, w: r.width, h: r.height, radius });
   };
+  followers.add(update);
   const observer = new ResizeObserver(update);
   observer.observe(node);
   addEventListener('resize', update);
@@ -82,7 +78,40 @@ export function videoHole(node: HTMLElement, radius = 0) {
       observer.disconnect();
       removeEventListener('resize', update);
       removeEventListener('scroll', update, true);
+      followers.delete(update);
       hole.release(node);
+    },
+  };
+}
+
+/**
+ * Action: the wheel scrolls this element from script, and the video window follows in the same frame. Scrolled by
+ * the browser, the page moves at once and the scroll event, so the video, comes a frame or two after.
+ */
+export function wheelScroll(node: HTMLElement) {
+  let target = 0;
+  let at = 0;
+  let frame = 0;
+  const step = () => {
+    at = Math.abs(target - at) < 0.5 ? target : at + (target - at) * 0.3;
+    node.scrollTop = at;
+    for (const follow of followers) follow();
+    frame = at === target ? 0 : requestAnimationFrame(step);
+  };
+  const onwheel = (e: WheelEvent) => {
+    // The preview's own wheel (volume), and zoom, stay as they are.
+    if (e.defaultPrevented || e.ctrlKey) return;
+    e.preventDefault();
+    if (!frame) target = at = node.scrollTop;
+    const max = node.scrollHeight - node.clientHeight;
+    target = Math.max(0, Math.min(max, target + e.deltaY * (e.deltaMode === 1 ? 40 : 1)));
+    if (!frame) frame = requestAnimationFrame(step);
+  };
+  node.addEventListener('wheel', onwheel, { passive: false });
+  return {
+    destroy() {
+      node.removeEventListener('wheel', onwheel);
+      cancelAnimationFrame(frame);
     },
   };
 }
