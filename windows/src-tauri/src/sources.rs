@@ -1,11 +1,13 @@
-//! Sources hold provider passwords: the whole list lives in one file encrypted with DPAPI for the
-//! current Windows user, never in plain text.
+//! Sources hold provider passwords: the whole list lives in one file encrypted for the current user
+//! (DPAPI on Windows; on macOS with a key kept in the login keychain), never in plain text.
 
 use std::path::{Path, PathBuf};
 
 use nightglass_core::Source;
 use tauri::{AppHandle, Manager};
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::LocalFree;
+#[cfg(windows)]
 use windows_sys::Win32::Security::Cryptography::{
     CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
@@ -19,7 +21,7 @@ pub fn file(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn load(path: &Path) -> Vec<Source> {
     let Ok(sealed) = std::fs::read(path) else { return Vec::new() };
-    match dpapi(&sealed, false).map(|json| serde_json::from_slice(&json)) {
+    match protect(&sealed, false).map(|json| serde_json::from_slice(&json)) {
         Ok(Ok(sources)) => sources,
         Ok(Err(e)) => {
             log::error!("{}: {e}", path.display());
@@ -34,7 +36,7 @@ pub fn load(path: &Path) -> Vec<Source> {
 
 pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
     let json = serde_json::to_vec(sources).map_err(|e| e.to_string())?;
-    let sealed = dpapi(&json, true)?;
+    let sealed = protect(&json, true)?;
     std::fs::create_dir_all(path.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
     // Write then rename, so a crash never leaves half a file.
     let tmp = path.with_extension("tmp");
@@ -64,7 +66,9 @@ pub fn settings_import(path: PathBuf) -> Result<(Vec<Source>, serde_json::Value)
     Ok((sources, doc["prefs"].take()))
 }
 
-pub fn dpapi(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
+/// Encrypts (or decrypts) `data` so that only the current user can read it.
+#[cfg(windows)]
+pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
     let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
     let null = std::ptr::null();
@@ -81,6 +85,97 @@ pub fn dpapi(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     let out = unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) }.to_vec();
     unsafe { LocalFree(output.pbData as _) };
     Ok(out)
+}
+
+#[cfg(target_os = "macos")]
+pub use keychain::protect;
+
+#[cfg(target_os = "macos")]
+mod keychain {
+    use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
+    use ring::rand::{SecureRandom, SystemRandom};
+    #[cfg(not(debug_assertions))]
+    use security_framework::passwords::{get_generic_password, set_generic_password};
+
+    const SERVICE: &str = "com.marcdownhq.nightglass";
+    #[cfg(not(debug_assertions))]
+    const ACCOUNT: &str = "data-key";
+    #[cfg(not(debug_assertions))]
+    const NOT_FOUND: i32 = -25300; // errSecItemNotFound
+
+    /// Read once per launch: each keychain read may ask the user.
+    static KEY: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+    fn key() -> Result<LessSafeKey, String> {
+        let bytes = match KEY.get() {
+            Some(bytes) => bytes,
+            None => {
+                let bytes = stored_key()?;
+                KEY.get_or_init(|| bytes)
+            }
+        };
+        let key = UnboundKey::new(&CHACHA20_POLY1305, bytes).map_err(|_| "Bad data key".to_string())?;
+        Ok(LessSafeKey::new(key))
+    }
+
+    fn new_key() -> Result<Vec<u8>, String> {
+        let mut bytes = vec![0; 32];
+        SystemRandom::new().fill(&mut bytes).map_err(|_| "No randomness".to_string())?;
+        Ok(bytes)
+    }
+
+    /// The user's data key, made on first use. Any other keychain error (access denied…) fails rather than replace it.
+    #[cfg(not(debug_assertions))]
+    fn stored_key() -> Result<Vec<u8>, String> {
+        match get_generic_password(SERVICE, ACCOUNT) {
+            Ok(bytes) => Ok(bytes),
+            Err(e) if e.code() == NOT_FOUND => {
+                let bytes = new_key()?;
+                set_generic_password(SERVICE, ACCOUNT, &bytes).map_err(|e| e.to_string())?;
+                Ok(bytes)
+            }
+            Err(e) => Err(format!("Keychain: {e}")),
+        }
+    }
+
+    /// Dev builds: every rebuild is a new unsigned binary to the keychain, which would ask for the password each
+    /// time; the key lives instead in a file only the user can read, apart from a release build's data.
+    #[cfg(debug_assertions)]
+    fn stored_key() -> Result<Vec<u8>, String> {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+        let path = std::path::Path::new(&home).join("Library/Application Support").join(SERVICE).join("dev-data-key");
+        if let Ok(bytes) = std::fs::read(&path) {
+            return Ok(bytes);
+        }
+        let bytes = new_key()?;
+        std::fs::create_dir_all(path.parent().expect("key dir")).map_err(|e| e.to_string())?;
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        file.write_all(&bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    }
+
+    /// Encrypts (or decrypts) `data` so that only the current user can read it: a random nonce, then the sealed data.
+    pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
+        let key = key()?;
+        if encrypt {
+            let mut nonce = [0; NONCE_LEN];
+            SystemRandom::new().fill(&mut nonce).map_err(|_| "No randomness".to_string())?;
+            let mut out = data.to_vec();
+            key.seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut out).map_err(|_| "Encryption failed".to_string())?;
+            return Ok([&nonce[..], &out].concat());
+        }
+        if data.len() < NONCE_LEN {
+            return Err("Truncated data".into());
+        }
+        let (nonce, sealed) = data.split_at(NONCE_LEN);
+        let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| "Bad nonce".to_string())?;
+        let mut buf = sealed.to_vec();
+        let plain = key.open_in_place(nonce, Aad::empty(), &mut buf).map_err(|_| "Decryption failed".to_string())?;
+        Ok(plain.to_vec())
+    }
 }
 
 #[cfg(test)]

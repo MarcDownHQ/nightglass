@@ -1,4 +1,6 @@
 mod cache;
+#[cfg(target_os = "macos")]
+mod host_macos;
 mod mpv;
 mod sources;
 mod tiles;
@@ -11,6 +13,17 @@ use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Series, Source
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
+/// A window's native handle, the parent of video windows: its HWND, or its content NSView on macOS.
+macro_rules! native {
+    ($window:expr) => {{
+        #[cfg(windows)]
+        let handle = $window.hwnd().map(|h| h.0 as isize);
+        #[cfg(target_os = "macos")]
+        let handle = $window.ns_view().map(|v| v as isize);
+        handle
+    }};
+}
+
 /// The child window mpv draws into.
 pub struct VideoHost(pub isize);
 
@@ -20,7 +33,8 @@ pub struct MainWindow(pub isize);
 /// How far back the guide keeps programmes: the replay window of most Xtream servers.
 const PAST: i64 = 3 * 86_400;
 
-#[tauri::command]
+// mpv commands run off the main thread (`async`): on macOS, mpv's video output waits on the main thread, which would deadlock.
+#[tauri::command(async)]
 /// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
 fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, options: Option<String>) -> Result<(), String> {
     // M3U playlists may ask for a user agent and a referrer per channel (`#EXTVLCOPT`).
@@ -29,18 +43,18 @@ fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, 
     mpv.command(&["loadfile", &url, "replace", "-1", options.as_deref().unwrap_or("")])
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn mpv_command(mpv: State<'_, Mpv>, args: Vec<String>) -> Result<(), String> {
     mpv.command(&args.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn mpv_set(mpv: State<'_, Mpv>, name: String, value: String) -> Result<(), String> {
     mpv.set(&name, &value)
 }
 
 /// Where the video goes, as margins relative to the window: [left, top, right, bottom].
-#[tauri::command]
+#[tauri::command(async)]
 fn mpv_video_rect(mpv: State<'_, Mpv>, margins: [f64; 4]) -> Result<(), String> {
     for (side, value) in ["left", "top", "right", "bottom"].iter().zip(margins) {
         mpv.set(&format!("video-margin-ratio-{side}"), &value.clamp(0.0, 1.0).to_string())?;
@@ -76,7 +90,7 @@ async fn pip_open(app: AppHandle, mpv: State<'_, Mpv>) -> Result<(), String> {
     for side in ["left", "top", "right", "bottom"] {
         mpv.set(&format!("video-margin-ratio-{side}"), "0")?;
     }
-    mpv::adopt_host(app.state::<VideoHost>().0, pip.hwnd().map_err(|e| e.to_string())?.0 as isize);
+    mpv::adopt_host(app.state::<VideoHost>().0, native!(pip).map_err(|e| e.to_string())?);
     Ok(())
 }
 
@@ -249,9 +263,15 @@ pub fn run() {
                 app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
             }
             let window = app.get_webview_window("main").expect("main window");
-            let main = window.hwnd()?.0 as isize;
+            let main = native!(window)?;
             let host = mpv::video_host(main);
+            #[cfg(windows)]
             let dll = app.path().resource_dir()?.join("libmpv-2.dll");
+            #[cfg(target_os = "macos")]
+            let dll = Some(app.path().resource_dir()?.join("libmpv.2.dylib"))
+                .filter(|p| p.exists())
+                // shortcut: dev builds use Homebrew's libmpv (`brew install mpv`); bundled builds carry their own.
+                .unwrap_or_else(|| "/opt/homebrew/lib/libmpv.2.dylib".into());
             app.manage(Mpv::new(&dll, host)?);
             app.manage(VideoHost(host));
             app.manage(MainWindow(main));
@@ -266,7 +286,7 @@ pub fn run() {
             // The video window follows the size of the window it is in: the main one, or the PiP one.
             WindowEvent::Resized(size) => {
                 if let Some(host) = window.try_state::<VideoHost>()
-                    && window.hwnd().is_ok_and(|h| mpv::host_parent(host.0) == h.0 as isize)
+                    && native!(window).is_ok_and(|h| mpv::host_parent(host.0) == h)
                 {
                     mpv::resize_host(host.0, size.width, size.height);
                 }
