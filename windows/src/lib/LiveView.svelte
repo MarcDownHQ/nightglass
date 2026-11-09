@@ -296,11 +296,13 @@
         {#if dial.digits}<div class="dial"><NeonText text={dial.digits} size={90} /></div>{/if}
       </div>
     {/if}
-    <LiveDetails
-      item={player.current?.item}
-      favorite={!!player.current?.item && starred(player.current.item.id)}
-      ontogglefavorite={() => player.current?.item && toggleStar(player.current.item.id)}
-    />
+    <div class="below">
+      <LiveDetails
+        item={player.current?.item}
+        favorite={!!player.current?.item && starred(player.current.item.id)}
+        ontogglefavorite={() => player.current?.item && toggleStar(player.current.item.id)}
+      />
+    </div>
   </section>
 </div>
 
@@ -576,13 +578,21 @@
     justify-content: center;
     padding: 0;
   }
+  /* The video never scrolls: it lives under the page and would trail a frame behind it. The details scroll on their own. */
   .cinema .right {
     container-type: size;
+    overflow: hidden;
     padding: 16px 20px;
   }
+  /* Room left below for the channel's name and the top of “Up next”. */
   .cinema .preview {
-    width: min(100%, calc(100cqh * 16 / 9));
+    width: min(100%, calc((100cqh - 130px) * 16 / 9));
     align-self: center;
+  }
+  .cinema .below {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
   .preview.empty {
     display: grid;
