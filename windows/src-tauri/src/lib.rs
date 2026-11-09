@@ -55,18 +55,19 @@ fn mpv_set(mpv: State<'_, Mpv>, name: String, value: String) -> Result<(), Strin
     mpv.set(&name, &value)
 }
 
-/// Where the video goes, as margins relative to the window: [left, top, right, bottom].
-#[tauri::command(async)]
-fn mpv_video_rect(mpv: State<'_, Mpv>, margins: [f64; 4]) -> Result<(), String> {
-    for (side, value) in ["left", "top", "right", "bottom"].iter().zip(margins) {
-        mpv.set(&format!("video-margin-ratio-{side}"), &value.clamp(0.0, 1.0).to_string())?;
+/// Where the video goes in the main window: x, y, width, height in physical pixels. The video window
+/// itself moves, mpv's picture stays as it is: nothing to redraw, so it keeps up with a scrolling page.
+#[tauri::command]
+fn video_place(host: State<'_, VideoHost>, main: State<'_, MainWindow>, rect: [i32; 4]) {
+    // In the PiP window it fills that window instead.
+    if mpv::host_parent(host.0) == main.0 {
+        mpv::move_host(host.0, rect);
     }
-    Ok(())
 }
 
 /// Picture in picture: a small window above the others that the video moves into, leaving the main window free.
 #[tauri::command]
-async fn pip_open(app: AppHandle, mpv: State<'_, Mpv>) -> Result<(), String> {
+async fn pip_open(app: AppHandle) -> Result<(), String> {
     if app.get_webview_window("pip").is_some() {
         return Ok(());
     }
@@ -88,10 +89,6 @@ async fn pip_open(app: AppHandle, mpv: State<'_, Mpv>) -> Result<(), String> {
         builder = builder.position(right - w - 24.0, bottom - h - 64.0);
     }
     let pip = builder.build().map_err(|e| e.to_string())?;
-    // The whole PiP window is picture.
-    for side in ["left", "top", "right", "bottom"] {
-        mpv.set(&format!("video-margin-ratio-{side}"), "0")?;
-    }
     mpv::adopt_host(app.state::<VideoHost>().0, native!(pip).map_err(|e| e.to_string())?);
     Ok(())
 }
@@ -283,8 +280,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // The video window follows the size of the window it is in: the main one, or the PiP one.
-            WindowEvent::Resized(size) => {
+            // In the PiP window, the video window fills it. In the main one the page places it (`video_place`).
+            WindowEvent::Resized(size) if window.label() == "pip" => {
                 if let Some(host) = window.try_state::<VideoHost>()
                     && native!(window).is_ok_and(|h| mpv::host_parent(host.0) == h)
                 {
@@ -304,7 +301,7 @@ pub fn run() {
             mpv_play,
             mpv_command,
             mpv_set,
-            mpv_video_rect,
+            video_place,
             pip_open,
             pip_close,
             sources_load,

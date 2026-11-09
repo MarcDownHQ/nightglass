@@ -20,7 +20,7 @@
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
   import { displayName, progress, qualityTag } from './theme';
-  import { videoHole } from './video.svelte';
+  import { videoHole, wheelScroll } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
   import Volume from './Volume.svelte';
 
@@ -258,7 +258,7 @@
     {/if}
   </section>
 
-  <section class="right">
+  <section class="right" use:wheelScroll>
     {#if player.current && player.pip}
       <div class="preview empty">
         <div class="status">
