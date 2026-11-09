@@ -98,14 +98,14 @@ npm run tauri dev
 
 ## Publier une version
 
-Le workflow [Windows](../.github/workflows/windows.yml) vérifie et construit l'app à chaque PR et à chaque push sur `master` ; l'installeur est dans les artefacts du run. Pour une version :
+Les workflows [Windows](../.github/workflows/windows.yml) et [macOS](../.github/workflows/macos.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur et le `.dmg` sont dans les artefacts des runs. Une version sort pour les deux plateformes à la fois ([Release](../.github/workflows/release.yml)) :
 
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
-2. Pousser un tag `windows-v<version>` (par exemple `windows-v0.2.0`).
-3. Le workflow crée une release **brouillon** avec l'installeur et `latest.json` : la relire sur GitHub, puis la publier.
+2. Pousser un tag `v<version>` (par exemple `v0.5.0`). Les anciens tags `windows-v*` ne déclenchent plus rien.
+3. Le workflow construit les deux apps et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`) et `latest.json` : la relire sur GitHub, puis la publier.
 4. Déclarer l'installeur publié à Microsoft (voir [Faux positif Defender](#faux-positif-defender-à-faire-à-chaque-version)).
 
-Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur, vérifie sa signature et s'installe, puis redémarre.
+Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (ou l'archive `.app` sur Mac), vérifie sa signature et s'installe, puis redémarre. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour les deux.
 
 La signature des mises à jour utilise une paire de clés Tauri :
 

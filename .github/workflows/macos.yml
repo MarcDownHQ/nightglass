@@ -1,4 +1,5 @@
 # Checks and builds the macOS app (the same Tauri app as windows/), universal: Apple silicon and Intel.
+# Releases (a `v*` tag) run it from release.yml.
 name: macOS
 
 on:
@@ -8,6 +9,7 @@ on:
     branches: [master]
     paths: ['windows/**', '.github/workflows/macos.yml']
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
