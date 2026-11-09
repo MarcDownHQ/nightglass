@@ -14,9 +14,13 @@ use dispatch2::run_on_main;
 use objc2::rc::Retained;
 use objc2::{AllocAnyThread, DefinedClass, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{NSAutoresizingMaskOptions, NSView, NSWindowOrderingMode};
+use objc2_core_graphics::CGColor;
 use objc2_core_video::CVTimeStamp;
 use objc2_foundation::{NSObject, NSPoint, NSRect, NSSize};
-use objc2_open_gl::{CGLChoosePixelFormat, CGLContextObj, CGLPixelFormatObj, CGLSetCurrentContext};
+use objc2_open_gl::{
+    CGLChoosePixelFormat, CGLContextObj, CGLCreateContext, CGLDestroyPixelFormat, CGLPixelFormatObj, CGLReleaseContext, CGLRetainContext,
+    CGLSetCurrentContext,
+};
 use objc2_quartz_core::{CALayer, CAOpenGLLayer};
 
 fn view<'a>(ptr: isize) -> &'a NSView {
@@ -137,11 +141,13 @@ struct State {
     ctx: *mut c_void,
     cgl: CGLContextObj,
     freed: bool,
+    /// The size last drawn at, in pixels: a layer resized loses its picture, so it must be drawn again.
+    drawn: (c_int, c_int),
 }
 
-/// One mpv instance's drawing: made on the layer's first draw, in its GL context; freed before mpv is destroyed.
+/// One mpv instance's drawing, in a GL context of its own that the layer draws with. Made with the instance, before
+/// any file plays (mpv's video output fails without it); freed before mpv is destroyed.
 pub struct Renderer {
-    mpv: usize,
     fns: RenderFns,
     state: Mutex<State>,
 }
@@ -151,38 +157,54 @@ unsafe impl Send for Renderer {}
 unsafe impl Sync for Renderer {}
 
 impl Renderer {
-    fn wants_frame(&self) -> bool {
-        let Ok(state) = self.state.lock() else { return false };
-        !state.freed && (state.ctx.is_null() || unsafe { (self.fns.update)(state.ctx) } & UPDATE_FRAME != 0)
+    fn new(mpv: *mut c_void, fns: RenderFns) -> Result<Self, String> {
+        let pf = pixel_format();
+        let mut cgl = std::ptr::null_mut();
+        unsafe {
+            CGLCreateContext(pf, std::ptr::null_mut(), NonNull::from(&mut cgl));
+            CGLDestroyPixelFormat(pf);
+        }
+        if cgl.is_null() {
+            return Err("No OpenGL context".into());
+        }
+        let mut init = InitParams { get_proc_address, ctx: std::ptr::null_mut() };
+        let mut params = [
+            Param { kind: PARAM_API_TYPE, data: c"opengl".as_ptr() as *mut c_void },
+            Param { kind: PARAM_OPENGL_INIT_PARAMS, data: (&raw mut init).cast() },
+            Param { kind: 0, data: std::ptr::null_mut() },
+        ];
+        let mut ctx = std::ptr::null_mut();
+        let code = unsafe {
+            CGLSetCurrentContext(cgl);
+            let code = (fns.create)(&mut ctx, mpv, params.as_mut_ptr());
+            CGLSetCurrentContext(std::ptr::null_mut());
+            code
+        };
+        if code < 0 {
+            unsafe { CGLReleaseContext(cgl) };
+            return Err(format!("mpv_render_context_create: {code}"));
+        }
+        Ok(Renderer { fns, state: Mutex::new(State { ctx, cgl, freed: false, drawn: (0, 0) }) })
     }
 
-    fn draw(&self, cgl: CGLContextObj) {
+    fn wants_frame(&self, size: (c_int, c_int)) -> bool {
+        let Ok(state) = self.state.lock() else { return false };
+        // mpv's update first: it must be read each time, or its next frames are not announced.
+        !state.freed && (unsafe { (self.fns.update)(state.ctx) } & UPDATE_FRAME != 0 || state.drawn != size)
+    }
+
+    /// In the layer's draw, with our context current (see `copyCGLContextForPixelFormat:`).
+    fn draw(&self) {
         let Ok(mut state) = self.state.lock() else { return };
         if state.freed {
             return;
-        }
-        if state.ctx.is_null() {
-            let mut init = InitParams { get_proc_address, ctx: std::ptr::null_mut() };
-            let mut params = [
-                Param { kind: PARAM_API_TYPE, data: c"opengl".as_ptr() as *mut c_void },
-                Param { kind: PARAM_OPENGL_INIT_PARAMS, data: (&raw mut init).cast() },
-                Param { kind: 0, data: std::ptr::null_mut() },
-            ];
-            let mut ctx = std::ptr::null_mut();
-            let code = unsafe { (self.fns.create)(&mut ctx, self.mpv as *mut c_void, params.as_mut_ptr()) };
-            if code < 0 {
-                log::error!("mpv_render_context_create: {code}");
-                state.freed = true;
-                return;
-            }
-            state.ctx = ctx;
-            state.cgl = cgl;
         }
         let (mut fbo, mut viewport) = (0, [0; 4]);
         unsafe {
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &mut fbo);
             glGetIntegerv(GL_VIEWPORT, viewport.as_mut_ptr());
         }
+        state.drawn = (viewport[2], viewport[3]);
         let mut target = Fbo { fbo, w: viewport[2], h: viewport[3], internal_format: 0 };
         let mut flip: c_int = 1;
         let mut params = [
@@ -196,13 +218,15 @@ impl Renderer {
     /// Must come before `mpv_terminate_destroy`, which waits for it.
     pub fn free(&self) {
         let Ok(mut state) = self.state.lock() else { return };
-        if !state.ctx.is_null() {
-            unsafe {
-                CGLSetCurrentContext(state.cgl);
-                (self.fns.free)(state.ctx);
-                CGLSetCurrentContext(std::ptr::null_mut());
-            }
-            state.ctx = std::ptr::null_mut();
+        if state.freed {
+            return;
+        }
+        unsafe {
+            CGLSetCurrentContext(state.cgl);
+            (self.fns.free)(state.ctx);
+            CGLSetCurrentContext(std::ptr::null_mut());
+            // The layer keeps its own reference until it goes.
+            CGLReleaseContext(state.cgl);
         }
         state.freed = true;
     }
@@ -217,46 +241,56 @@ define_class!(
     impl VideoLayer {
         #[unsafe(method(canDrawInCGLContext:pixelFormat:forLayerTime:displayTime:))]
         fn can_draw(&self, _ctx: CGLContextObj, _pf: CGLPixelFormatObj, _t: f64, _ts: *const CVTimeStamp) -> bool {
-            self.ivars().wants_frame()
+            let (size, k) = (self.bounds().size, self.contentsScale());
+            self.ivars().wants_frame(((size.width * k).round() as c_int, (size.height * k).round() as c_int))
         }
 
         #[unsafe(method(drawInCGLContext:pixelFormat:forLayerTime:displayTime:))]
         fn draw_in(&self, ctx: CGLContextObj, pf: CGLPixelFormatObj, t: f64, ts: *const CVTimeStamp) {
-            self.ivars().draw(ctx);
+            self.ivars().draw();
             // Flushes the frame.
             let _: () = unsafe { msg_send![super(self), drawInCGLContext: ctx, pixelFormat: pf, forLayerTime: t, displayTime: ts] };
         }
 
-        /// A 3.2 core profile: mpv's renderer wants more than the legacy 2.1 one.
         #[unsafe(method(copyCGLPixelFormatForDisplayMask:))]
-        fn pixel_format(&self, _mask: u32) -> CGLPixelFormatObj {
-            let attributes: [u32; 8] = [99, 0x3200, 73, 5, 8, 24, 11, 0]; // profile 3.2 core, accelerated, double buffer, 24-bit colour
-            let (mut pf, mut count) = (std::ptr::null_mut(), 0);
-            unsafe { CGLChoosePixelFormat(NonNull::from(&attributes).cast(), NonNull::from(&mut pf), NonNull::from(&mut count)) };
-            pf
+        fn copy_pixel_format(&self, _mask: u32) -> CGLPixelFormatObj {
+            pixel_format()
+        }
+
+        /// The renderer's own context, which mpv's render context lives in.
+        #[unsafe(method(copyCGLContextForPixelFormat:))]
+        fn copy_context(&self, _pf: CGLPixelFormatObj) -> CGLContextObj {
+            let cgl = self.ivars().state.lock().map_or(std::ptr::null_mut(), |s| s.cgl);
+            unsafe { CGLRetainContext(cgl) }
         }
     }
 );
 
 /// Hosts mpv's drawing in `host`'s layer; the renderer is mpv's to free.
-pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Arc<Renderer> {
-    let renderer = Arc::new(Renderer {
-        mpv: mpv as usize,
-        fns,
-        state: Mutex::new(State { ctx: std::ptr::null_mut(), cgl: std::ptr::null_mut(), freed: false }),
-    });
+pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Result<Arc<Renderer>, String> {
+    let renderer = Arc::new(Renderer::new(mpv, fns)?);
     let shared = renderer.clone();
     run_on_main(move |_| {
         let layer: Retained<VideoLayer> = unsafe { msg_send![super(VideoLayer::alloc().set_ivars(shared)), init] };
         // Polled each display refresh; draws only when mpv has a new frame.
         layer.setAsynchronous(true);
         layer.setNeedsDisplayOnBoundsChange(true);
+        // Black until mpv's first frame, like the video window on Windows: never the desktop through the page's hole.
+        layer.setBackgroundColor(Some(&CGColor::new_srgb(0.0, 0.0, 0.0, 1.0)));
         let host = view(host);
         host.setLayer(Some(&layer));
         host.setWantsLayer(true);
         fit_scale(host);
     });
-    renderer
+    Ok(renderer)
+}
+
+/// A 3.2 core profile: mpv's renderer wants more than the legacy 2.1 one.
+fn pixel_format() -> CGLPixelFormatObj {
+    let attributes: [u32; 8] = [99, 0x3200, 73, 5, 8, 24, 11, 0]; // profile 3.2 core, accelerated, double buffer, 24-bit colour
+    let (mut pf, mut count) = (std::ptr::null_mut(), 0);
+    unsafe { CGLChoosePixelFormat(NonNull::from(&attributes).cast(), NonNull::from(&mut pf), NonNull::from(&mut count)) };
+    pf
 }
 
 /// Draw at the screen's resolution (Retina or not).

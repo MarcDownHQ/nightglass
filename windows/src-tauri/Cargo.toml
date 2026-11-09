@@ -35,7 +35,8 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Secur
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow", "NSGraphics"] }
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
-objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAOpenGLLayer", "objc2-open-gl", "objc2-core-video", "objc2-core-foundation"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAOpenGLLayer", "objc2-open-gl", "objc2-core-video", "objc2-core-foundation", "objc2-core-graphics"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColor"] }
 objc2-open-gl = { version = "0.3", default-features = false, features = ["std", "CGLTypes", "CGLCurrent"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase"] }
 security-framework = "3"

@@ -20,9 +20,19 @@ class I18n {
 
 export const i18n = new I18n();
 
+/** macOS: ⌘ stands for Ctrl in shortcuts, and the window keeps its own buttons (traffic lights). */
+export const MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac OS');
+
+/** The shortcut modifier pressed: Ctrl, or ⌘ on macOS. */
+export function mod(e: KeyboardEvent): boolean {
+  return e.ctrlKey || (MAC && e.metaKey);
+}
+
 /** `text` in the user's language, with `{name}` placeholders filled from `vars`. */
 export function t(text: string, vars?: Record<string, string | number>): string {
-  const out = (i18n.lang === 'fr' && FR[text]) || text;
+  let out = (i18n.lang === 'fr' && FR[text]) || text;
+  // Shortcut labels are written for Windows: "Ctrl K", "Ctrl+.", "Alt ↑ ↓".
+  if (MAC) out = out.replace(/\bCtrl[ +]?/g, '⌘').replace(/\bAlt /g, '⌥');
   return vars ? out.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : out;
 }
 

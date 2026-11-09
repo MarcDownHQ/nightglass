@@ -1,4 +1,4 @@
-import { t } from './i18n.svelte';
+import { MAC, t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -174,7 +174,8 @@ class Player {
     void (this.pip ? invoke('pip_close') : this.leaveFullscreen());
   }
 
-  /** Fullscreen playback: the whole screen, unless the window already filled it. */
+  /** Fullscreen playback: the whole screen, unless the window already filled it. On macOS, the whole window:
+   * its fullscreen is a separate Space taking over the screen. */
   async expand() {
     if (this.pip) {
       await invoke('pip_close');
@@ -183,7 +184,7 @@ class Player {
     if (!this.current || this.expanded) return;
     this.wasFullscreen = await win.isFullscreen();
     this.expanded = true;
-    if (!this.wasFullscreen) await win.setFullscreen(true);
+    if (!this.wasFullscreen && !MAC) await win.setFullscreen(true);
   }
 
   /** Back to the list: live TV keeps playing in the preview, a movie stops. */
@@ -195,7 +196,7 @@ class Player {
   private async leaveFullscreen() {
     if (!this.expanded) return;
     this.expanded = false;
-    if (!this.wasFullscreen) await win.setFullscreen(false);
+    if (!this.wasFullscreen && !MAC) await win.setFullscreen(false);
   }
 
   /** Again, after an error: the same stream from the start. */

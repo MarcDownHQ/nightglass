@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './lib/i18n.svelte';
+  import { mod, t } from './lib/i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
@@ -49,16 +49,16 @@
 
   async function onkeydown(e: KeyboardEvent) {
     const n = Number(e.key);
-    if (e.ctrlKey && e.key === '.') player.stop();
-    else if (e.ctrlKey && n >= 1 && n <= SECTIONS.length) {
+    if (mod(e) && e.key === '.') player.stop();
+    else if (mod(e) && n >= 1 && n <= SECTIONS.length) {
       nav.searching = false;
       nav.section = SECTIONS[n - 1].id;
       void player.collapse();
-    } else if (e.ctrlKey && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
+    } else if (mod(e) && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
     else if (e.key === 'F11') await win.setFullscreen(!(await win.isFullscreen()));
-    else if (e.ctrlKey && (e.key === '+' || e.key === '=')) options.stepZoom(0.1);
-    else if (e.ctrlKey && e.key === '-') options.stepZoom(-0.1);
-    else if (e.ctrlKey && e.key === '0') options.set('zoom', 1);
+    else if (mod(e) && (e.key === '+' || e.key === '=')) options.stepZoom(0.1);
+    else if (mod(e) && e.key === '-') options.stepZoom(-0.1);
+    else if (mod(e) && e.key === '0') options.set('zoom', 1);
     else if (e.key === 'F1' || (e.key === '?' && !typing(e) && !nav.searching)) panels.help = !panels.help;
     else if (e.ctrlKey || e.altKey || e.metaKey || nav.searching || typing(e) || e.defaultPrevented) return;
     else if (e.key === '+' || e.key === '=') player.setVolume(library.volume + 5);
