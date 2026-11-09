@@ -1,10 +1,10 @@
-# Nightglass pour Windows
+# Nightglass pour Windows et macOS
 
-Portage Windows de Nightglass : **Tauri 2** (Rust) pour l'app, **Svelte 5** pour l'interface, **libmpv** pour la lecture (FFmpeg, décodage GPU d3d11va, HDR).
+**Tauri 2** (Rust) pour l'app, **Svelte 5** pour l'interface, **libmpv** pour la lecture (FFmpeg, décodage GPU d3d11va sous Windows, VideoToolbox sous macOS). Le dossier s'appelle `windows/` pour des raisons historiques : la même app tourne sous macOS (voir [macOS](#macos)).
 
 ## État
 
-Même périmètre que la version macOS :
+Les deux plateformes ont les mêmes fonctions :
 
 - sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque ;
 - écrans **Live** (liste, aperçu, now / next), **Guide** (grille sur 3 h, paginée), **Movies** et **Series** (affiches, saisons, épisodes), **Search** (Ctrl+K) et **Sources** ;
@@ -54,8 +54,6 @@ core/        # crate nightglass-core : clients M3U, Xtream, Stalker, XMLTV + mod
 src-tauri/   # app Tauri : lecteur mpv, sources chiffrées (DPAPI), commandes appelées par l'interface
 src/         # interface Svelte
 ```
-
-`nightglass-core` est le pendant du package Swift `NightglassCore` : mêmes protocoles, mêmes modèles, même format JSON pour les sources (`NG_SEED` est compatible entre les deux apps).
 
 Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
 

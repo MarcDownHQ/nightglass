@@ -4,7 +4,7 @@
 Dispatcharr only serves live TV, so this serves Blender Foundation open movies (CC BY)
 as VOD and as a series. Streams redirect to download.blender.org.
 
-    python3 Scripts/mock-xtream.py 9292   # user: demo / password: demo
+    python3 windows/scripts/mock-xtream.py 9292   # user: demo / password: demo
 """
 import json, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
