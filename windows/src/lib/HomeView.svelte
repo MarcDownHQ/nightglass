@@ -229,6 +229,8 @@
     grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 0.55fr));
     gap: 16px;
     align-items: stretch;
+    /* Fullscreen on a big screen: the card stops growing instead of pushing the rest below the fold. */
+    max-width: 1500px;
   }
   .hero {
     display: flex;

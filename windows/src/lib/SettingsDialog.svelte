@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { i18n, t, type Language } from './i18n.svelte';
+  import { i18n, MAC, t, type Language } from './i18n.svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import { organizer, panels } from './dialogs.svelte';
   import Modal from './Modal.svelte';
@@ -50,7 +50,7 @@
       <h3 class="mono">{t('Language')}</h3>
       <label class="select">
         <select value={i18n.choice} onchange={(e) => i18n.set(e.currentTarget.value as Language)}>
-          <option value="auto">{t('Same as Windows')}</option>
+          <option value="auto">{t(MAC ? 'Same as macOS' : 'Same as Windows')}</option>
           <option value="en">English</option>
           <option value="fr">Français</option>
         </select>
@@ -85,7 +85,7 @@
         <button class="link" onclick={exportSettings}>{t('Export…')}</button>
         <button class="link" onclick={importSettings}>{t('Import…')}</button>
       </div>
-      <small class="hint">{t('Sources, favourites, lists, hidden categories, progress: to move to another PC.')}</small>
+      <small class="hint">{t('Sources, favourites, lists, hidden categories, progress: to move to another computer.')}</small>
     </section>
 
     <section>

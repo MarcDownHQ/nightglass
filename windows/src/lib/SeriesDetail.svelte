@@ -234,7 +234,7 @@
     color: var(--dim);
   }
   .note.error {
-    color: var(--magenta);
+    color: var(--live);
   }
   .episode {
     display: flex;

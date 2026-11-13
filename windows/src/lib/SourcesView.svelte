@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { plural, t } from './i18n.svelte';
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
   import { kindLabel, type Source } from './models';
@@ -60,7 +60,7 @@
               <small class="error" title={store.errors[s.id]}>{friendly(store.errors[s.id])}</small>
               {#if cat}<small>{t('Showing the copy from the last launch.')}</small>{/if}
             {:else}
-              <small>{t('{channels} channels · {movies} movies · {series} series', { channels: cat?.channels.length ?? 0, movies: cat?.movies.length ?? 0, series: cat?.series.length ?? 0 })}</small>
+              <small>{plural(cat?.channels.length ?? 0, '{n} channel', '{n} channels')} · {plural(cat?.movies.length ?? 0, '{n} movie', '{n} movies')} · {plural(cat?.series.length ?? 0, '{n} series', '{n} series')}</small>
             {/if}
             {#if cat?.account}
               {@const soon = cat.account.expires && cat.account.expires * 1000 - Date.now() < 14 * 86_400_000}
@@ -93,7 +93,7 @@
       <button onclick={exportSettings} title={t('Sources, favourites, lists, hidden categories, progress: to a file')}
         ><span class="icon">&#xEDE1;</span> {t('Export settings…')}</button
       >
-      <button onclick={importSettings} title={t('From a file exported on this PC or another')}><span class="icon">&#xE8B5;</span> {t('Import settings…')}</button>
+      <button onclick={importSettings} title={t('From a file exported on this computer or another')}><span class="icon">&#xE8B5;</span> {t('Import settings…')}</button>
     </div>
   </div>
 </div>
@@ -193,7 +193,7 @@
     color: var(--acid);
   }
   .text .error {
-    color: var(--magenta);
+    color: var(--live);
   }
   .text .account {
     color: var(--cyan);

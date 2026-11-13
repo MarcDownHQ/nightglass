@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
-  import { prompt } from './dialogs.svelte';
+  import { dialogFocus, prompt } from './dialogs.svelte';
 
   let input: HTMLInputElement | undefined = $state();
 
@@ -19,7 +19,7 @@
 
 {#if prompt.title}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && prompt.answer(null)}>
-    <div class="dialog" role="dialog" aria-label={prompt.title}>
+    <div class="dialog" role="dialog" aria-label={prompt.title} use:dialogFocus>
       <h2>{prompt.title}</h2>
       <!-- svelte-ignore a11y_autofocus -->
       <input bind:this={input} bind:value={prompt.value} type={prompt.secret ? 'password' : 'text'} {onkeydown} autofocus spellcheck="false" />

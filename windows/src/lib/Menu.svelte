@@ -18,19 +18,39 @@
   } = $props();
   let open = $state(false);
   let root: HTMLElement;
+  let button: HTMLButtonElement;
+  let list: HTMLElement | undefined = $state();
+
+  // Opened, the focus goes on the chosen entry: the arrows start from there.
+  $effect(() => void (list?.querySelector<HTMLElement>('[aria-checked=true]') ?? list?.querySelector<HTMLElement>('button'))?.focus());
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.defaultPrevented) return;
+    const entries = [...(list?.querySelectorAll<HTMLElement>('button') ?? [])];
+    const i = entries.indexOf(document.activeElement as HTMLElement);
+    // Esc: closed, the focus back on its label.
+    if (e.key === 'Escape' && open) (open = false), button.focus();
+    else if (e.key === 'ArrowDown' && !open) open = true;
+    else if (e.key === 'ArrowDown' && open) entries[(i + 1) % entries.length]?.focus();
+    else if (e.key === 'ArrowUp' && open) entries[(i - 1 + entries.length) % entries.length]?.focus();
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
 </script>
 
 <svelte:window onmousedown={(e) => open && !root.contains(e.target as Node) && (open = false)} />
 
-<div class="menu" bind:this={root}>
-  <button class="trigger" class:custom={trigger} aria-expanded={open} {title} onclick={() => (open = !open)}>
+<!-- Closes when Tab takes the focus out of it. Not on a blur to nowhere: WebKit (macOS) clicks blur without focusing. -->
+<div class="menu" role="presentation" bind:this={root} {onkeydown} onfocusout={(e) => open && e.relatedTarget && !root.contains(e.relatedTarget as Node) && (open = false)}>
+  <button bind:this={button} class="trigger" class:custom={trigger} aria-expanded={open} {title} onclick={() => (open = !open)}>
     {#if trigger}{@render trigger()}{:else}{label}{/if}
   </button>
   {#if open}
-    <ul role="menu" aria-label={label}>
+    <ul role="menu" aria-label={label} bind:this={list}>
       {#each items as item (item.id)}
         <li>
-          <button role="menuitemradio" aria-checked={item.selected} class:on={item.selected} onclick={() => ((open = false), onpick(item.id))}>
+          <button role="menuitemradio" aria-checked={item.selected} class:on={item.selected} onclick={() => (button.focus(), (open = false), onpick(item.id))}>
             {item.name}
           </button>
         </li>

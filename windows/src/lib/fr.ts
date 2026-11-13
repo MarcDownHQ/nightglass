@@ -179,12 +179,18 @@ export const FR: Record<string, string> = {
   'Click to show only this source': 'Cliquer pour n’afficher que cette source',
   Refresh: 'Actualiser',
   Remove: 'Supprimer',
-  '{channels} channels · {movies} movies · {series} series': '{channels} chaînes · {movies} films · {series} séries',
+  '{n} channel': '{n} chaîne',
+  '{n} channels': '{n} chaînes',
+  '{n} movie': '{n} film',
+  '{n} movies': '{n} films',
+  // Same word in English: the no-break space tells the singular apart.
+  '{n} series': '{n} série',
+  '{n} series': '{n} séries',
   'Showing the copy from the last launch.': 'Copie du dernier lancement affichée.',
   'Export settings…': 'Exporter les réglages…',
   'Import settings…': 'Importer les réglages…',
   'Sources, favourites, lists, hidden categories, progress: to a file': 'Sources, favoris, listes, catégories masquées, progression : vers un fichier',
-  'From a file exported on this PC or another': 'Depuis un fichier exporté sur ce PC ou un autre',
+  'From a file exported on this computer or another': 'Depuis un fichier exporté sur cet ordinateur ou un autre',
   'No expiry': 'Sans expiration',
   Trial: 'Essai',
   'Expires {date}': 'Expire le {date}',
@@ -242,12 +248,13 @@ export const FR: Record<string, string> = {
   'Settings file': 'Fichier de réglages',
   'Export…': 'Exporter…',
   'Import…': 'Importer…',
-  'Sources, favourites, lists, hidden categories, progress: to move to another PC.':
-    'Sources, favoris, listes, catégories masquées, progression : pour passer sur un autre PC.',
+  'Sources, favourites, lists, hidden categories, progress: to move to another computer.':
+    'Sources, favoris, listes, catégories masquées, progression : pour passer sur un autre ordinateur.',
   'Keyboard shortcuts (?)': 'Raccourcis clavier (?)',
   'Install {version}': 'Installer {version}',
   Language: 'Langue',
   'Same as Windows': 'Comme Windows',
+  'Same as macOS': 'Comme macOS',
 
   // Organize
   Categories: 'Catégories',
@@ -408,6 +415,7 @@ export const FR: Record<string, string> = {
   "My list": "Ma liste",
   "In my list": "Dans ma liste",
   "Library": "Bibliothèque",
+  "{n} title": "{n} titre",
   "{n} titles": "{n} titres",
   "Your list is empty. Use “My list” on a title to keep it here.": "Votre liste est vide. Utilisez « Ma liste » sur un titre pour le garder ici.",
   // Player: buffer bar

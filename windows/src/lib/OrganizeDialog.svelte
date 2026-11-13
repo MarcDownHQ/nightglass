@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
-  import { organizer, prompt } from './dialogs.svelte';
+  import { dialogFocus, organizer, prompt } from './dialogs.svelte';
   import { newList } from './channelMenu';
   import { library, listLabel } from './library.svelte';
   import { categoryKey, categoryLabel } from './lineup';
@@ -63,7 +63,7 @@
 
 {#if organizer.open}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && (organizer.open = false)}>
-    <div class="dialog" role="dialog" aria-label={t('Organize')}>
+    <div class="dialog" role="dialog" aria-label={t('Organize')} use:dialogFocus>
       <header>
         <h2>{t('Organize')}</h2>
         <button class="icon close" title={t('Close (Esc)')} onclick={() => (organizer.open = false)}>&#xE8BB;</button>

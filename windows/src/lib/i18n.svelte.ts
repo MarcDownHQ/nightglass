@@ -31,8 +31,8 @@ export function mod(e: KeyboardEvent): boolean {
 /** `text` in the user's language, with `{name}` placeholders filled from `vars`. */
 export function t(text: string, vars?: Record<string, string | number>): string {
   let out = (i18n.lang === 'fr' && FR[text]) || text;
-  // Shortcut labels are written for Windows: "Ctrl K", "Ctrl+.", "Alt ↑ ↓".
-  if (MAC) out = out.replace(/\bCtrl[ +]?/g, '⌘').replace(/\bAlt /g, '⌥');
+  // Shortcut labels are written for Windows: "Ctrl K", "Ctrl+.", "Alt ↑ ↓", "F11" (macOS keeps it; its View menu has ⌃⌘F).
+  if (MAC) out = out.replace(/\bCtrl[ +]?/g, '⌘').replace(/\bAlt /g, '⌥').replace(/\bF11\b/g, '⌃⌘F');
   return vars ? out.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : out;
 }
 

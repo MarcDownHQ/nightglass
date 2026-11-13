@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { epgMatch } from './dialogs.svelte';
+  import { dialogFocus, epgMatch } from './dialogs.svelte';
   import { library } from './library.svelte';
   import { fold } from './lineup';
   import { player } from './player.svelte';
@@ -60,7 +60,7 @@
 
 {#if item}
   <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && (epgMatch.item = null)}>
-    <div class="dialog" role="dialog" aria-label={t('Match the guide…')}>
+    <div class="dialog" role="dialog" aria-label={t('Match the guide…')} use:dialogFocus>
       <header>
         <h2>{t('Guide for {name}', { name: displayName(item.channel.name) })}</h2>
         <button class="icon close" title={t('Close (Esc)')} onclick={() => (epgMatch.item = null)}>&#xE8BB;</button>
