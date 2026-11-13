@@ -69,10 +69,13 @@
   const FRENCH_KEYS: Record<string, string> = { Enter: 'Entrée', Space: 'Espace', Esc: 'Échap', Home: 'Début', 'D-pad': 'Croix' };
 
   function keyLabel(key: string): string {
-    return key
-      .split(' ')
-      .map((w) => (w === 'or' ? t('or') : i18n.lang === 'fr' ? (FRENCH_KEYS[w] ?? w) : w))
-      .join(' ');
+    // Through t() as well: on macOS, Ctrl reads ⌘ and Alt ⌥.
+    return t(
+      key
+        .split(' ')
+        .map((w) => (w === 'or' ? t('or') : i18n.lang === 'fr' ? (FRENCH_KEYS[w] ?? w) : w))
+        .join(' '),
+    );
   }
 </script>
 

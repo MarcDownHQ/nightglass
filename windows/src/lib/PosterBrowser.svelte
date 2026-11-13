@@ -13,7 +13,7 @@ export interface ContinueCard {
 
 <script lang="ts" generics="T extends { id: string }">
   import type { Snippet } from 'svelte';
-  import { t } from './i18n.svelte';
+  import { plural, t } from './i18n.svelte';
   import CategorySidebar, { type SideEntry } from './CategorySidebar.svelte';
   import { library } from './library.svelte';
   import { categoryKey } from './lineup';
@@ -116,7 +116,7 @@ export interface ContinueCard {
     <section class="catalog">
       <header>
         <h2>{caption}</h2>
-        <span class="count mono">{t('{n} titles', { n: shown.length })}</span>
+        <span class="count mono">{plural(shown.length, '{n} title', '{n} titles')}</span>
       </header>
       {#if shown.length}
         <div class="grid" bind:clientWidth={width}>
@@ -244,5 +244,12 @@ export interface ContinueCard {
     padding: 22px 24px;
     border-left: 1px solid var(--border);
     background: #0d1016;
+  }
+  /* A small window (1024 px, the smallest): a narrower panel, so the grid keeps two columns. */
+  @media (max-width: 1100px) {
+    .details {
+      width: 232px;
+      padding: 18px;
+    }
   }
 </style>

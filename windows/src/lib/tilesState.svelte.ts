@@ -44,9 +44,13 @@ class MultiView {
 
   async show(item?: LiveItem) {
     if (!this.open) {
+      // The channel on screen carries on in the first tile.
+      const playing = player.current?.live ? player.current.item : undefined;
       player.stop();
       await invoke('tiles_mode', { on: true });
       this.open = true;
+      if (playing) this.add(playing);
+      if (item?.id === playing?.id) return;
     }
     if (item) this.add(item);
   }

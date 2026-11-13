@@ -149,6 +149,6 @@
     color: var(--cyan);
   }
   .message.error {
-    color: var(--magenta);
+    color: var(--live);
   }
 </style>

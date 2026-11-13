@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mod, t } from './lib/i18n.svelte';
+  import { MAC, mod, t } from './lib/i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
@@ -128,7 +128,8 @@
   <PlayerScreen />
 {/if}
 
-<ResizeEdges />
+<!-- macOS keeps its native frame, which resizes on its own: tao cannot start a resize drag there. -->
+{#if !MAC}<ResizeEdges />{/if}
 
 {#if nav.searching}
   <SearchPalette />

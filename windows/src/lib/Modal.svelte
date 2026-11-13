@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import type { Snippet } from 'svelte';
+  import { dialogFocus } from './dialogs.svelte';
 
   /** A window over the app: Esc or a click outside closes it. */
   let { title, close, width = 640, children }: { title: string; close: () => void; width?: number; children: Snippet } = $props();
@@ -17,7 +18,7 @@
 <svelte:window onkeydowncapture={onkeydown} />
 
 <div class="scrim" role="presentation" onmousedown={(e) => e.target === e.currentTarget && close()}>
-  <div class="dialog" role="dialog" aria-label={title} style:width="min({width}px, calc(100vw - 80px))">
+  <div class="dialog" role="dialog" aria-label={title} use:dialogFocus style:width="min({width}px, calc(100vw - 80px))">
     <header>
       <h2>{title}</h2>
       <button class="icon close" title={t('Close (Esc)')} onclick={close}>&#xE8BB;</button>

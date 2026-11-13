@@ -47,3 +47,32 @@ class Panels {
 }
 
 export const panels = new Panels();
+
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+/** Action for a window over the app: the focus goes in, Tab stays in, and goes back where it was on close. */
+export function dialogFocus(node: HTMLElement) {
+  const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const all = () => [...node.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  // After the content's own autofocus (the prompt's field); the close button only when nothing else takes the focus.
+  queueMicrotask(() => node.contains(document.activeElement) || (all().find((el) => !el.closest('header')) ?? all()[0])?.focus());
+  const onkeydown = (e: KeyboardEvent) => {
+    const at = document.activeElement;
+    // A window opened over this one (a prompt over Organize) keeps its own Tab.
+    if (e.key !== 'Tab' || (!node.contains(at) && at?.closest('[role=dialog]'))) return;
+    const list = all();
+    const i = list.indexOf(at as HTMLElement);
+    const next = e.shiftKey ? (i <= 0 ? list.at(-1) : null) : i === -1 || i === list.length - 1 ? list[0] : null;
+    if (next) {
+      e.preventDefault();
+      next.focus();
+    }
+  };
+  addEventListener('keydown', onkeydown, true);
+  return {
+    destroy() {
+      removeEventListener('keydown', onkeydown, true);
+      if (back?.isConnected) back.focus();
+    },
+  };
+}

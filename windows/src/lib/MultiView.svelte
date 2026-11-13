@@ -257,7 +257,7 @@
     color: var(--dim);
   }
   .hint.error {
-    color: var(--magenta);
+    color: var(--live);
   }
   .caption {
     flex: none;

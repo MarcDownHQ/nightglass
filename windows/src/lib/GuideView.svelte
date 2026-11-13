@@ -212,7 +212,7 @@
       <ChannelLogo channel={item.channel} size={56} />
       <div class="info">
         <div class="meta">
-          {#if item.channel.number}<span class="mono">{item.channel.number}</span> · {/if}{displayName(item.channel.name)} · <span class="mono">{hm(p.start)} – {hm(p.end)}</span> · {duration(p)}
+          {#if item.channel.number}<span class="mono">{item.channel.number}</span>{' · '}{/if}{displayName(item.channel.name)} · <span class="mono">{hm(p.start)} – {hm(p.end)}</span> · {duration(p)}
         </div>
         <h2>{p.title}</h2>
         <div class="state">
