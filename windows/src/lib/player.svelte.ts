@@ -1,4 +1,4 @@
-import { MAC, t } from './i18n.svelte';
+import { ANDROID, MAC, t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -182,7 +182,7 @@ class Player {
       await win.setFocus();
     }
     if (!this.current || this.expanded) return;
-    this.wasFullscreen = await win.isFullscreen();
+    this.wasFullscreen = ANDROID || (await win.isFullscreen());
     this.expanded = true;
     if (!this.wasFullscreen && !MAC) await win.setFullscreen(true);
   }

@@ -1,19 +1,50 @@
+#[cfg(mobile)]
+mod android;
 mod cache;
 #[cfg(target_os = "macos")]
 mod host_macos;
+#[cfg(desktop)]
 mod mpv;
 mod sources;
+#[cfg(desktop)]
 mod tiles;
 
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(desktop)]
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Series, Source, xmltv};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use nightglass_core::{Catalog, Channel, Episode, Http, Info, Movie, Programme, Series, Source, xmltv};
+#[cfg(desktop)]
+use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager, State};
 use url::Url;
 
+// Multi-view needs several decoders drawing into windows of their own: not on a TV. The commands exist so the page's calls resolve.
+#[cfg(mobile)]
+mod tiles {
+    #[tauri::command]
+    pub fn tile_play() -> Result<(), String> {
+        Err("Multi-view is not available on Android TV.".into())
+    }
+    #[tauri::command]
+    pub fn tile_rect() -> Result<(), String> {
+        Ok(())
+    }
+    #[tauri::command]
+    pub fn tile_mute() -> Result<(), String> {
+        Ok(())
+    }
+    #[tauri::command]
+    pub fn tile_close() -> Result<(), String> {
+        Ok(())
+    }
+    #[tauri::command]
+    pub fn tiles_mode() {}
+}
+
 /// A window's native handle, the parent of video windows: its HWND, or its content NSView on macOS.
+#[cfg(desktop)]
 macro_rules! native {
     ($window:expr) => {{
         #[cfg(windows)]
@@ -25,15 +56,18 @@ macro_rules! native {
 }
 
 /// The child window mpv draws into.
+#[cfg(desktop)]
 pub struct VideoHost(pub isize);
 
 /// The main window, parent of the video windows.
+#[cfg(desktop)]
 pub struct MainWindow(pub isize);
 
 /// How far back the guide keeps programmes: the replay window of most Xtream servers.
 const PAST: i64 = 3 * 86_400;
 
 // mpv commands run off the main thread (`async`): on macOS, mpv's video output waits on the main thread, which would deadlock.
+#[cfg(desktop)]
 #[tauri::command(async)]
 /// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
 fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, options: Option<String>) -> Result<(), String> {
@@ -45,11 +79,13 @@ fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, 
     mpv.command(&["loadfile", &url, "replace", "-1", options]).or_else(|_| mpv.command(&["loadfile", &url, "replace", options]))
 }
 
+#[cfg(desktop)]
 #[tauri::command(async)]
 fn mpv_command(mpv: State<'_, Mpv>, args: Vec<String>) -> Result<(), String> {
     mpv.command(&args.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
+#[cfg(desktop)]
 #[tauri::command(async)]
 fn mpv_set(mpv: State<'_, Mpv>, name: String, value: String) -> Result<(), String> {
     mpv.set(&name, &value)
@@ -57,6 +93,7 @@ fn mpv_set(mpv: State<'_, Mpv>, name: String, value: String) -> Result<(), Strin
 
 /// Where the video goes in the main window: x, y, width, height in physical pixels. The video window
 /// itself moves, mpv's picture stays as it is: nothing to redraw, so it keeps up with a scrolling page.
+#[cfg(desktop)]
 #[tauri::command]
 fn video_place(host: State<'_, VideoHost>, main: State<'_, MainWindow>, rect: [i32; 4]) {
     // In the PiP window it fills that window instead.
@@ -66,6 +103,7 @@ fn video_place(host: State<'_, VideoHost>, main: State<'_, MainWindow>, rect: [i
 }
 
 /// Picture in picture: a small window above the others that the video moves into, leaving the main window free.
+#[cfg(desktop)]
 #[tauri::command]
 async fn pip_open(app: AppHandle) -> Result<(), String> {
     if app.get_webview_window("pip").is_some() {
@@ -94,6 +132,7 @@ async fn pip_open(app: AppHandle) -> Result<(), String> {
 }
 
 /// Closes the PiP window; the video goes back on its way out (see `run`).
+#[cfg(desktop)]
 #[tauri::command]
 async fn pip_close(app: AppHandle) -> Result<(), String> {
     match app.get_webview_window("pip") {
@@ -101,6 +140,9 @@ async fn pip_close(app: AppHandle) -> Result<(), String> {
         None => Ok(()),
     }
 }
+
+#[cfg(mobile)]
+use android::{mpv_command, mpv_play, mpv_set, pip_close, pip_open, video_place};
 
 #[tauri::command]
 fn sources_load(app: AppHandle) -> Result<Vec<Source>, String> {
@@ -114,8 +156,9 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
 
 // shortcut: whole catalogs cross the IPC bridge as JSON; page them from Rust if a provider's tens of thousands of entries get slow.
 #[tauri::command]
-async fn catalog(app: AppHandle, http: State<'_, Http>, source: Source) -> Result<Catalog, String> {
-    let catalog = source.client(&http).catalog().await.map_err(|e| e.to_string())?;
+async fn catalog(app: AppHandle, http: State<'_, Http>, source: Source, reduced: Option<bool>) -> Result<Catalog, String> {
+    let client = reduced.map_or(source.client(&http), |on| source.client(&http).reduced(on));
+    let catalog = client.catalog().await.map_err(|e| e.to_string())?;
     let (id, copy) = (source.id.to_string(), catalog.clone());
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(e) = cache::write(&app, "catalog", &id, &copy) {
@@ -168,6 +211,26 @@ async fn stream_url(http: State<'_, Http>, source: Source, channel: Channel) -> 
 #[tauri::command]
 async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
     source.client(&http).episodes(&series).await.map_err(|e| e.to_string())
+}
+
+/// What the provider says about a film (Xtream only; other sources have nothing more than the list).
+#[tauri::command]
+async fn movie_info(http: State<'_, Http>, source: Source, movie: Movie) -> Result<Info, String> {
+    source.client(&http).movie_info(&movie).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn series_info(http: State<'_, Http>, source: Source, series: Series) -> Result<Info, String> {
+    source.client(&http).series_info(&series).await.map_err(|e| e.to_string())
+}
+
+/// Opens an address in the system's own app: on a TV, a YouTube trailer opens the YouTube app.
+#[cfg(mobile)]
+use android::open_url;
+#[cfg(desktop)]
+#[tauri::command]
+fn open_url(_url: String) -> Result<(), String> {
+    Err("Not available here.".into())
 }
 
 /// Programmes from 3 days ago (for replay) to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
@@ -251,52 +314,71 @@ fn automation() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| k.starts_with("NG_")).collect()
 }
 
+#[cfg(desktop)]
+fn desktop_setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let window = app.get_webview_window("main").expect("main window");
+    let main = native!(window)?;
+    let host = mpv::video_host(main);
+    #[cfg(windows)]
+    let dll = app.path().resource_dir()?.join("libmpv-2.dll");
+    // In Contents/Frameworks, or lib/macos in dev builds: see build.rs.
+    #[cfg(target_os = "macos")]
+    let dll = std::path::PathBuf::from("@rpath/libmpv.dylib");
+    app.manage(Mpv::new(&dll, host)?);
+    app.manage(VideoHost(host));
+    app.manage(MainWindow(main));
+    app.manage(tiles::MpvDll(dll));
+    app.manage(tiles::Tiles::default());
+    let handle = app.handle().clone();
+    std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
+    Ok(())
+}
+
+#[cfg(desktop)]
+fn window_event(window: &tauri::Window, event: &WindowEvent) {
+    match event {
+        // In the PiP window, the video window fills it. In the main one the page places it (`video_place`).
+        WindowEvent::Resized(size) if window.label() == "pip" => {
+            if let Some(host) = window.try_state::<VideoHost>()
+                && native!(window).is_ok_and(|h| mpv::host_parent(host.0) == h)
+            {
+                mpv::resize_host(host.0, size.width, size.height);
+            }
+        }
+        // The video comes home before the PiP window goes: destroyed with it, mpv would lose where it draws.
+        WindowEvent::CloseRequested { .. } if window.label() == "pip" => {
+            mpv::adopt_host(window.state::<VideoHost>().0, window.state::<MainWindow>().0);
+            let _ = window.emit_to("main", "pip-closed", ());
+        }
+        // The PiP window alone would keep the app running.
+        WindowEvent::Destroyed if window.label() == "main" => window.app_handle().exit(0),
+        _ => {}
+    }
+}
+
+#[cfg(mobile)]
+fn window_event(_: &tauri::Window, _: &tauri::WindowEvent) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(mobile)]
+    let builder = builder.plugin(android::plugin());
+    builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
             }
-            let window = app.get_webview_window("main").expect("main window");
-            let main = native!(window)?;
-            let host = mpv::video_host(main);
-            #[cfg(windows)]
-            let dll = app.path().resource_dir()?.join("libmpv-2.dll");
-            // In Contents/Frameworks, or lib/macos in dev builds: see build.rs.
-            #[cfg(target_os = "macos")]
-            let dll = std::path::PathBuf::from("@rpath/libmpv.dylib");
-            app.manage(Mpv::new(&dll, host)?);
-            app.manage(VideoHost(host));
-            app.manage(MainWindow(main));
-            app.manage(tiles::MpvDll(dll));
-            app.manage(tiles::Tiles::default());
             app.manage(Http::new());
-            let handle = app.handle().clone();
-            std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
+            #[cfg(desktop)]
+            desktop_setup(app)?;
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            // In the PiP window, the video window fills it. In the main one the page places it (`video_place`).
-            WindowEvent::Resized(size) if window.label() == "pip" => {
-                if let Some(host) = window.try_state::<VideoHost>()
-                    && native!(window).is_ok_and(|h| mpv::host_parent(host.0) == h)
-                {
-                    mpv::resize_host(host.0, size.width, size.height);
-                }
-            }
-            // The video comes home before the PiP window goes: destroyed with it, mpv would lose where it draws.
-            WindowEvent::CloseRequested { .. } if window.label() == "pip" => {
-                mpv::adopt_host(window.state::<VideoHost>().0, window.state::<MainWindow>().0);
-                let _ = window.emit_to("main", "pip-closed", ());
-            }
-            // The PiP window alone would keep the app running.
-            WindowEvent::Destroyed if window.label() == "main" => window.app_handle().exit(0),
-            _ => {}
-        })
+        .on_window_event(window_event)
         .invoke_handler(tauri::generate_handler![
             mpv_play,
             mpv_command,
@@ -312,6 +394,9 @@ pub fn run() {
             cache_drop,
             stream_url,
             episodes,
+            movie_info,
+            series_info,
+            open_url,
             guide,
             guide_channels,
             catchup_url,

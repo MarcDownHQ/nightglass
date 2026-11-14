@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { t } from './i18n.svelte';
   import { contextMenu } from './menuState.svelte';
   import { episodeKey, library } from './library.svelte';
@@ -9,6 +10,18 @@
   import { store } from './store.svelte';
 
   const byId = $derived(new Map(store.series.map((s) => [s.id, s])));
+  let returnTo: HTMLElement | null = null;
+
+  function open(i: SeriesItem) {
+    returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    nav.openSeries = i;
+  }
+
+  /** Back puts the focus on the poster it left, so the D-pad carries on from there. */
+  function closeDetail() {
+    nav.openSeries = null;
+    void tick().then(() => returnTo?.focus());
+  }
 
   function menu(e: MouseEvent, item: SeriesItem, episode: Episode) {
     const key = episodeKey(item.id, episode);
@@ -57,15 +70,13 @@
     items={store.series}
     info={(i) => i.series}
     empty={t('No series. Add an Xtream account that has some.')}
-    onpick={(i) => {
-      nav.openSeries = i;
-    }}
+    onpick={open}
     menu={seriesMenu}
     {continuing}
   />
 </div>
 {#if nav.openSeries}
-  <SeriesDetail item={nav.openSeries} close={() => (nav.openSeries = null)} />
+  <SeriesDetail item={nav.openSeries} close={closeDetail} />
 {/if}
 
 <style>

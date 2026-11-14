@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { ANDROID, t } from './i18n.svelte';
   import CategorySidebar, { type SideEntry } from './CategorySidebar.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { newList, openChannelMenu, openVariantMenu } from './channelMenu';
@@ -26,6 +26,8 @@
 
   /** The shown list: `list:<id>` a favourites list, `cat:<key>` a category, or all / recent / hidden. */
   let tab = $state('all');
+  /** TV remote: the column the arrows act in. Up and Down move inside it, Right goes deeper, Left goes back toward the menu. */
+  let zone = $state<'categories' | 'channels'>('channels');
   let listView: { reveal: (index: number) => void } | undefined = $state();
   let dragged = $state<string | null>(null);
 
@@ -182,8 +184,49 @@
     ]);
   }
 
+  /** Android TV: the columns side by side (menu, categories, channels) are walked with the D-pad. Returns true when it handled the key. */
+  function tvKey(e: KeyboardEvent): boolean {
+    switch (e.key) {
+      case 'ArrowLeft':
+        if (zone === 'channels' && !options.cinema) zone = 'categories';
+        else document.querySelector<HTMLElement>('nav .item.on')?.focus();
+        return true;
+      case 'ArrowRight':
+      case 'Enter':
+        if (zone === 'categories' && !options.cinema) {
+          zone = 'channels';
+          return true;
+        }
+        return e.key === 'ArrowRight';
+      case 'ArrowDown':
+      case 'ArrowUp':
+        if (zone === 'categories' && !options.cinema) {
+          shiftTab(e.key === 'ArrowDown' ? 1 : -1);
+          return true;
+        }
+        return false;
+      default:
+        return false;
+    }
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.metaKey) return;
+    if (ANDROID && !e.altKey) {
+      // In the menu the system moves the focus between its buttons; only Right leaves it, for the categories.
+      if (e.target instanceof Element && e.target.closest('nav')) {
+        if (e.key === 'ArrowRight') {
+          (document.activeElement as HTMLElement | null)?.blur();
+          zone = 'categories';
+          e.preventDefault();
+        }
+        return;
+      }
+      if (tvKey(e)) {
+        e.preventDefault();
+        return;
+      }
+    }
     const playing = list.find(isPlaying);
     if (e.altKey) {
       if (!listId || !playing || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
@@ -227,7 +270,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="live" class:cinema={options.cinema} class:slim>
+<div class="live" class:cinema={options.cinema} class:slim class:tv={ANDROID} class:zone-categories={ANDROID && zone === 'categories'} class:zone-channels={ANDROID && zone === 'channels'}>
   {#if !options.cinema}
     <CategorySidebar {lists} {pinned} {categories} hidden={hiddenEntry} selected={tab} onpick={(id) => (tab = id)} onmenu={sideMenu} onnewlist={() => void newList()} />
   {/if}
@@ -360,6 +403,15 @@
     flex: 1;
     min-height: 0;
     display: flex;
+  }
+  /* TV: the column the arrows act in is outlined. */
+  .live.zone-categories :global(.side) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .live.zone-channels .channels {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .channels {
     width: 420px;

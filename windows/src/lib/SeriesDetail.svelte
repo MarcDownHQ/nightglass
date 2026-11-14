@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { ANDROID, t } from './i18n.svelte';
+  import { onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
   import { episodeKey, library } from './library.svelte';
-  import type { Episode, SeriesItem } from './models';
+  import type { Episode, Info, SeriesItem } from './models';
   import { nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
   import { store } from './store.svelte';
+  import { metaParts, openTrailer } from './titleInfo';
 
   let { item, close }: { item: SeriesItem; close: () => void } = $props();
 
@@ -16,6 +18,9 @@
   let season = $state(1);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let info = $state.raw<Info | null>(null);
+  const plot = $derived(info?.plot ?? item.series.plot);
+  const meta = $derived(metaParts(info));
 
   const seasons = $derived([...new Set(episodes.map((e) => e.season))].sort((a, b) => a - b));
   const list = $derived(episodes.filter((e) => e.season === season));
@@ -32,7 +37,30 @@
         season = list.length ? Math.min(...list.map((e) => e.season)) : 1;
       })
       .catch((e) => (error = String(e)))
-      .finally(() => (loading = false));
+      .finally(() => {
+        loading = false;
+        // TV: with the episodes in, the remote starts on the first one, unless it has already moved.
+        void tick().then(() => {
+          if (!ANDROID) return;
+          const now = document.activeElement;
+          if (!now || now === document.body || now.classList.contains('back')) document.querySelector<HTMLElement>('.detail .episode .main')?.focus();
+        });
+      });
+  });
+
+  onMount(() => {
+    if (ANDROID) document.querySelector<HTMLElement>('.detail .back')?.focus();
+  });
+
+  $effect(() => {
+    const current = item;
+    info = null;
+    store
+      .seriesInfo(current)
+      .then((i) => {
+        if (current === item) info = i;
+      })
+      .catch((e) => console.warn(`series info ${current.series.name}: ${e}`));
   });
 
   function toggleWatched(e: Episode) {
@@ -69,7 +97,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="detail" transition:fade={{ duration: 200 }}>
+<div class="detail" class:tv={ANDROID} transition:fade={{ duration: 200 }}>
   {#if item.series.poster}<img class="blur" src={item.series.poster} alt="" referrerpolicy="no-referrer" />{/if}
   <div class="body">
     <div class="cover">
@@ -78,7 +106,13 @@
     <div class="info">
       <button class="back" onclick={close}><span class="icon">&#xE76B;</span> {t('Back')}</button>
       <NeonText text={item.series.name} size={48} lines={2} />
-      {#if item.series.plot}<p class="plot">{item.series.plot}</p>{/if}
+      <div class="meta">
+        {#if info?.rating ?? item.series.rating}<span class="mono">★ {(info?.rating ?? item.series.rating ?? 0).toFixed(1)}</span>{/if}
+        {#each meta as part (part)}<span>{part}</span>{/each}
+        {#if info?.trailer}<button class="trailer" onclick={() => info?.trailer && void openTrailer(info.trailer).catch((e) => player.notify(String(e)))}>{t('Trailer')}</button>{/if}
+      </div>
+      {#if plot}<p class="plot">{plot}</p>{/if}
+      {#if info?.cast}<p class="credit"><b>{t('Cast')}</b> {info.cast}</p>{/if}
       {#if seasons.length > 1}
         <div class="seasons">
           {#each seasons as s (s)}
@@ -121,6 +155,9 @@
     position: absolute;
     inset: 61px 0 0 85px;
     overflow: hidden;
+  }
+  .detail.tv {
+    inset: 0 0 0 85px;
   }
   .blur {
     position: absolute;
@@ -180,6 +217,39 @@
   }
   .back .icon {
     font-size: 12px;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    font-size: 15px;
+    color: var(--dim);
+  }
+  .trailer {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    border: 1.5px solid rgb(233 236 242 / 0.25);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .trailer:hover,
+  .trailer:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .credit {
+    margin: 0;
+    max-width: 700px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--dim);
+  }
+  .credit b {
+    margin-right: 8px;
+    color: var(--text);
   }
   .plot {
     margin: 0;

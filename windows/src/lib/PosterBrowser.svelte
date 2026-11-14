@@ -13,7 +13,7 @@ export interface ContinueCard {
 
 <script lang="ts" generics="T extends { id: string }">
   import type { Snippet } from 'svelte';
-  import { plural, t } from './i18n.svelte';
+  import { ANDROID, plural, t } from './i18n.svelte';
   import CategorySidebar, { type SideEntry } from './CategorySidebar.svelte';
   import { library } from './library.svelte';
   import { categoryKey } from './lineup';
@@ -48,6 +48,17 @@ export interface ContinueCard {
     /** Shown above the grid in All. */
     continuing?: ContinueCard[];
   } = $props();
+
+  /** TV: the system moves the focus between posters, but not from the category column across to them. */
+  function onkeydown(e: KeyboardEvent) {
+    if (!ANDROID || e.key !== 'ArrowRight' || e.defaultPrevented) return;
+    const active = document.activeElement;
+    if (!(active instanceof Element) || !active.closest('.side')) return;
+    const first = document.querySelector<HTMLElement>('.browser .poster');
+    if (!first) return;
+    e.preventDefault();
+    first.focus();
+  }
 
   const MIN = 150;
   const GAP = 18;
@@ -107,6 +118,8 @@ export interface ContinueCard {
     ]);
   }
 </script>
+
+<svelte:window {onkeydown} />
 
 <div class="browser">
   {#if !items.length}

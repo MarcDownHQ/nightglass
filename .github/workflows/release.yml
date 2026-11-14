@@ -17,8 +17,11 @@ jobs:
   macos:
     uses: ./.github/workflows/macos.yml
     secrets: inherit
+  android:
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
   publish:
-    needs: [windows, macos]
+    needs: [windows, macos, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,7 +39,9 @@ jobs:
           exe=$(find artifacts -name '*-setup.exe')
           dmg=$(find artifacts -name '*.dmg')
           app=$(find artifacts -name '*.app.tar.gz')
-          for f in "$exe" "$exe.sig" "$dmg" "$app" "$app.sig"; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
+          apk32=$(find artifacts -name 'nightglass-armv7.apk')
+          apk64=$(find artifacts -name 'nightglass-aarch64.apk')
+          for f in "$exe" "$exe.sig" "$dmg" "$app" "$app.sig" "$apk32" "$apk64"; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
           # What the apps' updater reads, at releases/latest/download/latest.json once the release is published.
           # The macOS app is universal: one archive for both architectures.
@@ -47,5 +52,5 @@ jobs:
               "windows-x86_64": {signature: $winsig, url: $winurl},
               "darwin-aarch64": {signature: $macsig, url: $macurl},
               "darwin-x86_64": {signature: $macsig, url: $macurl}}}' > latest.json
-          gh release create "$GITHUB_REF_NAME" "$exe" "$dmg" "$app" latest.json --draft --title "Nightglass $version" \
-            --notes "Windows 10 and 11 (x64): the installer. macOS 13 or later (Apple silicon and Intel): the .dmg; not notarized, so the first launch must be allowed in System Settings > Privacy & Security. Licences and third-party notices come with both. Installed copies offer this update from their title bar."
+          gh release create "$GITHUB_REF_NAME" "$exe" "$dmg" "$app" "$apk32" "$apk64" latest.json --draft --title "Nightglass $version" \
+            --notes "Windows 10 and 11 (x64): the installer. macOS 13 or later (Apple silicon and Intel): the .dmg; not notarized, so the first launch must be allowed in System Settings > Privacy & Security. Android TV / Google TV (Android 7 or later): nightglass-armv7.apk for 32-bit boxes, nightglass-aarch64.apk for 64-bit ones, installed with adb (see windows/README.md). Licences and third-party notices come with Windows and macOS. Installed copies offer this update from their title bar."

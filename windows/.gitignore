@@ -3,3 +3,6 @@ dist/
 target/
 # Downloaded by scripts/fetch-libmpv.ps1
 src-tauri/lib/
+
+# Android APKs built by scripts/android.sh
+apk/

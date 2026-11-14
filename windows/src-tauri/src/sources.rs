@@ -16,6 +16,8 @@ use windows_sys::Win32::Security::Cryptography::{
 pub fn file(app: &AppHandle) -> Result<PathBuf, String> {
     let account = std::env::var("NG_KEYCHAIN_ACCOUNT").unwrap_or_else(|_| "sources".into());
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "android")]
+    sandbox::set_dir(&dir);
     Ok(dir.join(format!("{account}.bin")))
 }
 
@@ -90,6 +92,9 @@ pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
 #[cfg(target_os = "macos")]
 pub use keychain::protect;
 
+#[cfg(target_os = "android")]
+pub use sandbox::protect;
+
 #[cfg(target_os = "macos")]
 mod keychain {
     use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
@@ -158,6 +163,73 @@ mod keychain {
     }
 
     /// Encrypts (or decrypts) `data` so that only the current user can read it: a random nonce, then the sealed data.
+    pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
+        let key = key()?;
+        if encrypt {
+            let mut nonce = [0; NONCE_LEN];
+            SystemRandom::new().fill(&mut nonce).map_err(|_| "No randomness".to_string())?;
+            let mut out = data.to_vec();
+            key.seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut out).map_err(|_| "Encryption failed".to_string())?;
+            return Ok([&nonce[..], &out].concat());
+        }
+        if data.len() < NONCE_LEN {
+            return Err("Truncated data".into());
+        }
+        let (nonce, sealed) = data.split_at(NONCE_LEN);
+        let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| "Bad nonce".to_string())?;
+        let mut buf = sealed.to_vec();
+        let plain = key.open_in_place(nonce, Aad::empty(), &mut buf).map_err(|_| "Decryption failed".to_string())?;
+        Ok(plain.to_vec())
+    }
+}
+
+/// Android: no keychain a plain app can use without a UI; the data key sits in the app's private storage (readable
+/// by this app only), and the file it seals is useless without it, e.g. in a backup of the sources file alone.
+#[cfg(target_os = "android")]
+mod sandbox {
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, OnceLock};
+
+    use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
+    use ring::rand::{SecureRandom, SystemRandom};
+
+    static DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+    static KEY: OnceLock<Vec<u8>> = OnceLock::new();
+
+    pub fn set_dir(dir: &Path) {
+        *DIR.lock().expect("dir lock") = Some(dir.to_path_buf());
+    }
+
+    fn stored_key() -> Result<Vec<u8>, String> {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let dir = DIR.lock().expect("dir lock").clone().ok_or("No data folder")?;
+        let path = dir.join("data-key");
+        if let Ok(bytes) = std::fs::read(&path) {
+            return Ok(bytes);
+        }
+        let mut bytes = vec![0; 32];
+        SystemRandom::new().fill(&mut bytes).map_err(|_| "No randomness".to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        file.write_all(&bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    }
+
+    fn key() -> Result<LessSafeKey, String> {
+        let bytes = match KEY.get() {
+            Some(bytes) => bytes,
+            None => {
+                let bytes = stored_key()?;
+                KEY.get_or_init(|| bytes)
+            }
+        };
+        let key = UnboundKey::new(&CHACHA20_POLY1305, bytes).map_err(|_| "Bad data key".to_string())?;
+        Ok(LessSafeKey::new(key))
+    }
+
+    /// Encrypts (or decrypts) `data`: a random nonce, then the sealed data.
     pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
         let key = key()?;
         if encrypt {

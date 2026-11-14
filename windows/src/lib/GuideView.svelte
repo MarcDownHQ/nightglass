@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { ANDROID, t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
   import { openChannelMenu } from './channelMenu';
   import { library } from './library.svelte';
@@ -134,8 +134,32 @@
     chosen = { item, p };
   }
 
+  /** The cursor is on the first programme of its row: nothing earlier to go to. */
+  function atRowStart(): boolean {
+    if (!keyboard) return true;
+    const row = rows[cursorRow];
+    if (!row) return true;
+    return store.programmes(row.channel).findIndex((p) => p.start <= cursorTime && p.end > cursorTime) <= 0;
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if (e.defaultPrevented || player.expanded || nav.searching || typing(e) || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (ANDROID) {
+      // TV: the menu is the column to the left. In it the system moves the focus; Right comes back into the grid.
+      if (e.target instanceof Element && e.target.closest('nav')) {
+        if (e.key === 'ArrowRight') {
+          (document.activeElement as HTMLElement | null)?.blur();
+          moveCursor(0, 0);
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft' && atRowStart()) {
+        document.querySelector<HTMLElement>('nav .item.on')?.focus();
+        e.preventDefault();
+        return;
+      }
+    }
     if (e.key === 'ArrowLeft') moveCursor(0, -1);
     else if (e.key === 'ArrowRight') moveCursor(0, 1);
     else if (e.key === 'ArrowUp') moveCursor(-1, 0);
