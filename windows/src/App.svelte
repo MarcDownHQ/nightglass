@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MAC, mod, t } from './lib/i18n.svelte';
+  import { ANDROID, MAC, mod, t } from './lib/i18n.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
@@ -55,7 +55,7 @@
       nav.section = SECTIONS[n - 1].id;
       void player.collapse();
     } else if (mod(e) && e.key.toLowerCase() === 'k') nav.searching = !nav.searching;
-    else if (e.key === 'F11') await win.setFullscreen(!(await win.isFullscreen()));
+    else if (e.key === 'F11' && !ANDROID) await win.setFullscreen(!(await win.isFullscreen()));
     else if (mod(e) && (e.key === '+' || e.key === '=')) options.stepZoom(0.1);
     else if (mod(e) && e.key === '-') options.stepZoom(-0.1);
     else if (mod(e) && e.key === '0') options.set('zoom', 1);
@@ -73,7 +73,7 @@
     void updater.check();
     void options.applyZoom();
     startGamepad();
-    if (options.startFullscreen) void win.setFullscreen(true);
+    if (options.startFullscreen && !ANDROID) void win.setFullscreen(true);
     nav.section = options.startScreen === 'home' ? 'home' : 'live';
     await store.init();
     ready = true;
@@ -95,7 +95,7 @@
 <div class="app" class:hidden={player.expanded}>
   <NavRail />
   <div class="main">
-  <TitleBar />
+  {#if !ANDROID}<TitleBar />{/if}
   {#if multiview.open}
     <MultiView />
   {:else if nav.section === 'sources'}
@@ -129,7 +129,7 @@
 {/if}
 
 <!-- macOS keeps its native frame, which resizes on its own: tao cannot start a resize drag there. -->
-{#if !MAC}<ResizeEdges />{/if}
+{#if !MAC && !ANDROID}<ResizeEdges />{/if}
 
 {#if nav.searching}
   <SearchPalette />

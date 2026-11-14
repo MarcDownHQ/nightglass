@@ -9,6 +9,7 @@
   import type { Account } from './models';
   import { exportSettings, importSettings } from './settings';
   import { neon } from './theme';
+  import { ANDROID } from './i18n.svelte';
 
   /** "Expires 12 Dec 2026 · 1/2 connections": what the provider says about the subscription. */
   function accountLine(a: Account): string {
@@ -65,6 +66,7 @@
             {#if cat?.account}
               {@const soon = cat.account.expires && cat.account.expires * 1000 - Date.now() < 14 * 86_400_000}
               <small class="account" class:warn={soon || (cat.account.status && cat.account.status !== 'Active')}>{accountLine(cat.account)}</small>
+              {#if cat.account.message}<small class="message">{cat.account.message}</small>{/if}
             {/if}
           </div>
           <button
@@ -89,6 +91,12 @@
   </HudPanel>
   <div class="side">
     <AddSource />
+    {#if ANDROID}
+      <label class="reduced">
+        <input type="checkbox" checked={store.reduced} onchange={(e) => store.setReduced(e.currentTarget.checked)} />
+        <span>{t('Small catalog')}<small>{t('Known platforms and sports, in English, French and Spanish. Off: the whole catalog.')}</small></span>
+      </label>
+    {/if}
     <div class="transfer">
       <button onclick={exportSettings} title={t('Sources, favourites, lists, hidden categories, progress: to a file')}
         ><span class="icon">&#xEDE1;</span> {t('Export settings…')}</button
@@ -112,6 +120,17 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+  .reduced {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 16px;
+  }
+  .reduced small {
+    display: block;
+    opacity: 0.6;
+    font-size: 13px;
   }
   .transfer {
     display: flex;
@@ -197,6 +216,10 @@
   }
   .text .account {
     color: var(--cyan);
+  }
+  .text .message {
+    color: var(--muted, inherit);
+    font-style: italic;
   }
   .text .account.warn {
     color: var(--acid);

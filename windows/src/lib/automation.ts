@@ -21,7 +21,7 @@ export async function runAutomation() {
       if (store.sources.some((s) => s.name === seed.name)) continue;
       const source = { id: crypto.randomUUID(), ...seed } as Source;
       try {
-        store.add(source, await invoke<Catalog>('catalog', { source }));
+        store.add(source, await invoke<Catalog>('catalog', { source, reduced: store.reducedArg }));
         log(`seeded ${source.name}`);
       } catch (e) {
         log(`seed ${source.name} failed: ${e}`);

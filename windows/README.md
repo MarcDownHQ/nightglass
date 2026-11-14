@@ -47,6 +47,36 @@ En plus de la version macOS :
 - **reconnexion automatique** d'un direct coupé ou bloqué en mise en mémoire tampon : nouvelles tentatives après 1, 2, 4… jusqu'à 30 s, pendant environ 2 min 30 ; hors ligne, elle attend le retour du réseau ;
 - **grosses playlists** : la M3U est lue pendant son téléchargement, et le guide XMLTV est écrit sur le disque puis lu en continu, sans être gardé en mémoire (50 000 chaînes en 1,2 s ; guide de 67 Mo et 291 000 programmes en 6,6 s, build de débogage).
 
+## Android TV
+
+Un port pour Android TV / Google TV : le même cœur Rust et la même interface, la lecture passe par **Media3 (ExoPlayer)** (`PlayerPlugin.kt`) au lieu de libmpv. La télécommande navigue par colonnes (menu, catégories, liste, détail), les films et séries ont une fiche (synopsis, distribution, bande-annonce ouverte dans l'app YouTube). Testé sur une Google TV Streamer en 32 bits (`armeabi-v7a`) ; l'APK `aarch64` se compile aussi mais n'a pas été essayé sur un appareil. Android 7 (API 24) minimum, pas de picture-in-picture, pas de mise à jour intégrée.
+
+### Compiler et installer (pour toi ou pour Claude)
+
+Prérequis, une fois : **JDK 17**, le **SDK Android** avec le NDK `27.2.12479018` et la plateforme 36 (`sdkmanager "ndk;27.2.12479018" "platforms;android-36" "build-tools;36.0.0" "platform-tools"`), `rustup`, Node 24 et `adb`. Le script cherche ces outils aux emplacements habituels (`JAVA_HOME`, `ANDROID_HOME` et `NDK_HOME` les remplacent) et dit ce qui manque.
+
+```sh
+cd windows
+sh scripts/android.sh check             # ce qui manque, sans rien construire
+sh scripts/android.sh build armv7       # APK 32 bits (la plupart des box) -> apk/nightglass-armv7.apk
+sh scripts/android.sh build aarch64     # APK 64 bits
+sh scripts/android.sh install armv7     # construit puis installe sur l'appareil connecté
+```
+
+Pour se connecter à la box : Options pour les développeurs → Débogage USB ou Wi-Fi, puis `adb pair <ip>:<port>` (code à 6 chiffres) et `adb connect <ip>:<port>`. En une phrase à Claude : « compile et installe nightglass en armv7 sur ma box (ip:port) ».
+
+L'APK est signé avec la clé de debug (`~/.android/debug.keystore`, créée si besoin) : il s'installe partout mais n'est pas fait pour un store. Les APK de chaque version sont aussi sur la page des releases (workflow `android.yml`).
+
+### Catalogue réduit
+
+Sur Android, les gros fournisseurs listent des centaines de milliers de titres, ce qu'une box 32 bits ne tient pas en mémoire. Le **catalogue réduit** est donc **activé par défaut** (Xtream seulement) :
+
+- Live : les catégories `FR|`, plus `US|` et `ES|` quand elles portent une plateforme ou un sport connu ;
+- films et séries : seulement les catégories des plateformes connues en France (Netflix, Amazon / Prime, Disney+, Apple, Canal+, HBO / Max, Paramount, Crunchyroll, DAZN, OCS, Salto, UFC, WWE, Marvel, TF1, M6, Arte, beIN, France…), en anglais, français et espagnol ; ni arabe, ni Asie, ni autres langues ;
+- le chargement se fait catégorie par catégorie, pour ne jamais tenir tout le JSON d'un coup.
+
+**Pour le désactiver** : écran Sources → case « Catalogue réduit » (les sources se rechargent). Décochée, tout le catalogue du fournisseur est chargé, toujours catégorie par catégorie. **Pour changer la liste** : `KNOWN` en haut de `core/src/xtream.rs` (et `keep_live_category`, `keep_vod_category`, `language_ok` pour les langues), puis `cargo test -p nightglass-core`. Sur Windows et macOS, rien n'est filtré.
+
 ## Architecture
 
 ```

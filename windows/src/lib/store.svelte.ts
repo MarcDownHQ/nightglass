@@ -8,6 +8,7 @@ import {
   type Catalog,
   type Channel,
   type Episode,
+  type Info,
   type LiveItem,
   type MovieItem,
   type Programme,
@@ -17,6 +18,7 @@ import {
 import { options } from './options.svelte';
 import { player, type Playable } from './player.svelte';
 import { withoutOverlaps } from './epg';
+import { ANDROID } from './i18n.svelte';
 import { prefs } from './prefs';
 
 class Store {
@@ -28,6 +30,19 @@ class Store {
   guide = $state.raw<Record<string, Programme[]>>({});
   /** Source the screens show; null means every source. */
   activeSource = $state<string | null>(prefs.get('activeSource'));
+  /** Android TV: the small catalog (known platforms; US, FR and ES only). On unless turned off in Sources. */
+  reduced = $state(prefs.get('reducedCatalog') !== '0');
+
+  /** What the backend is told: nothing off Android, where it keeps the whole catalog. */
+  get reducedArg(): boolean | undefined {
+    return ANDROID ? this.reduced : undefined;
+  }
+
+  setReduced(on: boolean) {
+    this.reduced = on;
+    prefs.set('reducedCatalog', on ? null : '0');
+    for (const s of this.sources) void this.refresh(s);
+  }
   /** Unix seconds, ticking every 30 s for progress lines and now/next. */
   now = $state(Date.now() / 1000);
 
@@ -171,7 +186,7 @@ class Store {
     this.loading.add(source.id);
     delete this.errors[source.id];
     try {
-      this.setCatalog(source, await invoke<Catalog>('catalog', { source }));
+      this.setCatalog(source, await invoke<Catalog>('catalog', { source, reduced: this.reducedArg }));
       this.refreshed[source.id] = Date.now();
     } catch (e) {
       this.errors[source.id] = String(e);
@@ -346,6 +361,27 @@ class Store {
 
   episodes({ source, series }: SeriesItem): Promise<Episode[]> {
     return invoke<Episode[]>('episodes', { source, series });
+  }
+
+  private infos = new Map<string, Promise<Info>>();
+
+  /** What the provider says about a film: asked once, then kept. A failed ask is not kept. */
+  movieInfo({ source, movie }: MovieItem): Promise<Info> {
+    return this.info(`movie:${movie.id}`, () => invoke<Info>('movie_info', { source, movie }));
+  }
+
+  seriesInfo({ source, series }: SeriesItem): Promise<Info> {
+    return this.info(`series:${series.id}`, () => invoke<Info>('series_info', { source, series }));
+  }
+
+  private info(key: string, ask: () => Promise<Info>): Promise<Info> {
+    let p = this.infos.get(key);
+    if (!p) {
+      p = ask();
+      this.infos.set(key, p);
+      p.catch(() => this.infos.delete(key));
+    }
+    return p;
   }
 
   /** A channel by the number typed, from the source playing first when several sources share it. */

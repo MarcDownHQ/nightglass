@@ -1,13 +1,29 @@
 <script lang="ts">
-  import { t } from './i18n.svelte';
+  import { tick } from 'svelte';
+  import { ANDROID, t } from './i18n.svelte';
   import { contextMenu } from './menuState.svelte';
   import { library } from './library.svelte';
   import type { MovieItem } from './models';
+  import MovieDetail from './MovieDetail.svelte';
   import PosterBrowser, { type ContinueCard } from './PosterBrowser.svelte';
   import { store } from './store.svelte';
   import { clock } from './theme';
 
   const byId = $derived(new Map(store.movies.map((m) => [m.id, m])));
+  /** TV: a film opens its own page (plot, cast, trailer) before it plays. */
+  let opened = $state.raw<MovieItem | null>(null);
+  let returnTo: HTMLElement | null = null;
+
+  function open(i: MovieItem) {
+    returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    opened = i;
+  }
+
+  /** Back puts the focus on the poster it left, so the D-pad carries on from there. */
+  function closeDetail() {
+    opened = null;
+    void tick().then(() => returnTo?.focus());
+  }
 
   function status(i: MovieItem) {
     const p = library.progress[i.id];
@@ -50,16 +66,22 @@
   );
 </script>
 
+<!-- The grid stays mounted under the page, so Back returns to the same category and scroll. -->
+<div class="movies" class:covered={!!opened}>
 <PosterBrowser
   items={store.movies}
   info={(i) => i.movie}
   empty={t('No movies. M3U playlists don’t carry any; add an Xtream account.')}
-  onpick={(i) => store.playMovie(i)}
+  onpick={(i) => (ANDROID ? open(i) : store.playMovie(i))}
   {menu}
   {status}
   {continuing}
-  {details}
+  details={ANDROID ? undefined : details}
 />
+</div>
+{#if opened}
+  <MovieDetail item={opened} close={closeDetail} />
+{/if}
 
 {#snippet details(i: MovieItem)}
   {@const p = library.progress[i.id]}
@@ -86,6 +108,15 @@
 {/snippet}
 
 <style>
+  .movies {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .covered {
+    visibility: hidden;
+  }
   .detail {
     display: flex;
     flex-direction: column;

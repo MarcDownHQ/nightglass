@@ -22,6 +22,8 @@ export const i18n = new I18n();
 
 /** macOS: ⌘ stands for Ctrl in shortcuts, and the window keeps its own buttons (traffic lights). */
 export const MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac OS');
+/** Android TV: the app is the whole screen, with no window of its own to move, resize or take fullscreen. */
+export const ANDROID = typeof navigator !== 'undefined' && navigator.userAgent.includes('Android');
 
 /** The shortcut modifier pressed: Ctrl, or ⌘ on macOS. */
 export function mod(e: KeyboardEvent): boolean {

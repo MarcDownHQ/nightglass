@@ -79,6 +79,24 @@ pub struct Catalog {
     pub account: Option<Account>,
 }
 
+/// What the provider says about one film or series, beyond the list: asked for when its page opens.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Info {
+    pub plot: Option<String>,
+    pub cast: Option<String>,
+    pub director: Option<String>,
+    pub genre: Option<String>,
+    /// Release date or year, as the provider writes it.
+    pub release: Option<String>,
+    /// "01:52:10" or "112 min", as the provider writes it.
+    pub duration: Option<String>,
+    pub rating: Option<f64>,
+    /// A YouTube video id or address.
+    pub trailer: Option<String>,
+    pub backdrop: Option<Url>,
+}
+
 /// An IPTV subscription as the server describes it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +108,9 @@ pub struct Account {
     pub max_connections: Option<i64>,
     pub active_connections: Option<i64>,
     pub trial: bool,
+    /// The provider's own words ("Welcome to …", an announcement); empty is none.
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 /// Same JSON shape as the macOS app's `SourceKind`: `{"m3u": {"url": …, "epg": …}}`.
@@ -132,6 +153,14 @@ pub enum Client {
 }
 
 impl Client {
+    /// Turns the small catalog (known platforms, US/FR/ES) on or off; only Xtream filters.
+    pub fn reduced(mut self, on: bool) -> Self {
+        if let Client::Xtream(c) = &mut self {
+            c.reduced = on;
+        }
+        self
+    }
+
     pub async fn catalog(&self) -> Result<Catalog> {
         match self {
             Client::M3u(c) => c.catalog().await,
@@ -159,6 +188,20 @@ impl Client {
         match self {
             Client::Xtream(c) => c.episodes(series).await,
             _ => Ok(Vec::new()),
+        }
+    }
+
+    pub async fn movie_info(&self, movie: &Movie) -> Result<Info> {
+        match self {
+            Client::Xtream(c) => c.movie_info(movie).await,
+            _ => Ok(Info::default()),
+        }
+    }
+
+    pub async fn series_info(&self, series: &Series) -> Result<Info> {
+        match self {
+            Client::Xtream(c) => c.series_info(series).await,
+            _ => Ok(Info::default()),
         }
     }
 }

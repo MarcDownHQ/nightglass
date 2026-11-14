@@ -1,0 +1,52 @@
+# Builds the Android TV app (32-bit and 64-bit APKs) and attaches them to the build. A `v*` tag also adds them to the draft
+# release, which release.yml creates. The APKs are signed with the debug key: they install on any box, they are not for a store.
+name: Android
+
+on:
+  pull_request:
+    paths: ['windows/**', '.github/workflows/android.yml']
+  push:
+    branches: [master]
+    paths: ['windows/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [armv7, aarch64]
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.2.12479018'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+          key: android-${{ matrix.abi }}
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: sh scripts/android.sh build ${{ matrix.abi }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nightglass-android-${{ matrix.abi }}
+          path: windows/apk/nightglass-${{ matrix.abi }}.apk

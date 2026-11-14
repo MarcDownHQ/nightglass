@@ -65,6 +65,8 @@ export interface Account {
   maxConnections: number | null;
   activeConnections: number | null;
   trial: boolean;
+  /** The provider's own words ("Welcome to …", an announcement). */
+  message?: string | null;
 }
 
 export type SourceKind =
@@ -89,6 +91,20 @@ export interface LiveItem {
   channel: Channel;
   /** The feeds of the same channel when duplicates are merged, best first (this item among them). */
   variants?: LiveItem[];
+}
+
+/** What the provider says about one film or series, beyond the list. */
+export interface Info {
+  plot: string | null;
+  cast: string | null;
+  director: string | null;
+  genre: string | null;
+  release: string | null;
+  duration: string | null;
+  rating: number | null;
+  /** A YouTube video id or address. */
+  trailer: string | null;
+  backdrop: string | null;
 }
 
 export interface MovieItem {

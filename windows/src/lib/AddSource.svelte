@@ -37,7 +37,7 @@
             ? { xtream: { server: location, username: user, password: pass } }
             : { stalker: { portal: location, mac: mac.trim() } };
       const source: Source = { id: crypto.randomUUID(), name: name.trim() || new URL(location).host || kind, kind: sourceKind };
-      const catalog = await invoke<Catalog>('catalog', { source });
+      const catalog = await invoke<Catalog>('catalog', { source, reduced: store.reducedArg });
       store.add(source, catalog);
       message = {
         text: t('Added · {channels} channels, {movies} movies, {series} series', { channels: catalog.channels.length, movies: catalog.movies.length, series: catalog.series.length }),

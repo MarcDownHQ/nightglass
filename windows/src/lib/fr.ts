@@ -436,4 +436,10 @@ export const FR: Record<string, string> = {
   "Show channel names": "Afficher les noms des chaînes",
   // Search
   "Searching…": "Recherche…",
+  // Film and series pages
+  "Trailer": "Bande-annonce",
+  "Small catalog": "Catalogue réduit",
+  "Known platforms and sports, in English, French and Spanish. Off: the whole catalog.": "Plateformes et sports connus, en anglais, français et espagnol. Désactivé : tout le catalogue.",
+  "Director": "Réalisateur",
+  "Cast": "Distribution",
 };
