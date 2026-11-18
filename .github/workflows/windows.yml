@@ -29,6 +29,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          # The plugin host's tests build plugin-example as a WebAssembly component.
+          targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: windows
@@ -40,6 +42,7 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path plugin-example/Cargo.toml --target wasm32-wasip2 -- -D warnings
       - run: cargo test --workspace
       # With the update key (not on forks), the installer is also signed for the in-app updater (.sig next to it).
       - name: Build

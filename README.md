@@ -11,6 +11,7 @@ Lecteur IPTV pour Windows et macOS : une seule app, **Tauri 2** (Rust) + **Svelt
 | M3U / M3U8 | Fichier local ou URL. Parse `#EXTINF` (`tvg-id`, `tvg-name`, `tvg-logo`, `group-title`, `catchup*`), `#EXTVLCOPT` (user-agent, referrer). |
 | Xtream Codes | `player_api.php` : catégories et flux live/VOD/séries, `get_series_info`, `xmltv.php`, replay (`tv_archive`). URLs de lecture construites à partir de `username/password/stream_id`. |
 | Stalker / MAG portal | `portal.php` avec adresse MAC : `handshake` → `get_profile` → `itv/get_genres` / `get_all_channels` → `create_link`. |
+| Plugins | Composants WebAssembly qui ajoutent un type de source : voir [windows/README.md](windows/README.md#plugins). |
 | XMLTV (EPG) | URL fournie par la playlist (`url-tvg`), par Xtream ou saisie à la main. Lu en flux (fichiers de plusieurs centaines de Mo, souvent gzippés). |
 
 ## Design

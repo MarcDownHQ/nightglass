@@ -30,7 +30,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # wasm32-wasip2: the plugin host's tests build plugin-example as a WebAssembly component.
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: windows
