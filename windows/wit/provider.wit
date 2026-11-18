@@ -1,0 +1,157 @@
+package nightglass:provider@0.1.0;
+
+interface types {
+    /// A source's settings, keyed by `field.key`. Fields left empty are absent.
+    type config = list<tuple<string, string>>;
+
+    enum field-kind {
+        text,
+        secret,
+        /// An http(s) address.
+        url,
+        /// An http(s) address or a local file. Plugins can't read local files: prefer `url`.
+        location,
+        mac,
+    }
+
+    record field {
+        key: string,
+        /// In English; the app translates the labels it knows.
+        label: string,
+        kind: field-kind,
+        required: bool,
+        placeholder: option<string>,
+        default: option<string>,
+    }
+
+    record preset {
+        label: string,
+        name: string,
+        config: config,
+    }
+
+    record provider-info {
+        /// Unique among providers: lowercase letters, digits and `-`.
+        id: string,
+        name: string,
+        fields: list<field>,
+        /// Channel links are short-lived: `stream-url` is called at play time.
+        resolves-streams: bool,
+        presets: list<preset>,
+    }
+
+    record channel {
+        id: string,
+        name: string,
+        number: option<s64>,
+        group: option<string>,
+        logo: option<string>,
+        epg-id: option<string>,
+        %stream: string,
+        headers: list<tuple<string, string>>,
+        /// Days of replay the server keeps.
+        catchup-days: option<s64>,
+    }
+
+    record movie {
+        id: string,
+        name: string,
+        group: option<string>,
+        poster: option<string>,
+        %stream: string,
+        rating: option<f64>,
+        plot: option<string>,
+    }
+
+    record series {
+        id: string,
+        name: string,
+        group: option<string>,
+        poster: option<string>,
+        rating: option<f64>,
+        plot: option<string>,
+    }
+
+    record episode {
+        id: string,
+        title: string,
+        season: s64,
+        number: s64,
+        %stream: string,
+        plot: option<string>,
+    }
+
+    record account {
+        status: option<string>,
+        /// Unix seconds.
+        expires: option<s64>,
+        max-connections: option<s64>,
+        active-connections: option<s64>,
+        trial: bool,
+    }
+
+    record catalog {
+        channels: list<channel>,
+        movies: list<movie>,
+        series: list<series>,
+        /// An XMLTV guide for the channels.
+        epg-url: option<string>,
+        account: option<account>,
+    }
+
+    variant error {
+        /// The server answered with this status.
+        http(u16),
+        auth-failed,
+        bad-response(string),
+        network(string),
+        /// The named setting is missing or invalid.
+        setting(string),
+    }
+}
+
+/// The only way out of the sandbox.
+interface http {
+    use types.{error};
+
+    record request {
+        method: string,
+        url: string,
+        headers: list<tuple<string, string>>,
+        body: option<list<u8>>,
+    }
+
+    record response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    /// http and https only. Any status is a response; only a failed connection is an error.
+    send: func(request: request) -> result<response, error>;
+}
+
+interface log {
+    enum level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    log: func(level: level, message: string);
+}
+
+world provider {
+    import http;
+    import log;
+
+    use types.{config, provider-info, catalog, channel, series, episode, error};
+
+    export describe: func() -> provider-info;
+    export load-catalog: func(config: config) -> result<catalog, error>;
+    /// Only called when `resolves-streams` is set.
+    export stream-url: func(config: config, channel: channel) -> result<string, error>;
+    export catchup-url: func(config: config, channel: channel, start: s64, end: s64) -> result<string, error>;
+    export episodes: func(config: config, series: series) -> result<list<episode>, error>;
+}

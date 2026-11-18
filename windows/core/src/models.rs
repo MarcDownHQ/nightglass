@@ -145,6 +145,8 @@ pub enum IptvError {
     Setting(String),
     #[error("No provider \"{0}\" is installed.")]
     UnknownProvider(String),
+    #[error("The plugin failed: {0}")]
+    Plugin(String),
 }
 
 pub type Result<T> = std::result::Result<T, IptvError>;
