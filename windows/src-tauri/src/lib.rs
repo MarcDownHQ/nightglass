@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Providers, Series, Source, xmltv};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
@@ -114,8 +114,8 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
 
 // shortcut: whole catalogs cross the IPC bridge as JSON; page them from Rust if a provider's tens of thousands of entries get slow.
 #[tauri::command]
-async fn catalog(app: AppHandle, http: State<'_, Http>, source: Source) -> Result<Catalog, String> {
-    let catalog = source.client(&http).catalog().await.map_err(|e| e.to_string())?;
+async fn catalog(app: AppHandle, providers: State<'_, Providers>, source: Source) -> Result<Catalog, String> {
+    let catalog = providers.get(&source.provider).map_err(|e| e.to_string())?.catalog(&source.config).await.map_err(|e| e.to_string())?;
     let (id, copy) = (source.id.to_string(), catalog.clone());
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(e) = cache::write(&app, "catalog", &id, &copy) {
@@ -158,16 +158,16 @@ fn unix_now() -> i64 {
 
 type Guide = HashMap<String, Vec<Programme>>;
 
-/// Stalker links are short-lived, so they are asked for at play time; other sources return the stream as is.
+/// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(http: State<'_, Http>, source: Source, channel: Channel) -> Result<Url, String> {
-    source.client(&http).stream_url(&channel).await.map_err(|e| e.to_string())
+async fn stream_url(providers: State<'_, Providers>, source: Source, channel: Channel) -> Result<Url, String> {
+    providers.get(&source.provider).map_err(|e| e.to_string())?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())
 }
 
-/// A series' episodes, asked for when its page opens (Xtream only; other sources have none).
+/// A series' episodes, asked for when its page opens.
 #[tauri::command]
-async fn episodes(http: State<'_, Http>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
-    source.client(&http).episodes(&series).await.map_err(|e| e.to_string())
+async fn episodes(providers: State<'_, Providers>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
+    providers.get(&source.provider).map_err(|e| e.to_string())?.episodes(&source.config, &series).await.map_err(|e| e.to_string())
 }
 
 /// Programmes from 3 days ago (for replay) to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
@@ -213,10 +213,10 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
         .map_err(|e| e.to_string())
 }
 
-/// A past programme, from the servers that keep them (Xtream `tv_archive`).
+/// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(http: State<'_, Http>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
-    source.client(&http).catchup_url(&channel, start, end).await.map_err(|e| e.to_string())
+async fn catchup_url(providers: State<'_, Providers>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
+    providers.get(&source.provider).map_err(|e| e.to_string())?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
@@ -274,7 +274,9 @@ pub fn run() {
             app.manage(MainWindow(main));
             app.manage(tiles::MpvDll(dll));
             app.manage(tiles::Tiles::default());
-            app.manage(Http::new());
+            let http = Http::new();
+            app.manage(Providers::builtin(&http));
+            app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
             Ok(())

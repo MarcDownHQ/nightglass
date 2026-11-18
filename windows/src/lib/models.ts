@@ -67,19 +67,13 @@ export interface Account {
   trial: boolean;
 }
 
-export type SourceKind =
-  | { m3u: { url: string; epg: string | null } }
-  | { xtream: { server: string; username: string; password: string } }
-  | { stalker: { portal: string; mac: string } };
-
 export interface Source {
   id: string;
   name: string;
-  kind: SourceKind;
-}
-
-export function kindLabel(kind: SourceKind): 'M3U' | 'Xtream' | 'Stalker' {
-  return 'm3u' in kind ? 'M3U' : 'xtream' in kind ? 'Xtream' : 'Stalker';
+  /** A `ProviderInfo.id`. */
+  provider: string;
+  /** Settings keyed by `Field.key`; empty fields are absent. */
+  config: Record<string, string>;
 }
 
 /** A channel and the source it came from (Stalker needs the source to resolve its link). */

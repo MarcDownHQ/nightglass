@@ -2,7 +2,7 @@
   import { plural, t } from './i18n.svelte';
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
-  import { kindLabel, type Source } from './models';
+  import type { Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
   import { friendly } from './errors';
@@ -40,7 +40,7 @@
     <div class="rows">
       {#if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
       {#each store.sources as s (s.id)}
-        {@const kind = kindLabel(s.kind)}
+        {@const kind = ({ m3u: 'M3U', xtream: 'Xtream', stalker: 'Stalker' } as Record<string, string>)[s.provider] ?? s.provider}
         {@const cat = store.catalogs[s.id]}
         <div
           class="row"

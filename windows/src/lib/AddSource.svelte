@@ -3,7 +3,7 @@
   import { friendly } from './errors';
   import { invoke } from '@tauri-apps/api/core';
   import HudPanel from './HudPanel.svelte';
-  import type { Catalog, Source, SourceKind } from './models';
+  import type { Catalog, Source } from './models';
   import NeonTab from './NeonTab.svelte';
   import { store } from './store.svelte';
 
@@ -30,13 +30,13 @@
     try {
       // Also turns a Windows path (C:\…\list.m3u) into a file URL.
       const location = await invoke<string>('parse_location', { input: url });
-      const sourceKind: SourceKind =
+      const [provider, config]: [string, Record<string, string>] =
         kind === 'M3U'
-          ? { m3u: { url: location, epg: epg.trim() ? await invoke<string>('parse_location', { input: epg }) : null } }
+          ? ['m3u', { url: location, ...(epg.trim() ? { epg: await invoke<string>('parse_location', { input: epg }) } : {}) }]
           : kind === 'Xtream'
-            ? { xtream: { server: location, username: user, password: pass } }
-            : { stalker: { portal: location, mac: mac.trim() } };
-      const source: Source = { id: crypto.randomUUID(), name: name.trim() || new URL(location).host || kind, kind: sourceKind };
+            ? ['xtream', { server: location, username: user, password: pass }]
+            : ['stalker', { portal: location, mac: mac.trim() }];
+      const source: Source = { id: crypto.randomUUID(), name: name.trim() || new URL(location).host || kind, provider, config };
       const catalog = await invoke<Catalog>('catalog', { source });
       store.add(source, catalog);
       message = {

@@ -180,17 +180,13 @@ mod keychain {
 
 #[cfg(test)]
 mod tests {
-    use nightglass_core::SourceKind;
-
     use super::*;
 
     #[test]
     fn round_trip_is_encrypted() {
         let path = std::env::temp_dir().join(format!("nightglass-test-{}.bin", std::process::id()));
-        let sources = vec![Source::new(
-            "Panel",
-            SourceKind::Xtream { server: "http://panel.test".parse().unwrap(), username: "u".into(), password: "s3cret".into() },
-        )];
+        let config = [("server", "http://panel.test"), ("username", "u"), ("password", "s3cret")].map(|(k, v)| (k.to_string(), v.to_string()));
+        let sources = vec![Source::new("Panel", "xtream", config.into())];
         save(&path, &sources).unwrap();
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"s3cret"));

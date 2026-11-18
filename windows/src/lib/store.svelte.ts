@@ -261,7 +261,7 @@ class Store {
 
   async playable(item: LiveItem): Promise<Playable> {
     const { source, channel } = item;
-    const url = 'stalker' in source.kind ? await invoke<string>('stream_url', { source, channel }) : channel.stream;
+    const url = source.provider === 'stalker' ? await invoke<string>('stream_url', { source, channel }) : channel.stream;
     return {
       id: item.id,
       title: channel.name,

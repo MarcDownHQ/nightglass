@@ -97,7 +97,7 @@ export function openVariantMenu(e: MouseEvent, row: LiveItem) {
 /** Stalker links are resolved first: the stored one is a portal command, not a URL a player can open. */
 async function copyUrl(item: LiveItem) {
   try {
-    const url = 'stalker' in item.source.kind ? await invoke<string>('stream_url', { source: item.source, channel: item.channel }) : item.channel.stream;
+    const url = item.source.provider === 'stalker' ? await invoke<string>('stream_url', { source: item.source, channel: item.channel }) : item.channel.stream;
     await navigator.clipboard.writeText(url);
     player.notify(t('Stream URL copied'));
   } catch (e) {
