@@ -175,6 +175,10 @@ pub enum IptvError {
     Network(String),
     #[error("Can't read the file: {0}")]
     File(String),
+    #[error("Missing or invalid setting: {0}.")]
+    Setting(String),
+    #[error("No provider \"{0}\" is installed.")]
+    UnknownProvider(String),
 }
 
 pub type Result<T> = std::result::Result<T, IptvError>;
