@@ -2,6 +2,7 @@
   import { plural, t } from './i18n.svelte';
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
+  import Plugins from './Plugins.svelte';
   import type { Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
@@ -95,6 +96,7 @@
       >
       <button onclick={importSettings} title={t('From a file exported on this computer or another')}><span class="icon">&#xE8B5;</span> {t('Import settings…')}</button>
     </div>
+    <Plugins />
   </div>
 </div>
 

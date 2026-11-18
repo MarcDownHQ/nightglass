@@ -6,6 +6,7 @@ import { t } from './i18n.svelte';
 const RULES: [RegExp, string][] = [
   [/^missing or invalid setting/i, 'A setting of this source is missing or invalid: add it again.'],
   [/^no provider .* is installed/i, 'This source comes from a plugin that isn’t installed any more.'],
+  [/^the plugin failed/i, 'The plugin of this source failed: try again, or update the plugin.'],
   [/^invalid (url|path)/i, 'This address isn’t valid: it starts with http:// or https://, or it is the path of a file.'],
   [/identifiants refus|refused the credentials|auth.*fail|invalid credentials/i, 'The provider refused the username or password.'],
   [/\b(401|403|458|509)\b|forbidden|too many connections|max.?connections/i, 'The provider refused access: the account may have expired, or too many devices are watching at once.'],

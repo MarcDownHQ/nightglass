@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
 use nightglass_core::{Catalog, Channel, Episode, Http, Programme, ProviderInfo, Providers, Series, Source, xmltv};
+use nightglass_plugin_host::PluginStatus;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
@@ -100,6 +101,18 @@ async fn pip_close(app: AppHandle) -> Result<(), String> {
         Some(pip) => pip.close().map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// The plugins folder and what became of each file in it at launch.
+#[derive(serde::Serialize)]
+struct Plugins {
+    dir: std::path::PathBuf,
+    plugins: Vec<PluginStatus>,
+}
+
+#[tauri::command]
+fn plugins(plugins: State<'_, Plugins>) -> &Plugins {
+    plugins.inner()
 }
 
 /// The source types the add form offers, and what each one asks for.
@@ -257,6 +270,19 @@ fn automation() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| k.starts_with("NG_")).collect()
 }
 
+fn load_plugins(dir: &std::path::Path, http: &Http, providers: &mut Providers) -> Vec<PluginStatus> {
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        log::warn!("{}: {e}", dir.display());
+    }
+    match nightglass_plugin_host::Host::new(http) {
+        Ok(host) => tauri::async_runtime::block_on(host.load_dir(dir, providers)),
+        Err(e) => {
+            log::error!("plugin host: {e:#}");
+            Vec::new()
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -281,7 +307,11 @@ pub fn run() {
             app.manage(tiles::MpvDll(dll));
             app.manage(tiles::Tiles::default());
             let http = Http::new();
-            app.manage(Providers::builtin(&http));
+            let mut providers = Providers::builtin(&http);
+            let dir = app.path().app_data_dir()?.join("plugins");
+            let plugins = load_plugins(&dir, &http, &mut providers);
+            app.manage(providers);
+            app.manage(Plugins { dir, plugins });
             app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
@@ -313,6 +343,7 @@ pub fn run() {
             pip_open,
             pip_close,
             providers,
+            plugins,
             sources_load,
             sources_save,
             catalog,

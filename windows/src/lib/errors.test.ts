@@ -20,6 +20,7 @@ describe('friendly', () => {
     ['Invalid path: list.m3u', /isn’t valid/],
     ['Missing or invalid setting: username.', /setting of this source/],
     ['No provider "acme" is installed.', /plugin that isn’t installed/],
+    ['The plugin failed: wasm trap: unreachable', /plugin of this source failed/],
   ])('%s', (raw, expected) => expect(friendly(raw)).toMatch(expected));
 
   it('speaks French when asked', () => {

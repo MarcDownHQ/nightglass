@@ -2734,6 +2734,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "nightglass-core",
+ "nightglass-plugin-host",
  "objc2",
  "objc2-app-kit",
  "objc2-core-graphics",
