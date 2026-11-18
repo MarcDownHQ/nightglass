@@ -50,10 +50,12 @@ En plus de la version macOS :
 ## Architecture
 
 ```
-core/        # crate nightglass-core : clients M3U, Xtream, Stalker, XMLTV + modèles communs, sans UI
+core/        # crate nightglass-core : fournisseurs (M3U, Xtream, Stalker), XMLTV + modèles communs, sans UI
 src-tauri/   # app Tauri : lecteur mpv, sources chiffrées (DPAPI), commandes appelées par l'interface
 src/         # interface Svelte
 ```
+
+Chaque type de source est un fournisseur (`Provider` dans `core/src/provider.rs`) : il décrit les champs du formulaire d'ajout et répond aux appels catalogue, lien de lecture, replay et épisodes. Une source enregistre l'identifiant de son fournisseur et ses réglages (`{"provider": "xtream", "config": {"server": …}}`) ; l'ancien format (`{"kind": {"xtream": …}}`) se relit toujours.
 
 Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
 

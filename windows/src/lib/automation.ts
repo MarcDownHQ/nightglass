@@ -6,7 +6,7 @@ import { store } from './store.svelte';
 
 /**
  * Debug-only test hooks, driven by environment variables (the same names as the macOS app):
- * - `NG_SEED`: JSON `[Source]`, ids optional, added like the Sources screen does.
+ * - `NG_SEED`: JSON `[Source]` (`{"name", "provider", "config"}`), ids optional, added like the Sources screen does.
  * - `NG_SECTION`: LIVE / GUIDE / MOVIES / SERIES / SOURCES.
  * - `NG_ACTIVE`: name of the source to show.
  * - `NG_PLAY`: part of a channel name to tune; `NG_EXPAND=1` opens it fullscreen.
