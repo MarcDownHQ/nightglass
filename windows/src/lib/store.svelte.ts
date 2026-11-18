@@ -11,6 +11,7 @@ import {
   type LiveItem,
   type MovieItem,
   type Programme,
+  type ProviderInfo,
   type SeriesItem,
   type Source,
 } from './models';
@@ -20,6 +21,7 @@ import { withoutOverlaps } from './epg';
 import { prefs } from './prefs';
 
 class Store {
+  providers = $state.raw<ProviderInfo[]>([]);
   sources = $state.raw<Source[]>([]);
   catalogs = $state.raw<Record<string, Catalog>>({});
   loading = new SvelteSet<string>();
@@ -135,7 +137,7 @@ class Store {
 
   async init() {
     setInterval(() => (this.now = Date.now() / 1000), 30_000);
-    this.sources = await invoke<Source[]>('sources_load');
+    [this.providers, this.sources] = await Promise.all([invoke<ProviderInfo[]>('providers'), invoke<Source[]>('sources_load')]);
     // Last launch's catalogs and guides first, so the screens fill at once; then the network.
     await Promise.all(this.sources.map((s) => this.restore(s)));
     for (const s of this.sources) void this.refresh(s);
@@ -259,9 +261,18 @@ class Store {
     return list[i].start <= at ? { now: list[i], next: list[i + 1] } : { next: list[i] };
   }
 
+  provider(source: Source): ProviderInfo | undefined {
+    return this.providers.find((p) => p.id === source.provider);
+  }
+
+  /** The link a player can open: asked at play time for providers whose links are short-lived (Stalker). */
+  async streamUrl(source: Source, channel: Channel): Promise<string> {
+    return this.provider(source)?.resolvesStreams ? invoke<string>('stream_url', { source, channel }) : channel.stream;
+  }
+
   async playable(item: LiveItem): Promise<Playable> {
     const { source, channel } = item;
-    const url = source.provider === 'stalker' ? await invoke<string>('stream_url', { source, channel }) : channel.stream;
+    const url = await this.streamUrl(source, channel);
     return {
       id: item.id,
       title: channel.name,

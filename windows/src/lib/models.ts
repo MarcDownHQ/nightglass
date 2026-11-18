@@ -67,6 +67,34 @@ export interface Account {
   trial: boolean;
 }
 
+export type FieldKind = 'text' | 'secret' | 'url' | 'location' | 'mac';
+
+/** One setting a provider asks for when a source is added. `location` also takes a local file. */
+export interface Field {
+  key: string;
+  label: string;
+  kind: FieldKind;
+  required: boolean;
+  placeholder: string | null;
+  default: string | null;
+}
+
+export interface Preset {
+  label: string;
+  name: string;
+  config: Record<string, string>;
+}
+
+/** A source type: built in (M3U, Xtream, Stalker) or added by a plugin. */
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  fields: Field[];
+  /** Links are short-lived: `stream_url` is asked at play time. */
+  resolvesStreams: boolean;
+  presets: Preset[];
+}
+
 export interface Source {
   id: string;
   name: string;

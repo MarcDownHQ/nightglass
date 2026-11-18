@@ -40,7 +40,7 @@
     <div class="rows">
       {#if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
       {#each store.sources as s (s.id)}
-        {@const kind = ({ m3u: 'M3U', xtream: 'Xtream', stalker: 'Stalker' } as Record<string, string>)[s.provider] ?? s.provider}
+        {@const kind = store.provider(s)?.name ?? s.provider}
         {@const cat = store.catalogs[s.id]}
         <div
           class="row"
@@ -168,7 +168,7 @@
     border-radius: 2px;
     background: var(--magenta);
   }
-  /* One width for M3U, Xtream and Stalker, so the names line up. */
+  /* One width for every source type, so the names line up. */
   .kind {
     flex: none;
     width: 58px;

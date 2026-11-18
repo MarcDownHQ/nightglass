@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Providers, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Programme, ProviderInfo, Providers, Series, Source, xmltv};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
@@ -100,6 +100,12 @@ async fn pip_close(app: AppHandle) -> Result<(), String> {
         Some(pip) => pip.close().map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// The source types the add form offers, and what each one asks for.
+#[tauri::command]
+fn providers(providers: State<'_, Providers>) -> Vec<ProviderInfo> {
+    providers.infos()
 }
 
 #[tauri::command]
@@ -228,16 +234,16 @@ fn record_path(app: AppHandle, name: String) -> Result<String, String> {
     Ok(dir.join(format!("{}.ts", safe.trim())).to_string_lossy().into_owned())
 }
 
-/// What the user typed as a playlist, guide or portal address: a URL, or a Windows path to a local file.
+/// What the user typed as a playlist, guide or portal address: a URL, or (with `files`) a path to a local file.
 #[tauri::command]
-fn parse_location(input: String) -> Result<Url, String> {
+fn parse_location(input: String, files: bool) -> Result<Url, String> {
     let input = input.trim();
     let path = std::path::Path::new(input);
-    if path.is_absolute() {
+    if files && path.is_absolute() {
         return Url::from_file_path(path).map_err(|_| format!("Invalid path: {input}"));
     }
     match Url::parse(input) {
-        Ok(u) if matches!(u.scheme(), "http" | "https" | "file") => Ok(u),
+        Ok(u) if matches!(u.scheme(), "http" | "https") || (files && u.scheme() == "file") => Ok(u),
         _ => Err("Invalid URL".into()),
     }
 }
@@ -306,6 +312,7 @@ pub fn run() {
             video_place,
             pip_open,
             pip_close,
+            providers,
             sources_load,
             sources_save,
             catalog,
