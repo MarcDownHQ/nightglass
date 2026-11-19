@@ -2,7 +2,7 @@
 
 <img src="windows/src-tauri/icons/128x128@2x.png" width="128" alt="Icône Nightglass">
 
-Lecteur IPTV pour Windows et macOS : une seule app, **Tauri 2** (Rust) + **Svelte 5** + **libmpv**, dans [windows/](windows/README.md) (compiler, lancer, publier une version).
+Lecteur IPTV pour Windows, macOS et Linux : une seule app, **Tauri 2** (Rust) + **Svelte 5** + **libmpv**, dans [windows/](windows/README.md) (compiler, lancer, publier une version).
 
 ## Sources supportées
 
@@ -40,3 +40,5 @@ libmpv garde sa propre licence. Les deux apps embarquent une build LGPL, chargé
 - macOS : la build `video-full` de [media-kit/libmpv-darwin-build](https://github.com/media-kit/libmpv-darwin-build).
 
 Les deux apps joignent ces licences et indiquent où obtenir les sources ([windows/licenses/](windows/licenses/THIRD-PARTY-NOTICES.txt)).
+
+Sous Linux, l'app n'embarque pas libmpv : elle charge celle de la distribution.
