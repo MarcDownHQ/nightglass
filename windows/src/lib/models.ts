@@ -62,6 +62,8 @@ export interface Catalog {
   series: Series[];
   epgUrl: string | null;
   account?: Account | null;
+  /** Guide entries sent with the catalog, matched to channels by `epgId`. */
+  programmes?: Programme[];
 }
 
 /** An IPTV subscription as the server describes it (Xtream). Times are Unix seconds. */

@@ -149,7 +149,7 @@ impl XtreamClient {
                 })
             })
             .collect();
-        Ok(Catalog { channels, movies, series: shows, epg_url: Some(self.with_credentials("xmltv.php")), account: Some(account) })
+        Ok(Catalog { channels, movies, series: shows, epg_url: Some(self.with_credentials("xmltv.php")), account: Some(account), ..Default::default() })
     }
 
     /// `timeshift/<user>/<pass>/<minutes>/<YYYY-MM-DD:HH-MM>/<id>.ts`, with the start in the server's

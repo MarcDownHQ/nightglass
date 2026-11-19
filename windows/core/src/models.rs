@@ -113,6 +113,9 @@ pub struct Catalog {
     /// The subscription, for sources that say (Xtream `user_info`).
     #[serde(default)]
     pub account: Option<Account>,
+    /// Guide entries the source sends with its catalog, matched to channels by `epg_id` like a guide's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programmes: Vec<Programme>,
 }
 
 /// An IPTV subscription as the server describes it.

@@ -171,7 +171,10 @@ class Store {
         invoke<Catalog | null>('catalog_cached', { id: source.id }),
         invoke<Record<string, Programme[]> | null>('guide_cached', { id: source.id }),
       ]);
-      if (catalog && !this.catalogs[source.id]) this.catalogs = { ...this.catalogs, [source.id]: catalog };
+      if (catalog && !this.catalogs[source.id]) {
+        this.catalogs = { ...this.catalogs, [source.id]: catalog };
+        this.mergeProgrammes(catalog);
+      }
       if (guide) this.mergeGuide(guide);
     } catch (e) {
       console.warn(`cache ${source.name}: ${e}`);
@@ -193,7 +196,15 @@ class Store {
 
   private setCatalog(source: Source, catalog: Catalog) {
     this.catalogs = { ...this.catalogs, [source.id]: catalog };
+    this.mergeProgrammes(catalog);
     if (catalog.epgUrl) void this.loadGuide(source, catalog.epgUrl, catalog.channels);
+  }
+
+  private mergeProgrammes(catalog: Catalog) {
+    if (!catalog.programmes?.length) return;
+    const guide: Record<string, Programme[]> = {};
+    for (const p of catalog.programmes) (guide[epgKey(p.channel)] ??= []).push(p);
+    this.mergeGuide(guide);
   }
 
   /** Downloads the source's guide again: after a channel was matched by hand. */

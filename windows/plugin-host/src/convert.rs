@@ -80,6 +80,7 @@ pub fn catalog(c: wit::Catalog) -> Catalog {
             active_connections: a.active_connections,
             trial: a.trial,
         }),
+        programmes: Vec::new(),
     }
 }
 
