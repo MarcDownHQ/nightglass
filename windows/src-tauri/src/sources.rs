@@ -1,5 +1,6 @@
 //! Sources hold provider passwords: the whole list lives in one file encrypted for the current user
-//! (DPAPI on Windows; on macOS with a key kept in the login keychain), never in plain text.
+//! (DPAPI on Windows; with a key kept in the login keychain on macOS, in the desktop's keyring on Linux), never in
+//! plain text.
 
 use std::path::{Path, PathBuf};
 
@@ -87,20 +88,20 @@ pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 pub use keychain::protect;
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 mod keychain {
     use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
     use ring::rand::{SecureRandom, SystemRandom};
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     use security_framework::passwords::{get_generic_password, set_generic_password};
 
     const SERVICE: &str = "com.marcdownhq.nightglass";
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     const ACCOUNT: &str = "data-key";
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     const NOT_FOUND: i32 = -25300; // errSecItemNotFound
 
     /// Read once per launch: each keychain read may ask the user.
@@ -125,7 +126,7 @@ mod keychain {
     }
 
     /// The user's data key, made on first use. Any other keychain error (access denied…) fails rather than replace it.
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     fn stored_key() -> Result<Vec<u8>, String> {
         match get_generic_password(SERVICE, ACCOUNT) {
             Ok(bytes) => Ok(bytes),
@@ -140,7 +141,7 @@ mod keychain {
 
     /// Dev builds: every rebuild is a new unsigned binary to the keychain, which would ask for the password each
     /// time; the key lives instead in a file only the user can read, apart from a release build's data.
-    #[cfg(debug_assertions)]
+    #[cfg(all(target_os = "macos", debug_assertions))]
     fn stored_key() -> Result<Vec<u8>, String> {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
@@ -155,6 +156,23 @@ mod keychain {
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         file.write_all(&bytes).map_err(|e| e.to_string())?;
         Ok(bytes)
+    }
+
+    /// The user's data key in the desktop's keyring (Secret Service: GNOME Keyring, KWallet…), made on first use.
+    /// Any other error (no keyring running, access denied…) fails rather than replace it.
+    #[cfg(target_os = "linux")]
+    fn stored_key() -> Result<Vec<u8>, String> {
+        let account = if cfg!(debug_assertions) { "dev-data-key" } else { "data-key" };
+        let entry = keyring::Entry::new(SERVICE, account).map_err(|e| format!("Keyring: {e}"))?;
+        match entry.get_secret() {
+            Ok(bytes) => Ok(bytes),
+            Err(keyring::Error::NoEntry) => {
+                let bytes = new_key()?;
+                entry.set_secret(&bytes).map_err(|e| format!("Keyring: {e}"))?;
+                Ok(bytes)
+            }
+            Err(e) => Err(format!("Keyring: {e}")),
+        }
     }
 
     /// Encrypts (or decrypts) `data` so that only the current user can read it: a random nonce, then the sealed data.
