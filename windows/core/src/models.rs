@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::Config;
+use crate::{Browser, Config};
 
 /// A live channel, whatever protocol it came from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -63,12 +63,33 @@ pub struct Playback {
     /// Sent with every request of the stream, over the channel's own.
     #[serde(default)]
     pub headers: HashMap<String, String>,
+    /// Fetched by the app rather than by the player, which then opens the stream on 127.0.0.1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<Relay>,
 }
 
 impl From<Url> for Playback {
     fn from(url: Url) -> Self {
-        Playback { url, headers: HashMap::new() }
+        Playback { url, headers: HashMap::new(), relay: None }
     }
+}
+
+/// How the app fetches a stream for the player: playlists are rewritten to come back through it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Relay {
+    /// For servers that only answer browsers.
+    #[serde(default)]
+    pub browser: Option<Browser>,
+    /// Every answer goes through `Provider::filter` before the player gets it.
+    #[serde(default)]
+    pub filter: bool,
+}
+
+/// A playlist, segment or key on its way to the player.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Media {
+    pub content_type: Option<String>,
+    pub body: Vec<u8>,
 }
 
 /// One guide entry. Times are Unix seconds.

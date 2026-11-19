@@ -178,7 +178,12 @@ impl Http {
                     builder = builder.body(body);
                 }
                 let response = builder.send().await.map_err(network)?;
-                Ok(Opened { status: response.status().as_u16(), headers: header_list(response.headers(), |v| v.to_str().ok()), body: Body::App(response) })
+                Ok(Opened {
+                    url: response.url().clone(),
+                    status: response.status().as_u16(),
+                    headers: header_list(response.headers(), |v| v.to_str().ok()),
+                    body: BodyReader(Body::App(response)),
+                })
             }
             Some(browser) => {
                 let client = self.browser(browser)?;
@@ -191,7 +196,12 @@ impl Http {
                     builder = builder.body(body);
                 }
                 let response = builder.send().await.map_err(network_as_browser)?;
-                Ok(Opened { status: response.status().as_u16(), headers: header_list(response.headers(), |v| v.to_str().ok()), body: Body::Browser(Box::pin(response.bytes_stream())) })
+                Ok(Opened {
+                    url: Url::parse(&response.uri().to_string()).unwrap_or(request.url),
+                    status: response.status().as_u16(),
+                    headers: header_list(response.headers(), |v| v.to_str().ok()),
+                    body: BodyReader(Body::Browser(Box::pin(response.bytes_stream()))),
+                })
             }
         }
     }
@@ -233,10 +243,15 @@ pub struct Response {
 
 /// An answer whose body is still on its way.
 pub struct Opened {
+    /// Where the answer came from, after redirects.
+    pub url: Url,
     pub status: u16,
     pub headers: Vec<(String, String)>,
-    body: Body,
+    body: BodyReader,
 }
+
+/// The body of an `Opened`, read as it arrives.
+pub struct BodyReader(Body);
 
 enum Body {
     App(reqwest::Response),
@@ -250,7 +265,17 @@ impl Opened {
 
     /// The next piece of the body, none at its end.
     pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
-        match &mut self.body {
+        self.body.chunk().await
+    }
+
+    pub fn into_body(self) -> BodyReader {
+        self.body
+    }
+}
+
+impl BodyReader {
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
+        match &mut self.0 {
             Body::App(r) => r.chunk().await.map_err(network),
             Body::Browser(r) => futures_util::StreamExt::next(r).await.transpose().map_err(network_as_browser),
         }

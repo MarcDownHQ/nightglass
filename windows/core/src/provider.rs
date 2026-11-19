@@ -9,7 +9,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{Catalog, Channel, Episode, IptvError, Playback, Result, Series};
+use crate::{Catalog, Channel, Episode, IptvError, Media, Playback, Result, Series};
 
 /// A source's settings, keyed by `Field::key`. Fields left empty are absent.
 pub type Config = BTreeMap<String, String>;
@@ -79,6 +79,12 @@ pub trait Provider: Send + Sync {
 
     fn episodes<'a>(&'a self, _config: &'a Config, _series: &'a Series) -> BoxFuture<'a, Result<Vec<Episode>>> {
         Box::pin(async { Ok(Vec::new()) })
+    }
+
+    /// An answer `url` gave while the app relays a playback that asked for it (`Relay::filter`), changed before the
+    /// player gets it.
+    fn filter<'a>(&'a self, _config: &'a Config, _url: &'a Url, media: Media) -> BoxFuture<'a, Result<Media>> {
+        Box::pin(async { Ok(media) })
     }
 }
 
