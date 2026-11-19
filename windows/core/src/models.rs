@@ -56,6 +56,21 @@ pub struct Episode {
     pub plot: Option<String>,
 }
 
+/// What a player opens for a channel or a replay.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Playback {
+    pub url: Url,
+    /// Sent with every request of the stream, over the channel's own.
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+}
+
+impl From<Url> for Playback {
+    fn from(url: Url) -> Self {
+        Playback { url, headers: HashMap::new() }
+    }
+}
+
 /// One guide entry. Times are Unix seconds.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Programme {

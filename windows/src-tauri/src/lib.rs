@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Provider, ProviderInfo, Providers, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Playback, Programme, Provider, ProviderInfo, Providers, Series, Source, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -220,8 +220,17 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(registry: State<'_, Registry>, source: Source, channel: Channel) -> Result<Url, String> {
-    registry.get(&source.provider).await?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())
+async fn stream_url(registry: State<'_, Registry>, source: Source, channel: Channel) -> Result<Playback, String> {
+    let playback = registry.get(&source.provider).await?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())?;
+    Ok(with_channel_headers(playback, &channel))
+}
+
+/// The channel's headers, under those the provider gave for this playback.
+fn with_channel_headers(mut playback: Playback, channel: &Channel) -> Playback {
+    for (name, value) in &channel.headers {
+        playback.headers.entry(name.clone()).or_insert_with(|| value.clone());
+    }
+    playback
 }
 
 /// A series' episodes, asked for when its page opens.
@@ -275,8 +284,9 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(registry: State<'_, Registry>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
-    registry.get(&source.provider).await?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())
+async fn catchup_url(registry: State<'_, Registry>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Playback, String> {
+    let playback = registry.get(&source.provider).await?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())?;
+    Ok(with_channel_headers(playback, &channel))
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.

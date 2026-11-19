@@ -13,6 +13,12 @@ export interface Channel {
   catchupDays?: number | null;
 }
 
+/** What a player opens: `stream_url` and `catchup_url` answer with it. */
+export interface Playback {
+  url: string;
+  headers: Record<string, string>;
+}
+
 export interface Movie {
   id: string;
   name: string;

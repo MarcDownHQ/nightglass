@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Provider, ProviderInfo, Providers, Result, Series};
+use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Playback, Provider, ProviderInfo, Providers, Result, Series};
 use serde::Serialize;
 use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -209,18 +209,18 @@ impl Provider for WasmProvider {
         })
     }
 
-    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Url>> {
+    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Playback>> {
         Box::pin(async move {
             if !self.info.resolves_streams {
-                return Ok(channel.stream.clone());
+                return Ok(channel.stream.clone().into());
             }
-            self.call(async |store, guest| guest.call_stream_url(store, &convert::config(config), &convert::to_wit_channel(channel)).await, |u| convert::stream(&u)).await
+            self.call(async |store, guest| guest.call_stream_url(store, &convert::config(config), &convert::to_wit_channel(channel)).await, |u| convert::stream(&u).map(Playback::from)).await
         })
     }
 
-    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Url>> {
+    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Playback>> {
         Box::pin(async move {
-            self.call(async |store, guest| guest.call_catchup_url(store, &convert::config(config), &convert::to_wit_channel(channel), start, end).await, |u| convert::stream(&u)).await
+            self.call(async |store, guest| guest.call_catchup_url(store, &convert::config(config), &convert::to_wit_channel(channel), start, end).await, |u| convert::stream(&u).map(Playback::from)).await
         })
     }
 

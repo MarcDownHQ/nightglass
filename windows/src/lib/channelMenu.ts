@@ -95,7 +95,7 @@ export function openVariantMenu(e: MouseEvent, row: LiveItem) {
 
 async function copyUrl(item: LiveItem) {
   try {
-    const url = await store.streamUrl(item.source, item.channel);
+    const { url } = await store.playback(item.source, item.channel);
     await navigator.clipboard.writeText(url);
     player.notify(t('Stream URL copied'));
   } catch (e) {
