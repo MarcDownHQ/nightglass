@@ -3,47 +3,68 @@
   import { friendly } from './errors';
   import { invoke } from '@tauri-apps/api/core';
   import HudPanel from './HudPanel.svelte';
-  import type { Catalog, Source, SourceKind } from './models';
+  import type { Catalog, Field, Preset, ProviderInfo, Source } from './models';
   import NeonTab from './NeonTab.svelte';
   import { store } from './store.svelte';
 
-  const kinds = ['M3U', 'Xtream', 'Stalker'] as const;
-  let kind = $state<(typeof kinds)[number]>('M3U');
+  let chosen = $state<string | null>(null);
+  const provider = $derived(store.providers.find((p) => p.id === chosen) ?? store.providers[0]);
   let name = $state('');
-  let url = $state('');
-  let epg = $state('');
-  let user = $state('');
-  let pass = $state('');
-  let mac = $state('00:1A:79:');
+  /** What was typed, per provider and field. */
+  let typed = $state<Record<string, Record<string, string>>>({});
   let message = $state<{ text: string; error: boolean } | null>(null);
   let busy = $state(false);
 
-  function preset() {
-    name = 'iptv-org · France';
-    url = 'https://iptv-org.github.io/iptv/countries/fr.m3u';
-    epg = 'https://xmltvfr.fr/xmltv/xmltv.xml';
+  const value = (p: ProviderInfo, f: Field) => typed[p.id]?.[f.key] ?? f.default ?? '';
+  const missing = $derived(!provider || provider.fields.some((f) => f.required && !value(provider, f).trim()));
+
+  function set(f: Field, v: string) {
+    typed[provider.id] = { ...typed[provider.id], [f.key]: v };
+  }
+
+  function choose(p: ProviderInfo) {
+    chosen = p.id;
+    message = null;
+  }
+
+  function preset(p: Preset) {
+    name = p.name;
+    typed[provider.id] = { ...p.config };
+  }
+
+  /** Addresses go through `parse_location`, which also turns a Windows path (C:\…\list.m3u) into a file URL. */
+  async function settings(p: ProviderInfo): Promise<Record<string, string>> {
+    const config: Record<string, string> = {};
+    for (const f of p.fields) {
+      const raw = value(p, f);
+      if (!raw.trim()) continue;
+      config[f.key] =
+        f.kind === 'url' || f.kind === 'location'
+          ? await invoke<string>('parse_location', { input: raw, files: f.kind === 'location' })
+          : f.kind === 'mac'
+            ? raw.trim()
+            : raw;
+    }
+    return config;
   }
 
   async function connect() {
+    const p = provider;
     busy = true;
     message = null;
     try {
-      // Also turns a Windows path (C:\…\list.m3u) into a file URL.
-      const location = await invoke<string>('parse_location', { input: url });
-      const sourceKind: SourceKind =
-        kind === 'M3U'
-          ? { m3u: { url: location, epg: epg.trim() ? await invoke<string>('parse_location', { input: epg }) : null } }
-          : kind === 'Xtream'
-            ? { xtream: { server: location, username: user, password: pass } }
-            : { stalker: { portal: location, mac: mac.trim() } };
-      const source: Source = { id: crypto.randomUUID(), name: name.trim() || new URL(location).host || kind, kind: sourceKind };
+      const config = await settings(p);
+      const address = p.fields.find((f) => (f.kind === 'url' || f.kind === 'location') && config[f.key]);
+      const host = address ? new URL(config[address.key]).host : '';
+      const source: Source = { id: crypto.randomUUID(), name: name.trim() || host || p.name, provider: p.id, config };
       const catalog = await invoke<Catalog>('catalog', { source });
       store.add(source, catalog);
       message = {
         text: t('Added · {channels} channels, {movies} movies, {series} series', { channels: catalog.channels.length, movies: catalog.movies.length, series: catalog.series.length }),
         error: false,
       };
-      name = url = epg = user = pass = '';
+      name = '';
+      typed[p.id] = {};
     } catch (e) {
       message = { text: friendly(String(e)), error: true };
     } finally {
@@ -60,25 +81,31 @@
     }}
   >
     <div class="kinds">
-      {#each kinds as k (k)}
-        <NeonTab title={k} selected={k === kind} onclick={() => ((kind = k), (message = null))} />
+      {#each store.providers as p (p.id)}
+        <NeonTab title={p.name} selected={p.id === provider?.id} onclick={() => choose(p)} />
       {/each}
     </div>
     <label><span>{t('Name')}</span><input bind:value={name} placeholder={t('My provider')} spellcheck="false" /></label>
-    {#if kind === 'M3U'}
-      <label><span>{t('Playlist URL or file')}</span><input bind:value={url} placeholder="https://… .m3u" spellcheck="false" /></label>
-      <label><span>{t('Guide URL (XMLTV, optional)')}</span><input bind:value={epg} placeholder="https://… .xml" spellcheck="false" /></label>
-      <button type="button" class="preset" onclick={preset}>{t('Use iptv-org France')}</button>
-    {:else if kind === 'Xtream'}
-      <label><span>{t('Server')}</span><input bind:value={url} placeholder="http://provider:8080" spellcheck="false" /></label>
-      <label><span>{t('Username')}</span><input bind:value={user} autocomplete="off" spellcheck="false" /></label>
-      <label><span>{t('Password')}</span><input type="password" bind:value={pass} autocomplete="off" /></label>
-    {:else}
-      <label><span>{t('Portal URL')}</span><input bind:value={url} placeholder="http://portal/c/" spellcheck="false" /></label>
-      <label><span>{t('MAC address')}</span><input bind:value={mac} placeholder="00:1A:79:XX:XX:XX" spellcheck="false" /></label>
+    {#if provider}
+      {#each provider.fields as f (provider.id + f.key)}
+        <label>
+          <span>{t(f.label)}</span>
+          <input
+            type={f.kind === 'secret' ? 'password' : 'text'}
+            value={value(provider, f)}
+            oninput={(e) => set(f, e.currentTarget.value)}
+            placeholder={f.placeholder ?? ''}
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+      {/each}
+      {#each provider.presets as p (p.label)}
+        <button type="button" class="preset" onclick={() => preset(p)}>{t(p.label)}</button>
+      {/each}
     {/if}
     <div>
-      <button type="submit" class="connect" disabled={busy || !url.trim()}>{busy ? t('Connecting…') : t('Connect')}</button>
+      <button type="submit" class="connect" disabled={busy || missing}>{busy ? t('Connecting…') : t('Connect')}</button>
     </div>
     {#if message}<p class="message" class:error={message.error}>{message.text}</p>{/if}
   </form>

@@ -1,5 +1,4 @@
 import { t } from './i18n.svelte';
-import { invoke } from '@tauri-apps/api/core';
 import { epgMatch, prompt } from './dialogs.svelte';
 import { library, listLabel } from './library.svelte';
 import { categoryKey, categoryLabel } from './lineup';
@@ -94,10 +93,9 @@ export function openVariantMenu(e: MouseEvent, row: LiveItem) {
   ]);
 }
 
-/** Stalker links are resolved first: the stored one is a portal command, not a URL a player can open. */
 async function copyUrl(item: LiveItem) {
   try {
-    const url = 'stalker' in item.source.kind ? await invoke<string>('stream_url', { source: item.source, channel: item.channel }) : item.channel.stream;
+    const url = await store.streamUrl(item.source, item.channel);
     await navigator.clipboard.writeText(url);
     player.notify(t('Stream URL copied'));
   } catch (e) {

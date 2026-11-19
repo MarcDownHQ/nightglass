@@ -2,7 +2,7 @@
   import { plural, t } from './i18n.svelte';
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
-  import { kindLabel, type Source } from './models';
+  import type { Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
   import { friendly } from './errors';
@@ -40,7 +40,7 @@
     <div class="rows">
       {#if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
       {#each store.sources as s (s.id)}
-        {@const kind = kindLabel(s.kind)}
+        {@const kind = store.provider(s)?.name ?? s.provider}
         {@const cat = store.catalogs[s.id]}
         <div
           class="row"
@@ -168,7 +168,7 @@
     border-radius: 2px;
     background: var(--magenta);
   }
-  /* One width for M3U, Xtream and Stalker, so the names line up. */
+  /* One width for every source type, so the names line up. */
   .kind {
     flex: none;
     width: 58px;

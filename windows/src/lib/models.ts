@@ -67,19 +67,41 @@ export interface Account {
   trial: boolean;
 }
 
-export type SourceKind =
-  | { m3u: { url: string; epg: string | null } }
-  | { xtream: { server: string; username: string; password: string } }
-  | { stalker: { portal: string; mac: string } };
+export type FieldKind = 'text' | 'secret' | 'url' | 'location' | 'mac';
+
+/** One setting a provider asks for when a source is added. `location` also takes a local file. */
+export interface Field {
+  key: string;
+  label: string;
+  kind: FieldKind;
+  required: boolean;
+  placeholder: string | null;
+  default: string | null;
+}
+
+export interface Preset {
+  label: string;
+  name: string;
+  config: Record<string, string>;
+}
+
+/** A source type: built in (M3U, Xtream, Stalker) or added by a plugin. */
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  fields: Field[];
+  /** Links are short-lived: `stream_url` is asked at play time. */
+  resolvesStreams: boolean;
+  presets: Preset[];
+}
 
 export interface Source {
   id: string;
   name: string;
-  kind: SourceKind;
-}
-
-export function kindLabel(kind: SourceKind): 'M3U' | 'Xtream' | 'Stalker' {
-  return 'm3u' in kind ? 'M3U' : 'xtream' in kind ? 'Xtream' : 'Stalker';
+  /** A `ProviderInfo.id`. */
+  provider: string;
+  /** Settings keyed by `Field.key`; empty fields are absent. */
+  config: Record<string, string>;
 }
 
 /** A channel and the source it came from (Stalker needs the source to resolve its link). */

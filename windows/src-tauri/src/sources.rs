@@ -21,17 +21,17 @@ pub fn file(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn load(path: &Path) -> Vec<Source> {
     let Ok(sealed) = std::fs::read(path) else { return Vec::new() };
-    match protect(&sealed, false).map(|json| serde_json::from_slice(&json)) {
-        Ok(Ok(sources)) => sources,
-        Ok(Err(e)) => {
-            log::error!("{}: {e}", path.display());
-            Vec::new()
-        }
-        Err(e) => {
-            log::error!("{}: {e}", path.display());
-            Vec::new()
-        }
+    let error = match protect(&sealed, false).map(|json| serde_json::from_slice(&json)) {
+        Ok(Ok(sources)) => return sources,
+        Ok(Err(e)) => e.to_string(),
+        Err(e) => e,
+    };
+    let aside = path.with_extension(format!("unreadable-{}.bin", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())));
+    log::error!("{}: {error}, kept as {}", path.display(), aside.display());
+    if let Err(e) = std::fs::rename(path, &aside) {
+        log::error!("{}: {e}", aside.display());
     }
+    Vec::new()
 }
 
 pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
@@ -49,7 +49,7 @@ pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
 #[tauri::command]
 pub fn settings_export(app: AppHandle, path: PathBuf, prefs: serde_json::Value) -> Result<(), String> {
     let sources = load(&file(&app)?);
-    let doc = serde_json::json!({ "app": "Nightglass", "version": 1, "sources": sources, "prefs": prefs });
+    let doc = serde_json::json!({ "app": "Nightglass", "version": 2, "sources": sources, "prefs": prefs });
     let json = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
 }
@@ -180,17 +180,13 @@ mod keychain {
 
 #[cfg(test)]
 mod tests {
-    use nightglass_core::SourceKind;
-
     use super::*;
 
     #[test]
     fn round_trip_is_encrypted() {
         let path = std::env::temp_dir().join(format!("nightglass-test-{}.bin", std::process::id()));
-        let sources = vec![Source::new(
-            "Panel",
-            SourceKind::Xtream { server: "http://panel.test".parse().unwrap(), username: "u".into(), password: "s3cret".into() },
-        )];
+        let config = [("server", "http://panel.test"), ("username", "u"), ("password", "s3cret")].map(|(k, v)| (k.to_string(), v.to_string()));
+        let sources = vec![Source::new("Panel", "xtream", config.into())];
         save(&path, &sources).unwrap();
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"s3cret"));

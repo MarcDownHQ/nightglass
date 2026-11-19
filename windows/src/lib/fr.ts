@@ -322,6 +322,8 @@ export const FR: Record<string, string> = {
   'The server has nothing at this address: the channel or the playlist may have moved.':
     'Le serveur n’a rien à cette adresse : la chaîne ou la playlist a peut-être changé de place.',
   'The provider’s server is failing. Try again in a moment.': 'Le serveur du fournisseur est en panne. Réessayez dans un moment.',
+  'A setting of this source is missing or invalid: add it again.': 'Un réglage de cette source manque ou n’est pas valide : ajoutez-la de nouveau.',
+  'This source comes from a plugin that isn’t installed any more.': 'Cette source vient d’un plugin qui n’est plus installé.',
   'The server can’t be reached: check the address and the internet connection.': 'Le serveur est injoignable : vérifiez l’adresse et la connexion internet.',
   'The server answered, but not like an IPTV server: check the address.': 'Le serveur a répondu, mais pas comme un serveur IPTV : vérifiez l’adresse.',
   'The file can’t be read: check the path.': 'Le fichier est illisible : vérifiez le chemin.',
