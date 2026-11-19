@@ -70,7 +70,6 @@ pub fn video_host(parent: isize) -> isize {
         host.set_size_request(w, h);
         layer.put(&host, 0, 0);
         host.show();
-        // Ours until `destroy_host`.
         ToGlibPtr::<*mut gtk::ffi::GtkGLArea>::to_glib_full(&host) as isize
     })
 }
@@ -143,9 +142,7 @@ pub struct RenderFns {
     pub render: unsafe extern "C" fn(*mut c_void, *mut Param) -> c_int,
     pub update: unsafe extern "C" fn(*mut c_void) -> u64,
     pub free: unsafe extern "C" fn(*mut c_void),
-    pub get_property_string: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_char,
-    pub set_property_string: unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> c_int,
-    pub mpv_free: unsafe extern "C" fn(*mut c_void),
+    pub command_async: unsafe extern "C" fn(*mut c_void, u64, *mut *const c_char) -> c_int,
 }
 
 #[repr(C)]
@@ -243,9 +240,11 @@ struct State {
     ctx: *mut c_void,
     /// mpv is gone or going: never make a context again.
     dead: bool,
-    /// The video track while the area moves window (its GL context goes with the old one): mpv drops video
-    /// when its render context is freed, and gets it back once the new one is made.
+    /// mpv's `vid`, as observed.
     track: Option<String>,
+    /// The context was freed under a live mpv (the area moved window): mpv dropped its video, which the next
+    /// context selects again.
+    reselect: bool,
 }
 
 /// One mpv instance's drawing into its area. The render context lives in the area's GL context, so it is freed
@@ -254,7 +253,7 @@ struct State {
 pub struct Renderer {
     fns: RenderFns,
     mpv: *mut c_void,
-    area: isize,
+    area: glib::SendWeakRef<gtk::GLArea>,
     state: Mutex<State>,
 }
 
@@ -273,12 +272,9 @@ impl Renderer {
             return Err(format!("No OpenGL context: {e}"));
         }
         let mut init = InitParams { get_proc_address, ctx: std::ptr::null_mut() };
-        let mut block: c_int = 0;
         let mut params = vec![
             Param { kind: PARAM_API_TYPE, data: c"opengl".as_ptr() as *mut c_void },
             Param { kind: PARAM_OPENGL_INIT_PARAMS, data: (&raw mut init).cast() },
-            // Drawing happens on GTK's main thread: never wait there for a frame's time.
-            Param { kind: PARAM_BLOCK_FOR_TARGET_TIME, data: (&raw mut block).cast() },
         ];
         if let Some((kind, data)) = display_param(area) {
             params.push(Param { kind, data });
@@ -290,28 +286,26 @@ impl Renderer {
             return Err(format!("mpv_render_context_create: {code}"));
         }
         state.ctx = ctx;
-        let track = state.track.take();
-        drop(state);
-        if let Some(track) = track.filter(|t| t != "no") {
+        if std::mem::take(&mut state.reselect)
+            && let Some(track) = state.track.clone().filter(|t| t != "no")
+        {
             self.set("vid", "no");
             self.set("vid", &track);
         }
         Ok(())
     }
 
+    /// Asynchronous: synchronous mpv calls from the render thread can wait on the video output, which waits on it.
     fn set(&self, name: &str, value: &str) {
-        let (name, value) = (CString::new(name).unwrap_or_default(), CString::new(value).unwrap_or_default());
-        unsafe { (self.fns.set_property_string)(self.mpv, name.as_ptr(), value.as_ptr()) };
+        let args = [c"set".to_owned(), CString::new(name).unwrap_or_default(), CString::new(value).unwrap_or_default()];
+        let mut ptrs: Vec<*const c_char> = args.iter().map(|a| a.as_ptr()).chain([std::ptr::null()]).collect();
+        unsafe { (self.fns.command_async)(self.mpv, 0, ptrs.as_mut_ptr()) };
     }
 
-    fn track(&self) -> Option<String> {
-        let ptr = unsafe { (self.fns.get_property_string)(self.mpv, c"vid".as_ptr()) };
-        if ptr.is_null() {
-            return None;
+    pub fn track_changed(&self, track: Option<String>) {
+        if let Ok(mut state) = self.state.lock() {
+            state.track = track;
         }
-        let track = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned();
-        unsafe { (self.fns.mpv_free)(ptr.cast()) };
-        Some(track)
     }
 
     /// In the area's unrealize, or before mpv goes (`dead`), with the area's context current.
@@ -321,9 +315,7 @@ impl Renderer {
         if state.ctx.is_null() {
             return;
         }
-        if !state.dead {
-            state.track = self.track();
-        }
+        state.reselect = !state.dead;
         unsafe { (self.fns.free)(state.ctx) };
         state.ctx = std::ptr::null_mut();
     }
@@ -352,10 +344,12 @@ impl Renderer {
         unsafe { get(GL_FRAMEBUFFER_BINDING, &mut fbo) };
         let k = area.scale_factor();
         let mut target = Fbo { fbo, w: area.allocated_width() * k, h: area.allocated_height() * k, internal_format: 0 };
-        let mut flip: c_int = 1;
+        let (mut flip, mut block): (c_int, c_int) = (1, 0);
         let mut params = [
             Param { kind: PARAM_OPENGL_FBO, data: (&raw mut target).cast() },
             Param { kind: PARAM_FLIP_Y, data: (&raw mut flip).cast() },
+            // On GTK's main thread: never wait there for a frame's time.
+            Param { kind: PARAM_BLOCK_FOR_TARGET_TIME, data: (&raw mut block).cast() },
             Param { kind: 0, data: std::ptr::null_mut() },
         ];
         unsafe { (self.fns.render)(state.ctx, params.as_mut_ptr()) };
@@ -365,8 +359,9 @@ impl Renderer {
     pub fn free(self: &Arc<Self>) {
         let renderer = self.clone();
         on_main(move || {
-            let area = area(renderer.area);
-            if area.is_realized() {
+            if let Some(area) = renderer.area.upgrade()
+                && area.is_realized()
+            {
                 area.make_current();
             }
             renderer.release(true);
@@ -376,10 +371,15 @@ impl Renderer {
 
 /// Hosts mpv's drawing in the `host` area; the renderer is mpv's to free.
 pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Result<Arc<Renderer>, String> {
-    let renderer = Arc::new(Renderer { fns, mpv, area: host, state: Mutex::new(State { ctx: std::ptr::null_mut(), dead: false, track: None }) });
-    let shared = renderer.clone();
+    let mpv = mpv as isize;
     on_main(move || {
         let area = area(host);
+        let shared = Arc::new(Renderer {
+            fns,
+            mpv: mpv as *mut c_void,
+            area: area.downgrade().into(),
+            state: Mutex::new(State { ctx: std::ptr::null_mut(), dead: false, track: None, reselect: false }),
+        });
         let r = shared.clone();
         area.connect_realize(move |area| {
             area.make_current();
@@ -397,7 +397,6 @@ pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Result<Arc<Rende
             r.draw(area);
             glib::Propagation::Stop
         });
-        // Polled each frame of the window; draws only when mpv has a new picture.
         let r = shared.clone();
         area.add_tick_callback(move |area, _| {
             if r.wants_frame() {
@@ -410,7 +409,6 @@ pub fn attach(host: isize, mpv: *mut c_void, fns: RenderFns) -> Result<Arc<Rende
             area.make_current();
             shared.create(&area)?;
         }
-        Ok::<(), String>(())
-    })?;
-    Ok(renderer)
+        Ok(shared)
+    })
 }

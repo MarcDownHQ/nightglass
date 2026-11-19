@@ -54,6 +54,10 @@ const FORMAT_FLAG: c_int = 3;
 const FORMAT_INT64: c_int = 4;
 const FORMAT_DOUBLE: c_int = 5;
 
+/// The video track, followed for the renderer (see `host_linux`), not the UI.
+#[cfg(target_os = "linux")]
+const VID: u64 = u64::MAX;
+
 /// Properties the UI follows, with the format mpv reports them in.
 const OBSERVED: &[(&str, c_int)] = &[
     ("pause", FORMAT_FLAG),
@@ -118,9 +122,7 @@ impl Api {
                 render: symbol(&lib, "mpv_render_context_render")?,
                 update: symbol(&lib, "mpv_render_context_update")?,
                 free: symbol(&lib, "mpv_render_context_free")?,
-                get_property_string: symbol(&lib, "mpv_get_property_string")?,
-                set_property_string: symbol(&lib, "mpv_set_property_string")?,
-                mpv_free: symbol(&lib, "mpv_free")?,
+                command_async: symbol(&lib, "mpv_command_async")?,
             }),
             _lib: lib,
         })
@@ -205,6 +207,10 @@ impl Mpv {
         for (i, (name, format)) in OBSERVED.iter().enumerate() {
             unsafe { (mpv.api.observe_property)(handle, i as u64, c(name).as_ptr(), *format) };
         }
+        #[cfg(target_os = "linux")]
+        unsafe {
+            (mpv.api.observe_property)(handle, VID, c("vid").as_ptr(), FORMAT_STRING)
+        };
         Ok(mpv)
     }
 
@@ -255,6 +261,17 @@ impl Mpv {
                 }
                 8 => json!({ "event": "file-loaded" }),
                 21 => json!({ "event": "playback-restart" }),
+                #[cfg(target_os = "linux")]
+                22 if event.reply_userdata == VID => {
+                    if let Some(renderer) = &self.renderer {
+                        renderer.track_changed(match property(event).1 {
+                            Value::Null => None,
+                            Value::String(track) => Some(track),
+                            track => Some(track.to_string()),
+                        });
+                    }
+                    continue;
+                }
                 22 => {
                     let (name, value) = property(event);
                     // time-pos changes every frame; a few updates a second are enough for a clock.

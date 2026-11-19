@@ -25,7 +25,8 @@ pub struct Tiles(Mutex<HashMap<usize, Tile>>);
 pub struct MpvDll(pub PathBuf);
 
 /// Plays `url` in tile `index`, made on first use, at `rect` (x, y, width, height in physical pixels).
-// Windows: on the main thread, which owns the tiles' windows. macOS and Linux: off it, mpv waits on it (see `host_macos`).
+// Windows: on the main thread, which owns the tiles' windows. macOS and Linux: off it, where mpv's video output
+// (macOS) or the GL drawing (Linux) waits on it.
 #[cfg_attr(windows, tauri::command)]
 #[cfg_attr(not(windows), tauri::command(async))]
 pub fn tile_play(
@@ -45,7 +46,13 @@ pub fn tile_play(
         Entry::Occupied(e) => e.into_mut(),
         Entry::Vacant(slot) => {
             let host = mpv::tile_host(app.state::<MainWindow>().0, rect);
-            let instance = Arc::new(Mpv::new(&app.state::<MpvDll>().0, host)?);
+            let instance = match Mpv::new(&app.state::<MpvDll>().0, host) {
+                Ok(instance) => Arc::new(instance),
+                Err(e) => {
+                    mpv::destroy_host(host);
+                    return Err(e);
+                }
+            };
             // Four streams at once: a small back buffer each.
             instance.set("demuxer-max-back-bytes", "16MiB")?;
             let (pump, handle) = (instance.clone(), app.clone());

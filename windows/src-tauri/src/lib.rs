@@ -41,7 +41,7 @@ pub struct MainWindow(pub isize);
 /// How far back the guide keeps programmes: the replay window of most Xtream servers.
 const PAST: i64 = 3 * 86_400;
 
-// mpv commands run off the main thread (`async`): on macOS, mpv's video output waits on the main thread, which would deadlock.
+// mpv commands run off the main thread (`async`): on macOS and Linux, mpv's video output waits on the main thread, which would deadlock.
 #[tauri::command(async)]
 /// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
 fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, options: Option<String>) -> Result<(), String> {
