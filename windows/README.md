@@ -134,14 +134,14 @@ L'app charge la libmpv du système (`libmpv.so.2`), rien à télécharger. `npm 
 
 ## Publier une version
 
-Les workflows [Windows](../.github/workflows/windows.yml), [macOS](../.github/workflows/macos.yml) et [Linux](../.github/workflows/linux.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur, le `.dmg`, le `.deb` et le `.rpm` sont dans les artefacts des runs. La version Linux ne fait pas encore partie des releases. Une version sort pour les deux plateformes à la fois ([Release](../.github/workflows/release.yml)) :
+Les workflows [Windows](../.github/workflows/windows.yml), [macOS](../.github/workflows/macos.yml) et [Linux](../.github/workflows/linux.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur, le `.dmg`, le `.deb` et le `.rpm` sont dans les artefacts des runs. Une version sort pour les trois plateformes à la fois ([Release](../.github/workflows/release.yml)) :
 
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
 2. Pousser un tag `v<version>` (par exemple `v0.5.0`). Les anciens tags `windows-v*` ne déclenchent plus rien.
-3. Le workflow construit les deux apps et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`) et `latest.json` : la relire sur GitHub, puis la publier.
+3. Le workflow construit l'app pour chaque plateforme et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`), le `.deb`, le `.rpm` et `latest.json` : la relire sur GitHub, puis la publier.
 4. Déclarer l'installeur publié à Microsoft (voir [Faux positif Defender](#faux-positif-defender-à-faire-à-chaque-version)).
 
-Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (ou l'archive `.app` sur Mac), vérifie sa signature et s'installe, puis redémarre. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour les deux.
+Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (l'archive `.app` sur Mac, le `.deb` ou le `.rpm` selon le paquet installé sous Linux), vérifie sa signature et s'installe, puis redémarre. Sous Linux, l'installation passe par `pkexec`, qui demande le mot de passe administrateur. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour toutes.
 
 La signature des mises à jour utilise une paire de clés Tauri :
 

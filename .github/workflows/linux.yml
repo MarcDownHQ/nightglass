@@ -1,4 +1,4 @@
-# Checks and builds the Linux app (.deb and .rpm).
+# Checks and builds the Linux app (.deb and .rpm). Releases (a `v*` tag) run it from release.yml.
 name: Linux
 
 on:
@@ -44,10 +44,17 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo clippy --manifest-path plugin-example/Cargo.toml --target wasm32-wasip2 -- -D warnings
       - run: dbus-run-session -- sh -c 'printf ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null && cargo test --workspace'
-      - run: npm run tauri build
+      # With the update key (not on forks), the packages are also signed for the in-app updater (.sig).
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then npm run tauri build -- --config src-tauri/tauri.updater.conf.json
+          else npm run tauri build; fi
       - uses: actions/upload-artifact@v7
         with:
           name: nightglass-linux
           path: |
-            windows/target/release/bundle/deb/*.deb
-            windows/target/release/bundle/rpm/*.rpm
+            windows/target/release/bundle/deb/*.deb*
+            windows/target/release/bundle/rpm/*.rpm*

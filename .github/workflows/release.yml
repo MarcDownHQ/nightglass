@@ -1,5 +1,5 @@
-# A `v<version>` tag builds both apps and attaches them to one draft release, which stays private until
-# someone publishes it on GitHub. One release for both: the apps' updater reads latest.json from the latest
+# A `v<version>` tag builds the apps and attaches them to one draft release, which stays private until
+# someone publishes it on GitHub. One release for all: the apps' updater reads latest.json from the latest
 # release, so it must list every platform.
 name: Release
 
@@ -17,8 +17,11 @@ jobs:
   macos:
     uses: ./.github/workflows/macos.yml
     secrets: inherit
+  linux:
+    uses: ./.github/workflows/linux.yml
+    secrets: inherit
   publish:
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,16 +39,22 @@ jobs:
           exe=$(find artifacts -name '*-setup.exe')
           dmg=$(find artifacts -name '*.dmg')
           app=$(find artifacts -name '*.app.tar.gz')
-          for f in "$exe" "$exe.sig" "$dmg" "$app" "$app.sig"; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
+          deb=$(find artifacts -name '*.deb')
+          rpm=$(find artifacts -name '*.rpm')
+          for f in "$exe" "$exe.sig" "$dmg" "$app" "$app.sig" "$deb" "$deb.sig" "$rpm" "$rpm.sig"; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
           # What the apps' updater reads, at releases/latest/download/latest.json once the release is published.
           # The macOS app is universal: one archive for both architectures.
           jq -n --arg version "$version" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg winsig "$(cat "$exe.sig")" --arg winurl "$base/$(basename "$exe")" \
             --arg macsig "$(cat "$app.sig")" --arg macurl "$base/$(basename "$app")" \
+            --arg debsig "$(cat "$deb.sig")" --arg deburl "$base/$(basename "$deb")" \
+            --arg rpmsig "$(cat "$rpm.sig")" --arg rpmurl "$base/$(basename "$rpm")" \
             '{version: $version, notes: "Nightglass \($version)", pub_date: $date, platforms: {
               "windows-x86_64": {signature: $winsig, url: $winurl},
               "darwin-aarch64": {signature: $macsig, url: $macurl},
-              "darwin-x86_64": {signature: $macsig, url: $macurl}}}' > latest.json
-          gh release create "$GITHUB_REF_NAME" "$exe" "$dmg" "$app" latest.json --draft --title "Nightglass $version" \
-            --notes "Windows 10 and 11 (x64): the installer. macOS 13 or later (Apple silicon and Intel): the .dmg; not notarized, so the first launch must be allowed in System Settings > Privacy & Security. Licences and third-party notices come with both. Installed copies offer this update from their title bar."
+              "darwin-x86_64": {signature: $macsig, url: $macurl},
+              "linux-x86_64-deb": {signature: $debsig, url: $deburl},
+              "linux-x86_64-rpm": {signature: $rpmsig, url: $rpmurl}}}' > latest.json
+          gh release create "$GITHUB_REF_NAME" "$exe" "$dmg" "$app" "$deb" "$rpm" latest.json --draft --title "Nightglass $version" \
+            --notes "Windows 10 and 11 (x64): the installer. macOS 13 or later (Apple silicon and Intel): the .dmg; not notarized, so the first launch must be allowed in System Settings > Privacy & Security. Linux (x64): the .deb (Debian, Ubuntu) or the .rpm (Fedora, openSUSE), which install mpv's library as a dependency. Licences and third-party notices come with all of them. Installed copies offer this update from their title bar."
