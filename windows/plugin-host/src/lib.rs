@@ -50,7 +50,7 @@ impl wit::Host for State {}
 impl wit_http::Host for State {
     async fn send(&mut self, request: wit_http::Request) -> std::result::Result<wit_http::Response, wit::Error> {
         let url = Url::parse(&request.url).map_err(|_| wit::Error::Network(format!("invalid URL {}", request.url)))?;
-        let response = self.http.send(&request.method, url, &request.headers, request.body).await.map_err(convert::to_wit_error)?;
+        let response = self.http.send(nightglass_core::Request { method: request.method, url, headers: request.headers, body: request.body, browser: None }).await.map_err(convert::to_wit_error)?;
         Ok(wit_http::Response { status: response.status, headers: response.headers, body: response.body })
     }
 }

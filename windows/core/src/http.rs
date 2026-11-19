@@ -1,13 +1,70 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
 use crate::{IptvError, Result};
 
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+const REDIRECTS: usize = 10;
+
 /// The HTTP client every source shares. Cheap to clone.
 #[derive(Clone)]
-pub struct Http(reqwest::Client);
+pub struct Http {
+    client: reqwest::Client,
+    browsers: Arc<Mutex<HashMap<Browser, wreq::Client>>>,
+}
+
+/// A desktop browser whose TLS and HTTP/2 handshake a request presents, for servers that turn other clients away.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Browser {
+    Chrome,
+    Edge,
+    Firefox,
+    Safari,
+}
+
+impl Browser {
+    fn client(self) -> Result<wreq::Client> {
+        use wreq_util::Emulation;
+        let emulation = match self {
+            Browser::Chrome => Emulation::Chrome149,
+            Browser::Edge => Emulation::Edge148,
+            Browser::Firefox => Emulation::Firefox151,
+            Browser::Safari => Emulation::Safari26,
+        };
+        wreq::Client::builder()
+            .emulation(emulation)
+            .redirect(wreq::redirect::Policy::limited(REDIRECTS))
+            .connect_timeout(CONNECT_TIMEOUT)
+            .read_timeout(READ_TIMEOUT)
+            .build()
+            .map_err(network_as_browser)
+    }
+}
+
+/// Any request: what `Http::send` and `Http::open` take.
+#[derive(Clone, Debug)]
+pub struct Request {
+    pub method: String,
+    pub url: Url,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<Vec<u8>>,
+    /// Sent with this browser's handshake rather than the app's own.
+    pub browser: Option<Browser>,
+}
+
+impl Request {
+    pub fn get(url: Url) -> Self {
+        Request { method: "GET".into(), url, headers: Vec::new(), body: None, browser: None }
+    }
+}
 
 impl Default for Http {
     fn default() -> Self {
@@ -19,11 +76,11 @@ impl Http {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
             .user_agent(concat!("Nightglass/", env!("CARGO_PKG_VERSION")))
-            .connect_timeout(Duration::from_secs(15))
-            .read_timeout(Duration::from_secs(60))
+            .connect_timeout(CONNECT_TIMEOUT)
+            .read_timeout(READ_TIMEOUT)
             .build()
             .expect("HTTP client");
-        Http(client)
+        Http { client, browsers: Default::default() }
     }
 
     /// A playlist or guide: a local file (`file:` URL) or a download.
@@ -79,7 +136,7 @@ impl Http {
                 f(&buf[..n]);
             }
         }
-        let mut response = self.0.get(url.clone()).send().await.map_err(network)?;
+        let mut response = self.client.get(url.clone()).send().await.map_err(network)?;
         if !response.status().is_success() {
             return Err(IptvError::Http(response.status().as_u16()));
         }
@@ -92,33 +149,65 @@ impl Http {
     pub const SEND_LIMIT: usize = 128 << 20;
 
     /// Any request, its answer returned whatever the status. http(s) only.
-    pub async fn send(&self, method: &str, url: Url, headers: &[(String, String)], body: Option<Vec<u8>>) -> Result<Response> {
-        if !matches!(url.scheme(), "http" | "https") {
-            return Err(IptvError::Network(format!("{} addresses can't be fetched", url.scheme())));
-        }
-        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| IptvError::Network(format!("invalid method {method}")))?;
-        let mut request = self.0.request(method, url);
-        for (name, value) in headers {
-            request = request.header(name, value);
-        }
-        if let Some(body) = body {
-            request = request.body(body);
-        }
-        let mut response = request.send().await.map_err(network)?;
-        let status = response.status().as_u16();
-        let headers = response.headers().iter().filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string()))).collect();
+    pub async fn send(&self, request: Request) -> Result<Response> {
+        let mut response = self.open(request).await?;
         let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(network)? {
+        while let Some(chunk) = response.chunk().await? {
             if body.len() + chunk.len() > Self::SEND_LIMIT {
                 return Err(IptvError::Network(format!("response larger than {} MB", Self::SEND_LIMIT >> 20)));
             }
             body.extend_from_slice(&chunk);
         }
-        Ok(Response { status, headers, body })
+        Ok(Response { status: response.status, headers: response.headers, body })
+    }
+
+    /// Any request, its body read as it arrives. http(s) only.
+    pub async fn open(&self, request: Request) -> Result<Opened> {
+        if !matches!(request.url.scheme(), "http" | "https") {
+            return Err(IptvError::Network(format!("{} addresses can't be fetched", request.url.scheme())));
+        }
+        let invalid = || IptvError::Network(format!("invalid method {}", request.method));
+        match request.browser {
+            None => {
+                let method = reqwest::Method::from_bytes(request.method.as_bytes()).map_err(|_| invalid())?;
+                let mut builder = self.client.request(method, request.url);
+                for (name, value) in &request.headers {
+                    builder = builder.header(name, value);
+                }
+                if let Some(body) = request.body {
+                    builder = builder.body(body);
+                }
+                let response = builder.send().await.map_err(network)?;
+                Ok(Opened { status: response.status().as_u16(), headers: header_list(response.headers(), |v| v.to_str().ok()), body: Body::App(response) })
+            }
+            Some(browser) => {
+                let client = self.browser(browser)?;
+                let method = wreq::Method::from_bytes(request.method.as_bytes()).map_err(|_| invalid())?;
+                let mut builder = client.request(method, request.url.as_str());
+                for (name, value) in &request.headers {
+                    builder = builder.header(name, value);
+                }
+                if let Some(body) = request.body {
+                    builder = builder.body(body);
+                }
+                let response = builder.send().await.map_err(network_as_browser)?;
+                Ok(Opened { status: response.status().as_u16(), headers: header_list(response.headers(), |v| v.to_str().ok()), body: Body::Browser(Box::pin(response.bytes_stream())) })
+            }
+        }
+    }
+
+    fn browser(&self, browser: Browser) -> Result<wreq::Client> {
+        let mut clients = self.browsers.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(client) = clients.get(&browser) {
+            return Ok(client.clone());
+        }
+        let client = browser.client()?;
+        clients.insert(browser, client.clone());
+        Ok(client)
     }
 
     pub(crate) async fn data(&self, url: Url, headers: &[(&str, &str)]) -> Result<Vec<u8>> {
-        let mut request = self.0.get(url);
+        let mut request = self.client.get(url);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
@@ -140,6 +229,36 @@ pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+}
+
+/// An answer whose body is still on its way.
+pub struct Opened {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    body: Body,
+}
+
+enum Body {
+    App(reqwest::Response),
+    Browser(std::pin::Pin<Box<dyn futures_util::Stream<Item = wreq::Result<Bytes>> + Send>>),
+}
+
+impl Opened {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+    }
+
+    /// The next piece of the body, none at its end.
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
+        match &mut self.body {
+            Body::App(r) => r.chunk().await.map_err(network),
+            Body::Browser(r) => futures_util::StreamExt::next(r).await.transpose().map_err(network_as_browser),
+        }
+    }
+}
+
+fn header_list<'a, K: ToString + 'a, V: 'a>(headers: impl IntoIterator<Item = (&'a K, &'a V)>, text: impl Fn(&V) -> Option<&str>) -> Vec<(String, String)> {
+    headers.into_iter().filter_map(|(k, v)| Some((k.to_string(), text(v)?.to_string()))).collect()
 }
 
 /// A file `Http::to_disk` made or found.
@@ -165,6 +284,21 @@ fn network(e: reqwest::Error) -> IptvError {
         next = cause.source();
     }
     let mut message = e.without_url().to_string();
+    for cause in causes {
+        message.push_str(": ");
+        message.push_str(&cause);
+    }
+    IptvError::Network(message)
+}
+
+fn network_as_browser(e: wreq::Error) -> IptvError {
+    let mut causes = Vec::new();
+    let mut next = std::error::Error::source(&e);
+    while let Some(cause) = next {
+        causes.push(cause.to_string());
+        next = cause.source();
+    }
+    let mut message = e.without_uri().to_string();
     for cause in causes {
         message.push_str(": ");
         message.push_str(&cause);
@@ -227,15 +361,46 @@ mod tests {
             .mount(&server)
             .await;
         let url = Url::parse(&format!("{}/api", server.uri())).unwrap();
-        let r = Http::new().send("POST", url, &[("x-key".into(), "k".into())], Some(b"hi".to_vec())).await.unwrap();
+        let r = Http::new()
+            .send(Request { method: "POST".into(), headers: vec![("x-key".into(), "k".into())], body: Some(b"hi".to_vec()), ..Request::get(url) })
+            .await
+            .unwrap();
         assert_eq!(r.status, 418);
         assert_eq!(r.body, b"teapot");
         assert!(r.headers.contains(&("x-reply".into(), "r".into())));
     }
 
     #[tokio::test]
+    async fn browser_requests_present_the_browser() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET")).and(path("/ua")).respond_with(|r: &wiremock::Request| {
+            ResponseTemplate::new(200).set_body_string(r.headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or_default())
+        })
+        .mount(&server)
+        .await;
+        let url = Url::parse(&format!("{}/ua", server.uri())).unwrap();
+        let http = Http::new();
+        let app = http.send(Request::get(url.clone())).await.unwrap();
+        assert!(String::from_utf8(app.body).unwrap().starts_with("Nightglass/"));
+        let chrome = http.send(Request { browser: Some(Browser::Chrome), ..Request::get(url.clone()) }).await.unwrap();
+        assert!(String::from_utf8(chrome.body).unwrap().contains("Chrome/"));
+        let own = http.send(Request { browser: Some(Browser::Firefox), headers: vec![("User-Agent".into(), "mine".into())], ..Request::get(url) }).await.unwrap();
+        assert_eq!(own.body, b"mine");
+    }
+
+    #[tokio::test]
+    async fn browser_requests_follow_redirects() {
+        let server = MockServer::start().await;
+        Mock::given(path("/a")).respond_with(ResponseTemplate::new(302).insert_header("location", "/b")).mount(&server).await;
+        Mock::given(path("/b")).respond_with(ResponseTemplate::new(200).set_body_string("b")).mount(&server).await;
+        let url = Url::parse(&format!("{}/a", server.uri())).unwrap();
+        let r = Http::new().send(Request { browser: Some(Browser::Safari), ..Request::get(url) }).await.unwrap();
+        assert_eq!((r.status, r.body.as_slice()), (200, b"b".as_slice()));
+    }
+
+    #[tokio::test]
     async fn send_refuses_local_files() {
-        let err = Http::new().send("GET", Url::parse("file:///etc/passwd").unwrap(), &[], None).await.err();
+        let err = Http::new().send(Request::get(Url::parse("file:///etc/passwd").unwrap())).await.err();
         assert!(matches!(err, Some(IptvError::Network(_))));
     }
 }

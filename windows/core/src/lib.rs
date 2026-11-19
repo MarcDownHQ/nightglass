@@ -10,7 +10,7 @@ mod stalker;
 pub mod xmltv;
 mod xtream;
 
-pub use http::{Http, OnDisk, Response};
+pub use http::{Browser, Http, OnDisk, Opened, Request, Response};
 pub use m3u::M3uSource;
 pub use models::*;
 pub use provider::{BoxFuture, Config, ConfigExt, Field, FieldKind, Preset, Provider, ProviderInfo, Providers};
