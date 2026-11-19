@@ -6,10 +6,13 @@ mod sources;
 mod tiles;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, ProviderInfo, Providers, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Provider, ProviderInfo, Providers, Series, Source, xmltv};
+use nightglass_plugin_host::PluginStatus;
+use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
@@ -102,10 +105,39 @@ async fn pip_close(app: AppHandle) -> Result<(), String> {
     }
 }
 
+/// Write-locked while the plugins load, so commands wait for them rather than miss them.
+struct Registry {
+    dir: std::path::PathBuf,
+    loaded: Arc<RwLock<Loaded>>,
+}
+
+struct Loaded {
+    providers: Providers,
+    plugins: Vec<PluginStatus>,
+}
+
+impl Registry {
+    async fn get(&self, id: &str) -> Result<Arc<dyn Provider>, String> {
+        self.loaded.read().await.providers.get(id).cloned().map_err(|e| e.to_string())
+    }
+}
+
+/// The plugins folder and what became of each file in it at launch.
+#[derive(serde::Serialize)]
+struct Plugins {
+    dir: std::path::PathBuf,
+    plugins: Vec<PluginStatus>,
+}
+
+#[tauri::command]
+async fn plugins(registry: State<'_, Registry>) -> Result<Plugins, String> {
+    Ok(Plugins { dir: registry.dir.clone(), plugins: registry.loaded.read().await.plugins.clone() })
+}
+
 /// The source types the add form offers, and what each one asks for.
 #[tauri::command]
-fn providers(providers: State<'_, Providers>) -> Vec<ProviderInfo> {
-    providers.infos()
+async fn providers(registry: State<'_, Registry>) -> Result<Vec<ProviderInfo>, String> {
+    Ok(registry.loaded.read().await.providers.infos())
 }
 
 #[tauri::command]
@@ -120,8 +152,8 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
 
 // shortcut: whole catalogs cross the IPC bridge as JSON; page them from Rust if a provider's tens of thousands of entries get slow.
 #[tauri::command]
-async fn catalog(app: AppHandle, providers: State<'_, Providers>, source: Source) -> Result<Catalog, String> {
-    let catalog = providers.get(&source.provider).map_err(|e| e.to_string())?.catalog(&source.config).await.map_err(|e| e.to_string())?;
+async fn catalog(app: AppHandle, registry: State<'_, Registry>, source: Source) -> Result<Catalog, String> {
+    let catalog = registry.get(&source.provider).await?.catalog(&source.config).await.map_err(|e| e.to_string())?;
     let (id, copy) = (source.id.to_string(), catalog.clone());
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(e) = cache::write(&app, "catalog", &id, &copy) {
@@ -166,14 +198,14 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(providers: State<'_, Providers>, source: Source, channel: Channel) -> Result<Url, String> {
-    providers.get(&source.provider).map_err(|e| e.to_string())?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())
+async fn stream_url(registry: State<'_, Registry>, source: Source, channel: Channel) -> Result<Url, String> {
+    registry.get(&source.provider).await?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())
 }
 
 /// A series' episodes, asked for when its page opens.
 #[tauri::command]
-async fn episodes(providers: State<'_, Providers>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
-    providers.get(&source.provider).map_err(|e| e.to_string())?.episodes(&source.config, &series).await.map_err(|e| e.to_string())
+async fn episodes(registry: State<'_, Registry>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
+    registry.get(&source.provider).await?.episodes(&source.config, &series).await.map_err(|e| e.to_string())
 }
 
 /// Programmes from 3 days ago (for replay) to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.
@@ -221,8 +253,8 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(providers: State<'_, Providers>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
-    providers.get(&source.provider).map_err(|e| e.to_string())?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())
+async fn catchup_url(registry: State<'_, Registry>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
+    registry.get(&source.provider).await?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
@@ -257,6 +289,25 @@ fn automation() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| k.starts_with("NG_")).collect()
 }
 
+fn load_plugins(dir: std::path::PathBuf, http: &Http) -> Registry {
+    let loaded = Arc::new(RwLock::new(Loaded { providers: Providers::builtin(http), plugins: Vec::new() }));
+    let mut guard = loaded.clone().try_write_owned().expect("unshared lock");
+    let (http, folder) = (http.clone(), dir.clone());
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = std::fs::create_dir_all(&folder) {
+            log::warn!("{}: {e}", folder.display());
+        }
+        match nightglass_plugin_host::Host::new(&http) {
+            Ok(host) => {
+                let Loaded { providers, plugins } = &mut *guard;
+                *plugins = host.load_dir(&folder, providers).await;
+            }
+            Err(e) => log::error!("plugin host: {e:#}"),
+        }
+    });
+    Registry { dir, loaded }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -281,7 +332,7 @@ pub fn run() {
             app.manage(tiles::MpvDll(dll));
             app.manage(tiles::Tiles::default());
             let http = Http::new();
-            app.manage(Providers::builtin(&http));
+            app.manage(load_plugins(app.path().app_data_dir()?.join("plugins"), &http));
             app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
@@ -313,6 +364,7 @@ pub fn run() {
             pip_open,
             pip_close,
             providers,
+            plugins,
             sources_load,
             sources_save,
             catalog,

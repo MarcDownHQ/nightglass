@@ -95,6 +95,13 @@ export interface ProviderInfo {
   presets: Preset[];
 }
 
+/** A file of the plugins folder: the provider it added, or why it didn't load. */
+export interface PluginStatus {
+  file: string;
+  provider: string | null;
+  error: string | null;
+}
+
 export interface Source {
   id: string;
   name: string;

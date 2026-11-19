@@ -6,7 +6,7 @@
 
 Les deux plateformes ont les mêmes fonctions :
 
-- sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque ;
+- sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque, et d'autres types par des plugins WebAssembly ;
 - écrans **Live** (liste, aperçu, now / next), **Guide** (grille sur 3 h, paginée), **Movies** et **Series** (affiches, saisons, épisodes), **Search** (Ctrl+K) et **Sources** ;
 - lecteur plein écran : pistes audio et sous-titres, avance / retour pour les films, zapping en direct ;
 - installeur NSIS avec les licences de libmpv, FFmpeg et des crates Rust ;
@@ -50,9 +50,12 @@ En plus de la version macOS :
 ## Architecture
 
 ```
-core/        # crate nightglass-core : fournisseurs (M3U, Xtream, Stalker), XMLTV + modèles communs, sans UI
-src-tauri/   # app Tauri : lecteur mpv, sources chiffrées (DPAPI), commandes appelées par l'interface
-src/         # interface Svelte
+core/            # crate nightglass-core : fournisseurs (M3U, Xtream, Stalker), XMLTV + modèles communs, sans UI
+plugin-host/     # crate nightglass-plugin-host : fournisseurs en plugins WebAssembly (wasmtime)
+plugin-example/  # un plugin d'exemple, compilé à part pour wasm32-wasip2
+wit/             # provider.wit : le contrat d'un plugin
+src-tauri/       # app Tauri : lecteur mpv, sources chiffrées (DPAPI), commandes appelées par l'interface
+src/             # interface Svelte
 ```
 
 Chaque type de source est un fournisseur (`Provider` dans `core/src/provider.rs`) : il décrit les champs du formulaire d'ajout et répond aux appels catalogue, lien de lecture, replay et épisodes. Une source enregistre l'identifiant de son fournisseur et ses réglages (`{"provider": "xtream", "config": {"server": …}}`) ; l'ancien format (`{"kind": {"xtream": …}}`) se relit toujours.
@@ -64,6 +67,25 @@ Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI po
 mpv dessine dans une fenêtre enfant placée tout en bas de la fenêtre principale ([src-tauri/src/mpv.rs](src-tauri/src/mpv.rs)). La page web est transparente : là où elle ne peint rien, on voit la vidéo. L'élément qui porte l'action `videoHole` ([src/lib/video.svelte.ts](src/lib/video.svelte.ts)) découpe ce trou dans le fond et donne à mpv les marges où placer l'image.
 
 Sur macOS, mpv ignore `wid` : il dessine via son API de rendu (OpenGL) dans un calque d'une NSView placée sous la WebView ([src-tauri/src/host_macos.rs](src-tauri/src/host_macos.rs)). Le reste (marges, trou, multivue, PiP) est le même.
+
+## Plugins
+
+Un plugin ajoute un type de source sans toucher au code de l'app : c'est un composant WebAssembly qui implémente le monde `provider` de [wit/provider.wit](wit/provider.wit). Il se décrit (`describe` : identifiant, nom, champs du formulaire, préréglages) et répond aux mêmes appels que les fournisseurs intégrés (`load-catalog`, `stream-url`, `catchup-url`, `episodes`).
+
+Au lancement, l'app charge chaque `.wasm` de `%APPDATA%\com.marcdownhq.nightglass\plugins` (sur macOS : `~/Library/Application Support/com.marcdownhq.nightglass/plugins`). L'écran Sources montre ce dossier et ce que chaque fichier a donné. Un plugin ne remplace pas un fournisseur intégré : un identifiant déjà pris est refusé.
+
+Un plugin tourne dans un bac à sable : pas de fichiers, pas de variables d'environnement, pas de sockets. Il ne sort que par `http.send` (http et https, faite par l'app) et `log`. Chaque appel a sa propre instance, 256 Mo de mémoire et 5 minutes au plus (10 secondes pour `describe`) ; une réponse HTTP ne dépasse pas 128 Mo. Les adresses de flux qu'il renvoie restent sur le réseau (http, https, rtmp, rtsp, rtp, udp, srt, mms) ; celles des guides, logos et affiches sont en http(s). Les plugins se chargent en arrière-plan : la fenêtre s'ouvre sans les attendre.
+
+Pour en écrire un en Rust, partir de [plugin-example](plugin-example/src/lib.rs) (une liste de chaînes en JSON) :
+
+```powershell
+rustup target add wasm32-wasip2
+cd plugin-example
+cargo build --release --target wasm32-wasip2
+copy target\wasm32-wasip2\release\nightglass_plugin_example.wasm "$env:APPDATA\com.marcdownhq.nightglass\plugins\"
+```
+
+Tout langage qui produit un composant WebAssembly (WASI 0.2) convient.
 
 ## Prérequis
 
@@ -135,7 +157,7 @@ Un exe non signé et tout neuf peut être bloqué au lancement par Defender (par
 ## Tests
 
 ```powershell
-cargo test --workspace
+cargo test --workspace   # les tests de plugin-host compilent plugin-example : rustup target add wasm32-wasip2
 npm test   # Vitest : règles de classement, messages d'erreur, traduction française complète
 ```
 

@@ -89,6 +89,34 @@ impl Http {
         Ok(())
     }
 
+    pub const SEND_LIMIT: usize = 128 << 20;
+
+    /// Any request, its answer returned whatever the status. http(s) only.
+    pub async fn send(&self, method: &str, url: Url, headers: &[(String, String)], body: Option<Vec<u8>>) -> Result<Response> {
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(IptvError::Network(format!("{} addresses can't be fetched", url.scheme())));
+        }
+        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| IptvError::Network(format!("invalid method {method}")))?;
+        let mut request = self.0.request(method, url);
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        if let Some(body) = body {
+            request = request.body(body);
+        }
+        let mut response = request.send().await.map_err(network)?;
+        let status = response.status().as_u16();
+        let headers = response.headers().iter().filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string()))).collect();
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(network)? {
+            if body.len() + chunk.len() > Self::SEND_LIMIT {
+                return Err(IptvError::Network(format!("response larger than {} MB", Self::SEND_LIMIT >> 20)));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(Response { status, headers, body })
+    }
+
     pub(crate) async fn data(&self, url: Url, headers: &[(&str, &str)]) -> Result<Vec<u8>> {
         let mut request = self.0.get(url);
         for (name, value) in headers {
@@ -106,6 +134,12 @@ impl Http {
         serde_json::from_slice(&data)
             .map_err(|_| IptvError::BadResponse(String::from_utf8_lossy(&data[..data.len().min(120)]).into_owned()))
     }
+}
+
+pub struct Response {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
 
 /// A file `Http::to_disk` made or found.
@@ -172,5 +206,36 @@ pub(crate) fn objects(v: Value) -> Vec<serde_json::Map<String, Value>> {
             })
             .collect(),
         _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use wiremock::matchers::{body_string, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn send_returns_any_status() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api"))
+            .and(header("x-key", "k"))
+            .and(body_string("hi"))
+            .respond_with(ResponseTemplate::new(418).insert_header("x-reply", "r").set_body_string("teapot"))
+            .mount(&server)
+            .await;
+        let url = Url::parse(&format!("{}/api", server.uri())).unwrap();
+        let r = Http::new().send("POST", url, &[("x-key".into(), "k".into())], Some(b"hi".to_vec())).await.unwrap();
+        assert_eq!(r.status, 418);
+        assert_eq!(r.body, b"teapot");
+        assert!(r.headers.contains(&("x-reply".into(), "r".into())));
+    }
+
+    #[tokio::test]
+    async fn send_refuses_local_files() {
+        let err = Http::new().send("GET", Url::parse("file:///etc/passwd").unwrap(), &[], None).await.err();
+        assert!(matches!(err, Some(IptvError::Network(_))));
     }
 }
