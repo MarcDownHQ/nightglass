@@ -15,6 +15,12 @@ pub fn info(info: wit::ProviderInfo) -> std::result::Result<ProviderInfo, String
     if !valid {
         return Err(format!("invalid provider id \"{}\": use lowercase letters, digits and -", info.id));
     }
+    if let Some(key) = duplicate(info.fields.iter().map(|f| &f.key)) {
+        return Err(format!("two fields named \"{key}\""));
+    }
+    if let Some(label) = duplicate(info.presets.iter().map(|p| &p.label)) {
+        return Err(format!("two presets named \"{label}\""));
+    }
     Ok(ProviderInfo {
         id: info.id,
         name: info.name,
@@ -41,12 +47,24 @@ pub fn info(info: wit::ProviderInfo) -> std::result::Result<ProviderInfo, String
     })
 }
 
-pub fn url(s: &str) -> Result<Url> {
-    Url::parse(s.trim()).map_err(|_| IptvError::BadResponse(format!("invalid address from the plugin: {s}")))
+fn duplicate<'a>(items: impl Iterator<Item = &'a String>) -> Option<&'a String> {
+    let mut seen = std::collections::HashSet::new();
+    items.into_iter().find(|i| !seen.insert(*i))
 }
 
+const STREAM_SCHEMES: [&str; 9] = ["http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "srt", "mms"];
+
+/// A playable address: never `file:` or anything else mpv would open outside the network.
+pub fn stream(s: &str) -> Result<Url> {
+    Url::parse(s.trim())
+        .ok()
+        .filter(|u| STREAM_SCHEMES.contains(&u.scheme()))
+        .ok_or_else(|| IptvError::BadResponse(format!("invalid stream address from the plugin: {s}")))
+}
+
+/// Guides, logos and posters are fetched by the app: http(s) only.
 fn optional_url(s: Option<String>) -> Option<Url> {
-    s.and_then(|s| Url::parse(s.trim()).ok())
+    s.and_then(|s| Url::parse(s.trim()).ok()).filter(|u| matches!(u.scheme(), "http" | "https"))
 }
 
 pub fn catalog(c: wit::Catalog) -> Catalog {
@@ -67,7 +85,7 @@ pub fn catalog(c: wit::Catalog) -> Catalog {
 
 fn channel(c: wit::Channel) -> Option<Channel> {
     Some(Channel {
-        stream: url(&c.stream).ok()?,
+        stream: stream(&c.stream).ok()?,
         id: c.id,
         name: c.name,
         number: c.number,
@@ -80,7 +98,7 @@ fn channel(c: wit::Channel) -> Option<Channel> {
 }
 
 fn movie(m: wit::Movie) -> Option<Movie> {
-    Some(Movie { stream: url(&m.stream).ok()?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
+    Some(Movie { stream: stream(&m.stream).ok()?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
 }
 
 fn series(s: wit::Series) -> Series {
@@ -88,7 +106,7 @@ fn series(s: wit::Series) -> Series {
 }
 
 pub fn episode(e: wit::Episode) -> Option<Episode> {
-    Some(Episode { stream: url(&e.stream).ok()?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
+    Some(Episode { stream: stream(&e.stream).ok()?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {

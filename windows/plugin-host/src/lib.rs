@@ -28,6 +28,7 @@ use bindings::nightglass::provider::{http as wit_http, log as wit_log, types as 
 
 const MEMORY: usize = 256 << 20;
 const CALL_TIMEOUT: Duration = Duration::from_secs(300);
+const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(10);
 const EPOCH: Duration = Duration::from_millis(10);
 
 struct State {
@@ -134,8 +135,11 @@ impl Host {
         let pre = bindings::ProviderPre::new(pre).map_err(|e| format!("{e:#}"))?;
         let runner = Runner { pre, engine: self.engine.clone(), http: self.http.clone() };
         let file = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        let (mut store, guest) = runner.instance(&file).await.map_err(|e| e.to_string())?;
-        let info = finish(guest.call_describe(&mut store), |info| Ok(Ok(info))).await.map_err(|e| e.to_string())?;
+        let call = async {
+            let (mut store, guest) = runner.instance(&file).await?;
+            guest.call_describe(&mut store).await
+        };
+        let info = finish(DESCRIBE_TIMEOUT, call, |info| Ok(Ok(info))).await.map_err(|e| e.to_string())?;
         Ok(Arc::new(WasmProvider { info: convert::info(info)?, runner }))
     }
 }
@@ -147,28 +151,28 @@ struct Runner {
 }
 
 impl Runner {
-    async fn instance(&self, plugin: &str) -> Result<(Store<State>, bindings::Provider)> {
+    async fn instance(&self, plugin: &str) -> wasmtime::Result<(Store<State>, bindings::Provider)> {
         let mut wasi = WasiCtxBuilder::new();
         wasi.allow_tcp(false).allow_udp(false).allow_ip_name_lookup(false);
         let state = State {
             wasi: wasi.build(),
             table: ResourceTable::new(),
-            limits: StoreLimitsBuilder::new().memory_size(MEMORY).build(),
+            limits: StoreLimitsBuilder::new().memory_size(MEMORY).memories(8).tables(64).table_elements(1 << 20).instances(64).build(),
             http: self.http.clone(),
             plugin: plugin.into(),
         };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store.epoch_deadline_async_yield_and_update(1);
-        let guest = self.pre.instantiate_async(&mut store).await.map_err(plugin_failed)?;
+        let guest = self.pre.instantiate_async(&mut store).await?;
         Ok((store, guest))
     }
 }
 
-/// Waits for a guest call, at most `CALL_TIMEOUT`: guest code yields at every clock tick, so even a
-/// plugin stuck in a loop is dropped.
-async fn finish<R, T>(call: impl Future<Output = wasmtime::Result<R>>, map: impl FnOnce(R) -> Result<std::result::Result<T, wit::Error>>) -> Result<T> {
-    let returned = tokio::time::timeout(CALL_TIMEOUT, call)
+/// Waits for a guest call, instantiation included, at most `limit`: guest code yields at every clock
+/// tick, so even a plugin stuck in a loop is dropped.
+async fn finish<R, T>(limit: Duration, call: impl Future<Output = wasmtime::Result<R>>, map: impl FnOnce(R) -> Result<std::result::Result<T, wit::Error>>) -> Result<T> {
+    let returned = tokio::time::timeout(limit, call)
         .await
         .map_err(|_| IptvError::Plugin("took too long".into()))?
         .map_err(plugin_failed)?;
@@ -185,8 +189,12 @@ struct WasmProvider {
 }
 
 impl WasmProvider {
-    async fn instance(&self) -> Result<(Store<State>, bindings::Provider)> {
-        self.runner.instance(&self.info.id).await
+    async fn call<R, T>(&self, run: impl AsyncFnOnce(&mut Store<State>, bindings::Provider) -> wasmtime::Result<std::result::Result<R, wit::Error>>, map: impl FnOnce(R) -> Result<T>) -> Result<T> {
+        let call = async {
+            let (mut store, guest) = self.runner.instance(&self.info.id).await?;
+            run(&mut store, guest).await
+        };
+        map(finish(CALL_TIMEOUT, call, Ok).await?)
     }
 }
 
@@ -197,9 +205,7 @@ impl Provider for WasmProvider {
 
     fn catalog<'a>(&'a self, config: &'a Config) -> BoxFuture<'a, Result<Catalog>> {
         Box::pin(async move {
-            let (mut store, guest) = self.instance().await?;
-            let catalog = finish(guest.call_load_catalog(&mut store, &convert::config(config)), Ok).await?;
-            Ok(convert::catalog(catalog))
+            self.call(async |store, guest| guest.call_load_catalog(store, &convert::config(config)).await, |c| Ok(convert::catalog(c))).await
         })
     }
 
@@ -208,25 +214,19 @@ impl Provider for WasmProvider {
             if !self.info.resolves_streams {
                 return Ok(channel.stream.clone());
             }
-            let (mut store, guest) = self.instance().await?;
-            let url = finish(guest.call_stream_url(&mut store, &convert::config(config), &convert::to_wit_channel(channel)), Ok).await?;
-            convert::url(&url)
+            self.call(async |store, guest| guest.call_stream_url(store, &convert::config(config), &convert::to_wit_channel(channel)).await, |u| convert::stream(&u)).await
         })
     }
 
     fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Url>> {
         Box::pin(async move {
-            let (mut store, guest) = self.instance().await?;
-            let url = finish(guest.call_catchup_url(&mut store, &convert::config(config), &convert::to_wit_channel(channel), start, end), Ok).await?;
-            convert::url(&url)
+            self.call(async |store, guest| guest.call_catchup_url(store, &convert::config(config), &convert::to_wit_channel(channel), start, end).await, |u| convert::stream(&u)).await
         })
     }
 
     fn episodes<'a>(&'a self, config: &'a Config, series: &'a Series) -> BoxFuture<'a, Result<Vec<Episode>>> {
         Box::pin(async move {
-            let (mut store, guest) = self.instance().await?;
-            let episodes = finish(guest.call_episodes(&mut store, &convert::config(config), &convert::to_wit_series(series)), Ok).await?;
-            Ok(episodes.into_iter().filter_map(convert::episode).collect())
+            self.call(async |store, guest| guest.call_episodes(store, &convert::config(config), &convert::to_wit_series(series)).await, |e| Ok(e.into_iter().filter_map(convert::episode).collect())).await
         })
     }
 }
