@@ -164,7 +164,7 @@ async fn providers(registry: State<'_, Registry>) -> Result<Vec<ProviderInfo>, S
 
 #[tauri::command]
 fn sources_load(app: AppHandle) -> Result<Vec<Source>, String> {
-    Ok(sources::load(&sources::file(&app)?))
+    sources::load(&sources::file(&app)?)
 }
 
 #[tauri::command]

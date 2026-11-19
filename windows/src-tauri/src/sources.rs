@@ -20,10 +20,13 @@ pub fn file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(format!("{account}.bin")))
 }
 
-pub fn load(path: &Path) -> Vec<Source> {
-    let Ok(sealed) = std::fs::read(path) else { return Vec::new() };
+/// Without the key (keyring locked or not running yet), fails and leaves the file alone; a file the key cannot open
+/// is moved aside.
+pub fn load(path: &Path) -> Result<Vec<Source>, String> {
+    let Ok(sealed) = std::fs::read(path) else { return Ok(Vec::new()) };
+    key_ready()?;
     let error = match protect(&sealed, false).map(|json| serde_json::from_slice(&json)) {
-        Ok(Ok(sources)) => return sources,
+        Ok(Ok(sources)) => return Ok(sources),
         Ok(Err(e)) => e.to_string(),
         Err(e) => e,
     };
@@ -32,8 +35,16 @@ pub fn load(path: &Path) -> Vec<Source> {
     if let Err(e) = std::fs::rename(path, &aside) {
         log::error!("{}: {e}", aside.display());
     }
-    Vec::new()
+    Ok(Vec::new())
 }
+
+#[cfg(windows)]
+fn key_ready() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(unix)]
+use keychain::ready as key_ready;
 
 pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
     let json = serde_json::to_vec(sources).map_err(|e| e.to_string())?;
@@ -49,7 +60,7 @@ pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
 /// The file holds the passwords in clear: the UI says so before it asks where to save.
 #[tauri::command]
 pub fn settings_export(app: AppHandle, path: PathBuf, prefs: serde_json::Value) -> Result<(), String> {
-    let sources = load(&file(&app)?);
+    let sources = load(&file(&app)?)?;
     let doc = serde_json::json!({ "app": "Nightglass", "version": 2, "sources": sources, "prefs": prefs });
     let json = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
@@ -106,6 +117,10 @@ mod keychain {
 
     /// Read once per launch: each keychain read may ask the user.
     static KEY: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+    pub fn ready() -> Result<(), String> {
+        key().map(|_| ())
+    }
 
     fn key() -> Result<LessSafeKey, String> {
         let bytes = match KEY.get() {
@@ -208,7 +223,7 @@ mod tests {
         save(&path, &sources).unwrap();
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"s3cret"));
-        assert_eq!(load(&path), sources);
+        assert_eq!(load(&path).unwrap(), sources);
         std::fs::remove_file(path).unwrap();
     }
 }

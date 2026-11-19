@@ -26,6 +26,8 @@ class Store {
   catalogs = $state.raw<Record<string, Catalog>>({});
   loading = new SvelteSet<string>();
   errors = $state<Record<string, string>>({});
+  /** Why the saved sources could not be read (keyring locked…): until the next launch, saving would replace them. */
+  sourcesError = $state<string | null>(null);
   /** Programmes per normalised EPG id, sorted by start. */
   guide = $state.raw<Record<string, Programme[]>>({});
   /** Source the screens show; null means every source. */
@@ -137,7 +139,13 @@ class Store {
 
   async init() {
     setInterval(() => (this.now = Date.now() / 1000), 30_000);
-    [this.providers, this.sources] = await Promise.all([invoke<ProviderInfo[]>('providers'), invoke<Source[]>('sources_load')]);
+    [this.providers, this.sources] = await Promise.all([
+      invoke<ProviderInfo[]>('providers'),
+      invoke<Source[]>('sources_load').catch((e) => {
+        this.sourcesError = String(e);
+        return [];
+      }),
+    ]);
     // Last launch's catalogs and guides first, so the screens fill at once; then the network.
     await Promise.all(this.sources.map((s) => this.restore(s)));
     for (const s of this.sources) void this.refresh(s);
@@ -237,6 +245,7 @@ class Store {
   }
 
   private async save() {
+    if (this.sourcesError) return;
     try {
       await invoke('sources_save', { sources: this.sources });
     } catch (e) {
