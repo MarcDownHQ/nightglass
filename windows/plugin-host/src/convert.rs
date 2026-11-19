@@ -153,3 +153,31 @@ pub fn to_wit_error(e: IptvError) -> wit::Error {
         other => wit::Error::Network(other.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field(key: &str) -> wit::Field {
+        wit::Field { key: key.into(), label: key.into(), kind: wit::FieldKind::Text, required: false, placeholder: None, default: None }
+    }
+
+    fn provider(fields: Vec<wit::Field>) -> wit::ProviderInfo {
+        wit::ProviderInfo { id: "p".into(), name: "P".into(), fields, resolves_streams: false, presets: Vec::new() }
+    }
+
+    #[test]
+    fn field_keys_are_unique() {
+        assert!(info(provider(vec![field("a"), field("b")])).is_ok());
+        assert_eq!(info(provider(vec![field("a"), field("a")])).unwrap_err(), "two fields named \"a\"");
+    }
+
+    #[test]
+    fn streams_stay_on_the_network() {
+        assert!(stream("rtsp://cam.test/live").is_ok());
+        assert!(stream("file:///etc/passwd").is_err());
+        assert!(stream("file://attacker/share/x.ts").is_err());
+        assert_eq!(optional_url(Some("file://attacker/share/epg.xml".into())), None);
+        assert!(optional_url(Some("https://s.test/epg.xml".into())).is_some());
+    }
+}

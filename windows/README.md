@@ -74,7 +74,7 @@ Un plugin ajoute un type de source sans toucher au code de l'app : c'est un comp
 
 Au lancement, l'app charge chaque `.wasm` de `%APPDATA%\com.marcdownhq.nightglass\plugins` (sur macOS : `~/Library/Application Support/com.marcdownhq.nightglass/plugins`). L'écran Sources montre ce dossier et ce que chaque fichier a donné. Un plugin ne remplace pas un fournisseur intégré : un identifiant déjà pris est refusé.
 
-Un plugin tourne dans un bac à sable : pas de fichiers, pas de variables d'environnement, pas de sockets. Il ne sort que par `http.send` (http et https, faite par l'app) et `log`. Chaque appel a sa propre instance, 256 Mo de mémoire et 5 minutes au plus.
+Un plugin tourne dans un bac à sable : pas de fichiers, pas de variables d'environnement, pas de sockets. Il ne sort que par `http.send` (http et https, faite par l'app) et `log`. Chaque appel a sa propre instance, 256 Mo de mémoire et 5 minutes au plus (10 secondes pour `describe`) ; une réponse HTTP ne dépasse pas 128 Mo. Les adresses de flux qu'il renvoie restent sur le réseau (http, https, rtmp, rtsp, rtp, udp, srt, mms) ; celles des guides, logos et affiches sont en http(s). Les plugins se chargent en arrière-plan : la fenêtre s'ouvre sans les attendre.
 
 Pour en écrire un en Rust, partir de [plugin-example](plugin-example/src/lib.rs) (une liste de chaînes en JSON) :
 
