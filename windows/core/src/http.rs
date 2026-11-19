@@ -89,6 +89,8 @@ impl Http {
         Ok(())
     }
 
+    pub const SEND_LIMIT: usize = 128 << 20;
+
     /// Any request, its answer returned whatever the status. http(s) only.
     pub async fn send(&self, method: &str, url: Url, headers: &[(String, String)], body: Option<Vec<u8>>) -> Result<Response> {
         if !matches!(url.scheme(), "http" | "https") {
@@ -102,10 +104,16 @@ impl Http {
         if let Some(body) = body {
             request = request.body(body);
         }
-        let response = request.send().await.map_err(network)?;
+        let mut response = request.send().await.map_err(network)?;
         let status = response.status().as_u16();
         let headers = response.headers().iter().filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string()))).collect();
-        let body = response.bytes().await.map_err(network)?.to_vec();
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(network)? {
+            if body.len() + chunk.len() > Self::SEND_LIMIT {
+                return Err(IptvError::Network(format!("response larger than {} MB", Self::SEND_LIMIT >> 20)));
+            }
+            body.extend_from_slice(&chunk);
+        }
         Ok(Response { status, headers, body })
     }
 
