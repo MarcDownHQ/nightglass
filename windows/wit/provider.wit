@@ -1,4 +1,4 @@
-package nightglass:provider@0.1.0;
+package nightglass:provider@0.2.0;
 
 interface types {
     /// A source's settings, keyed by `field.key`. Fields left empty are absent.
@@ -28,6 +28,14 @@ interface types {
         label: string,
         name: string,
         config: config,
+    }
+
+    /// A desktop browser whose TLS and HTTP/2 handshake a request presents, for servers that turn other clients away.
+    enum browser {
+        chrome,
+        edge,
+        firefox,
+        safari,
     }
 
     record provider-info {
@@ -81,6 +89,15 @@ interface types {
         plot: option<string>,
     }
 
+    /// A guide entry, matched to channels by `epg-id`. Times are Unix seconds.
+    record programme {
+        channel: string,
+        start: s64,
+        end: s64,
+        title: string,
+        desc: option<string>,
+    }
+
     record account {
         status: option<string>,
         /// Unix seconds.
@@ -97,6 +114,31 @@ interface types {
         /// An XMLTV guide for the channels.
         epg-url: option<string>,
         account: option<account>,
+        /// Guide entries sent with the catalog, for sources that have no XMLTV guide.
+        programmes: list<programme>,
+    }
+
+    /// The app fetches the stream for the player, which then opens it on 127.0.0.1. HLS playlists are rewritten so
+    /// that every playlist, segment and key they name comes back through the app.
+    record relay {
+        /// Every request of the stream presents this browser's handshake.
+        browser: option<browser>,
+        /// Every answer goes through the `filter` export before the player gets it.
+        filter: bool,
+    }
+
+    /// What the player opens.
+    record playback {
+        url: string,
+        /// Sent with every request of the stream, over the channel's own.
+        headers: list<tuple<string, string>>,
+        relay: option<relay>,
+    }
+
+    /// A playlist, segment or key on its way to the player.
+    record media {
+        content-type: option<string>,
+        body: list<u8>,
     }
 
     variant error {
@@ -112,13 +154,15 @@ interface types {
 
 /// The only way out of the sandbox.
 interface http {
-    use types.{error};
+    use types.{browser, error};
 
     record request {
         method: string,
         url: string,
         headers: list<tuple<string, string>>,
         body: option<list<u8>>,
+        /// Sent with this browser's handshake rather than the app's own.
+        browser: option<browser>,
     }
 
     record response {
@@ -146,12 +190,15 @@ world provider {
     import http;
     import log;
 
-    use types.{config, provider-info, catalog, channel, series, episode, error};
+    use types.{config, provider-info, catalog, channel, series, episode, playback, media, error};
 
     export describe: func() -> provider-info;
     export load-catalog: func(config: config) -> result<catalog, error>;
     /// Only called when `resolves-streams` is set.
-    export stream-url: func(config: config, channel: channel) -> result<string, error>;
-    export catchup-url: func(config: config, channel: channel, start: s64, end: s64) -> result<string, error>;
+    export stream-url: func(config: config, channel: channel) -> result<playback, error>;
+    export catchup-url: func(config: config, channel: channel, start: s64, end: s64) -> result<playback, error>;
     export episodes: func(config: config, series: series) -> result<list<episode>, error>;
+    /// Only called while the app relays a playback whose `relay.filter` is set: an answer from `url`, changed before
+    /// the player gets it.
+    export filter: func(config: config, url: string, media: media) -> result<media, error>;
 }

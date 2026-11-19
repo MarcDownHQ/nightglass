@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Movie, Preset, ProviderInfo, Result, Series};
+use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, Series};
 use url::Url;
 
 use crate::wit;
@@ -80,8 +80,38 @@ pub fn catalog(c: wit::Catalog) -> Catalog {
             active_connections: a.active_connections,
             trial: a.trial,
         }),
-        programmes: Vec::new(),
+        programmes: c.programmes.into_iter().filter_map(programme).collect(),
     }
+}
+
+fn programme(p: wit::Programme) -> Option<Programme> {
+    (!p.channel.is_empty() && p.end > p.start).then_some(Programme { channel: p.channel, start: p.start, end: p.end, title: p.title, desc: p.desc })
+}
+
+pub fn browser(b: wit::Browser) -> Browser {
+    match b {
+        wit::Browser::Chrome => Browser::Chrome,
+        wit::Browser::Edge => Browser::Edge,
+        wit::Browser::Firefox => Browser::Firefox,
+        wit::Browser::Safari => Browser::Safari,
+    }
+}
+
+pub fn playback(p: wit::Playback) -> Result<Playback> {
+    let relay = p.relay.map(|r| Relay { browser: r.browser.map(browser), filter: r.filter });
+    let url = stream(&p.url)?;
+    if relay.is_some() && !matches!(url.scheme(), "http" | "https") {
+        return Err(IptvError::BadResponse(format!("only http(s) streams can be relayed: {url}")));
+    }
+    Ok(Playback { url, headers: p.headers.into_iter().collect(), relay })
+}
+
+pub fn to_wit_media(m: Media) -> wit::Media {
+    wit::Media { content_type: m.content_type, body: m.body }
+}
+
+pub fn media(m: wit::Media) -> Media {
+    Media { content_type: m.content_type, body: m.body }
 }
 
 fn channel(c: wit::Channel) -> Option<Channel> {
