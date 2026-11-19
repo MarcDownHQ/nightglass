@@ -1,5 +1,5 @@
-//! libmpv, loaded at runtime (libmpv-2.dll, libmpv.2.dylib). mpv draws into a child window (an NSView
-//! on macOS, see `host_macos`) kept under the transparent webview, so the UI can sit on top of the video.
+//! libmpv, loaded at runtime (libmpv-2.dll, libmpv.2.dylib, libmpv.so.2). mpv draws into a child window (an NSView
+//! on macOS, see `host_macos`; a GtkGLArea on Linux, see `host_linux`) kept under the transparent webview, so the UI can sit on top of the video.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::Path;
@@ -7,6 +7,8 @@ use std::path::Path;
 use libloading::Library;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "linux")]
+pub use crate::host_linux::*;
 #[cfg(target_os = "macos")]
 pub use crate::host_macos::*;
 #[cfg(windows)]
@@ -79,8 +81,8 @@ struct Api {
     wait_event: unsafe extern "C" fn(Handle, f64) -> *mut Event,
     error_string: unsafe extern "C" fn(c_int) -> *const c_char,
     terminate_destroy: unsafe extern "C" fn(Handle),
-    #[cfg(target_os = "macos")]
-    render: Option<crate::host_macos::RenderFns>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    render: Option<RenderFns>,
     _lib: Library,
 }
 
@@ -104,11 +106,21 @@ impl Api {
             error_string: symbol(&lib, "mpv_error_string")?,
             terminate_destroy: symbol(&lib, "mpv_terminate_destroy")?,
             #[cfg(target_os = "macos")]
-            render: Some(crate::host_macos::RenderFns {
+            render: Some(RenderFns {
                 create: symbol(&lib, "mpv_render_context_create")?,
                 render: symbol(&lib, "mpv_render_context_render")?,
                 update: symbol(&lib, "mpv_render_context_update")?,
                 free: symbol(&lib, "mpv_render_context_free")?,
+            }),
+            #[cfg(target_os = "linux")]
+            render: Some(RenderFns {
+                create: symbol(&lib, "mpv_render_context_create")?,
+                render: symbol(&lib, "mpv_render_context_render")?,
+                update: symbol(&lib, "mpv_render_context_update")?,
+                free: symbol(&lib, "mpv_render_context_free")?,
+                get_property_string: symbol(&lib, "mpv_get_property_string")?,
+                set_property_string: symbol(&lib, "mpv_set_property_string")?,
+                mpv_free: symbol(&lib, "mpv_free")?,
             }),
             _lib: lib,
         })
@@ -123,8 +135,8 @@ fn c(s: &str) -> CString {
 pub struct Mpv {
     api: Api,
     handle: Handle,
-    #[cfg(target_os = "macos")]
-    renderer: Option<std::sync::Arc<crate::host_macos::Renderer>>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    renderer: Option<std::sync::Arc<Renderer>>,
 }
 
 // The libmpv client API is thread-safe.
@@ -133,24 +145,26 @@ unsafe impl Sync for Mpv {}
 
 impl Mpv {
     pub fn new(dll: &Path, wid: isize) -> Result<Self, String> {
-        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+        #[cfg_attr(windows, allow(unused_mut))]
         let mut api = Api::load(dll)?;
+        #[cfg(target_os = "linux")]
+        numeric_locale();
         let handle = unsafe { (api.create)() };
         if handle.is_null() {
             return Err("mpv_create failed".into());
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let render = api.render.take();
-        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+        #[cfg_attr(windows, allow(unused_mut))]
         let mut mpv = Mpv {
             api,
             handle,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             renderer: None,
         };
         let wid = wid.to_string();
-        // macOS: no `wid` there; the render API draws into the host view's layer.
-        let (wid_option, vo) = if cfg!(target_os = "macos") { ("vo", "libmpv") } else { ("wid", wid.as_str()) };
+        // macOS and Linux: no `wid` there; the render API draws into the host view's layer, or the host area.
+        let (wid_option, vo) = if cfg!(any(target_os = "macos", target_os = "linux")) { ("vo", "libmpv") } else { ("wid", wid.as_str()) };
         let options = [
             (wid_option, vo),
             // Ignore the user's own mpv.conf and scripts: the app owns every setting.
@@ -167,7 +181,7 @@ impl Mpv {
             // Keep the video window alive between streams, so it never pops above the webview.
             ("force-window", "yes"),
             ("idle", "yes"),
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(windows)]
             ("vo", "gpu-next"),
             ("hwdec", "auto-safe"),
             ("background-color", "#000000"),
@@ -183,9 +197,9 @@ impl Mpv {
             }
         }
         mpv.check(unsafe { (mpv.api.initialize)(handle) })?;
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if let Some(fns) = render {
-            mpv.renderer = Some(crate::host_macos::attach(wid.parse().unwrap_or(0), handle, fns)?);
+            mpv.renderer = Some(attach(wid.parse().unwrap_or(0), handle, fns)?);
         }
         unsafe { (mpv.api.request_log_messages)(handle, c("warn").as_ptr()) };
         for (i, (name, format)) in OBSERVED.iter().enumerate() {
@@ -287,7 +301,7 @@ impl Mpv {
 
 impl Drop for Mpv {
     fn drop(&mut self) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if let Some(renderer) = &self.renderer {
             renderer.free();
         }

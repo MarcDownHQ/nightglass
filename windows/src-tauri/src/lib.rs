@@ -1,4 +1,6 @@
 mod cache;
+#[cfg(target_os = "linux")]
+mod host_linux;
 #[cfg(target_os = "macos")]
 mod host_macos;
 mod mpv;
@@ -16,13 +18,16 @@ use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
 
-/// A window's native handle, the parent of video windows: its HWND, or its content NSView on macOS.
+/// A window's native handle, the parent of video windows: its HWND, its content NSView on macOS, or its video
+/// layer on Linux.
 macro_rules! native {
     ($window:expr) => {{
         #[cfg(windows)]
         let handle = $window.hwnd().map(|h| h.0 as isize);
         #[cfg(target_os = "macos")]
         let handle = $window.ns_view().map(|v| v as isize);
+        #[cfg(target_os = "linux")]
+        let handle = $window.default_vbox().and_then(|b| mpv::video_layer(&b).ok_or(tauri::Error::WindowNotFound));
         handle
     }};
 }
@@ -74,8 +79,25 @@ async fn pip_open(app: AppHandle) -> Result<(), String> {
     if app.get_webview_window("pip").is_some() {
         return Ok(());
     }
+    // Linux: the window gets its video, and with it its GL context, before GTK first paints it. Otherwise WebKit's
+    // first GL draw lands in the middle of a software-drawn frame, which compositors with explicit sync reject.
+    #[cfg(target_os = "linux")]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let handle = app.clone();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(open_pip(&handle));
+        })
+        .map_err(|e| e.to_string())?;
+        rx.recv().map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    open_pip(&app)
+}
+
+fn open_pip(app: &AppHandle) -> Result<(), String> {
     let (w, h) = (480.0, 270.0);
-    let mut builder = WebviewWindowBuilder::new(&app, "pip", WebviewUrl::App("index.html".into()))
+    let mut builder = WebviewWindowBuilder::new(app, "pip", WebviewUrl::App("index.html".into()))
         .title("Nightglass")
         .inner_size(w, h)
         .min_inner_size(240.0, 135.0)
@@ -326,6 +348,8 @@ pub fn run() {
             // In Contents/Frameworks, or lib/macos in dev builds: see build.rs.
             #[cfg(target_os = "macos")]
             let dll = std::path::PathBuf::from("@rpath/libmpv.dylib");
+            #[cfg(target_os = "linux")]
+            let dll = std::path::PathBuf::from("libmpv.so.2");
             app.manage(Mpv::new(&dll, host)?);
             app.manage(VideoHost(host));
             app.manage(MainWindow(main));

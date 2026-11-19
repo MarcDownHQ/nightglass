@@ -21,13 +21,13 @@ struct Tile {
 #[derive(Default)]
 pub struct Tiles(Mutex<HashMap<usize, Tile>>);
 
-/// Where libmpv is (libmpv-2.dll, @rpath/libmpv.dylib), for the tiles' instances.
+/// Where libmpv is (libmpv-2.dll, @rpath/libmpv.dylib, libmpv.so.2), for the tiles' instances.
 pub struct MpvDll(pub PathBuf);
 
 /// Plays `url` in tile `index`, made on first use, at `rect` (x, y, width, height in physical pixels).
-// Windows: on the main thread, which owns the tiles' windows. macOS: off it, mpv waits on it (see `host_macos`).
+// Windows: on the main thread, which owns the tiles' windows. macOS and Linux: off it, mpv waits on it (see `host_macos`).
 #[cfg_attr(windows, tauri::command)]
-#[cfg_attr(target_os = "macos", tauri::command(async))]
+#[cfg_attr(not(windows), tauri::command(async))]
 pub fn tile_play(
     app: AppHandle,
     tiles: State<'_, Tiles>,
@@ -61,7 +61,7 @@ pub fn tile_play(
 }
 
 #[cfg_attr(windows, tauri::command)]
-#[cfg_attr(target_os = "macos", tauri::command(async))]
+#[cfg_attr(not(windows), tauri::command(async))]
 pub fn tile_rect(tiles: State<'_, Tiles>, index: usize, rect: [i32; 4]) -> Result<(), String> {
     if let Some(tile) = tiles.0.lock().map_err(|e| e.to_string())?.get(&index) {
         mpv::move_host(tile.host, rect);
@@ -71,7 +71,7 @@ pub fn tile_rect(tiles: State<'_, Tiles>, index: usize, rect: [i32; 4]) -> Resul
 
 /// Only one tile is heard at a time.
 #[cfg_attr(windows, tauri::command)]
-#[cfg_attr(target_os = "macos", tauri::command(async))]
+#[cfg_attr(not(windows), tauri::command(async))]
 pub fn tile_mute(tiles: State<'_, Tiles>, index: usize, muted: bool) -> Result<(), String> {
     if let Some(tile) = tiles.0.lock().map_err(|e| e.to_string())?.get(&index) {
         tile.mpv.set("mute", if muted { "yes" } else { "no" })?;
@@ -81,7 +81,7 @@ pub fn tile_mute(tiles: State<'_, Tiles>, index: usize, muted: bool) -> Result<(
 
 /// Stops a tile and frees its mpv instance and window; `None` closes them all.
 #[cfg_attr(windows, tauri::command)]
-#[cfg_attr(target_os = "macos", tauri::command(async))]
+#[cfg_attr(not(windows), tauri::command(async))]
 pub fn tile_close(tiles: State<'_, Tiles>, index: Option<usize>) -> Result<(), String> {
     let mut tiles = tiles.0.lock().map_err(|e| e.to_string())?;
     let indexes: Vec<usize> = match index {
