@@ -4,7 +4,7 @@ version = "0.5.0"
 description = "Nightglass IPTV player for Windows"
 authors = ["MarcDownHQ"]
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.97"
 license = "MIT"
 
 [lib]
