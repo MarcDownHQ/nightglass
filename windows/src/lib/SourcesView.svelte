@@ -39,7 +39,9 @@
 <div class="sources">
   <HudPanel caption={t('Sources')} trailing={String(store.sources.length)}>
     <div class="rows">
-      {#if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
+      {#if store.sourcesError}
+        <p class="empty unreadable" title={store.sourcesError}>{t('Saved sources could not be read; changes are not saved until the next launch.')}</p>
+      {:else if !store.sources.length}<p class="empty">{t('No source yet.')}</p>{/if}
       {#each store.sources as s (s.id)}
         {@const kind = store.provider(s)?.name ?? s.provider}
         {@const cat = store.catalogs[s.id]}
@@ -144,6 +146,9 @@
     padding: 24px;
     font-size: 15px;
     color: var(--dim);
+  }
+  .unreadable {
+    color: var(--live);
   }
   .row {
     position: relative;

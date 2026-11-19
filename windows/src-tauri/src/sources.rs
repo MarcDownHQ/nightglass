@@ -1,5 +1,6 @@
 //! Sources hold provider passwords: the whole list lives in one file encrypted for the current user
-//! (DPAPI on Windows; on macOS with a key kept in the login keychain), never in plain text.
+//! (DPAPI on Windows; with a key kept in the login keychain on macOS, in the desktop's keyring on Linux), never in
+//! plain text.
 
 use std::path::{Path, PathBuf};
 
@@ -19,10 +20,13 @@ pub fn file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(format!("{account}.bin")))
 }
 
-pub fn load(path: &Path) -> Vec<Source> {
-    let Ok(sealed) = std::fs::read(path) else { return Vec::new() };
+/// Without the key (keyring locked or not running yet), fails and leaves the file alone; a file the key cannot open
+/// is moved aside.
+pub fn load(path: &Path) -> Result<Vec<Source>, String> {
+    let Ok(sealed) = std::fs::read(path) else { return Ok(Vec::new()) };
+    key_ready()?;
     let error = match protect(&sealed, false).map(|json| serde_json::from_slice(&json)) {
-        Ok(Ok(sources)) => return sources,
+        Ok(Ok(sources)) => return Ok(sources),
         Ok(Err(e)) => e.to_string(),
         Err(e) => e,
     };
@@ -31,8 +35,16 @@ pub fn load(path: &Path) -> Vec<Source> {
     if let Err(e) = std::fs::rename(path, &aside) {
         log::error!("{}: {e}", aside.display());
     }
-    Vec::new()
+    Ok(Vec::new())
 }
+
+#[cfg(windows)]
+fn key_ready() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(unix)]
+use keychain::ready as key_ready;
 
 pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
     let json = serde_json::to_vec(sources).map_err(|e| e.to_string())?;
@@ -48,7 +60,7 @@ pub fn save(path: &Path, sources: &[Source]) -> Result<(), String> {
 /// The file holds the passwords in clear: the UI says so before it asks where to save.
 #[tauri::command]
 pub fn settings_export(app: AppHandle, path: PathBuf, prefs: serde_json::Value) -> Result<(), String> {
-    let sources = load(&file(&app)?);
+    let sources = load(&file(&app)?)?;
     let doc = serde_json::json!({ "app": "Nightglass", "version": 2, "sources": sources, "prefs": prefs });
     let json = serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
@@ -87,24 +99,28 @@ pub fn protect(data: &[u8], encrypt: bool) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 pub use keychain::protect;
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 mod keychain {
     use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
     use ring::rand::{SecureRandom, SystemRandom};
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     use security_framework::passwords::{get_generic_password, set_generic_password};
 
     const SERVICE: &str = "com.marcdownhq.nightglass";
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     const ACCOUNT: &str = "data-key";
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     const NOT_FOUND: i32 = -25300; // errSecItemNotFound
 
     /// Read once per launch: each keychain read may ask the user.
     static KEY: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+    pub fn ready() -> Result<(), String> {
+        key().map(|_| ())
+    }
 
     fn key() -> Result<LessSafeKey, String> {
         let bytes = match KEY.get() {
@@ -125,7 +141,7 @@ mod keychain {
     }
 
     /// The user's data key, made on first use. Any other keychain error (access denied…) fails rather than replace it.
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     fn stored_key() -> Result<Vec<u8>, String> {
         match get_generic_password(SERVICE, ACCOUNT) {
             Ok(bytes) => Ok(bytes),
@@ -140,7 +156,7 @@ mod keychain {
 
     /// Dev builds: every rebuild is a new unsigned binary to the keychain, which would ask for the password each
     /// time; the key lives instead in a file only the user can read, apart from a release build's data.
-    #[cfg(debug_assertions)]
+    #[cfg(all(target_os = "macos", debug_assertions))]
     fn stored_key() -> Result<Vec<u8>, String> {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
@@ -155,6 +171,23 @@ mod keychain {
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         file.write_all(&bytes).map_err(|e| e.to_string())?;
         Ok(bytes)
+    }
+
+    /// The user's data key in the desktop's keyring (Secret Service: GNOME Keyring, KWallet…), made on first use.
+    /// Any other error (no keyring running, access denied…) fails rather than replace it.
+    #[cfg(target_os = "linux")]
+    fn stored_key() -> Result<Vec<u8>, String> {
+        let account = if cfg!(debug_assertions) { "dev-data-key" } else { "data-key" };
+        let entry = keyring::Entry::new(SERVICE, account).map_err(|e| format!("Keyring: {e}"))?;
+        match entry.get_secret() {
+            Ok(bytes) => Ok(bytes),
+            Err(keyring::Error::NoEntry) => {
+                let bytes = new_key()?;
+                entry.set_secret(&bytes).map_err(|e| format!("Keyring: {e}"))?;
+                Ok(bytes)
+            }
+            Err(e) => Err(format!("Keyring: {e}")),
+        }
     }
 
     /// Encrypts (or decrypts) `data` so that only the current user can read it: a random nonce, then the sealed data.
@@ -190,7 +223,7 @@ mod tests {
         save(&path, &sources).unwrap();
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"s3cret"));
-        assert_eq!(load(&path), sources);
+        assert_eq!(load(&path).unwrap(), sources);
         std::fs::remove_file(path).unwrap();
     }
 }

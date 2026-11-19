@@ -26,6 +26,7 @@ export const FR: Record<string, string> = {
   'Show the categories behind the PIN': 'Afficher les catégories protégées par le PIN',
   'No source yet': 'Aucune source',
   'No source yet.': 'Aucune source.',
+  'Saved sources could not be read; changes are not saved until the next launch.': 'Impossible de lire les sources enregistrées ; les changements ne seront pas enregistrés avant le prochain lancement.',
   'Add an M3U playlist, an Xtream account or a Stalker portal.': 'Ajoutez une playlist M3U, un compte Xtream ou un portail Stalker.',
   'Add a source': 'Ajouter une source',
 

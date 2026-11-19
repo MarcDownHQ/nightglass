@@ -1,6 +1,6 @@
-# Nightglass pour Windows et macOS
+# Nightglass pour Windows, macOS et Linux
 
-**Tauri 2** (Rust) pour l'app, **Svelte 5** pour l'interface, **libmpv** pour la lecture (FFmpeg, décodage GPU d3d11va sous Windows, VideoToolbox sous macOS). Le dossier s'appelle `windows/` pour des raisons historiques : la même app tourne sous macOS (voir [macOS](#macos)).
+**Tauri 2** (Rust) pour l'app, **Svelte 5** pour l'interface, **libmpv** pour la lecture (FFmpeg, décodage GPU d3d11va sous Windows, VideoToolbox sous macOS, VA-API sous Linux). Le dossier s'appelle `windows/` pour des raisons historiques : la même app tourne sous macOS et Linux (voir [macOS](#macos), [Linux](#linux)).
 
 ## État
 
@@ -60,7 +60,7 @@ src/             # interface Svelte
 
 Chaque type de source est un fournisseur (`Provider` dans `core/src/provider.rs`) : il décrit les champs du formulaire d'ajout et répond aux appels catalogue, lien de lecture, replay et épisodes. Une source enregistre l'identifiant de son fournisseur et ses réglages (`{"provider": "xtream", "config": {"server": …}}`) ; l'ancien format (`{"kind": {"xtream": …}}`) se relit toujours.
 
-Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
+Les sources contiennent des mots de passe : la liste est chiffrée avec DPAPI pour l'utilisateur Windows courant (sur macOS : ChaCha20-Poly1305, avec une clé gardée dans le trousseau, ou dans un fichier 0600 pour les builds de dev ; sous Linux : de même, avec la clé dans le trousseau Secret Service du bureau, GNOME Keyring ou KWallet, sans lequel les sources ne se chargent pas), dans `%APPDATA%\com.marcdownhq.nightglass\sources.bin`. Le cache des catalogues et des guides (`%LOCALAPPDATA%com.marcdownhq.nightglasscatalog-*.bin`, `guide-*.bin`) est chiffré de la même façon : les URL Xtream contiennent le mot de passe. Favoris, récents, éléments masqués, positions de lecture, volume et langues restent dans le stockage de la page.
 
 ### La vidéo sous l'interface
 
@@ -68,11 +68,13 @@ mpv dessine dans une fenêtre enfant placée tout en bas de la fenêtre principa
 
 Sur macOS, mpv ignore `wid` : il dessine via son API de rendu (OpenGL) dans un calque d'une NSView placée sous la WebView ([src-tauri/src/host_macos.rs](src-tauri/src/host_macos.rs)). Le reste (marges, trou, multivue, PiP) est le même.
 
+Sous Linux, de même via l'API de rendu, dans une GtkGLArea posée sous la WebView par un GtkOverlay ([src-tauri/src/host_linux.rs](src-tauri/src/host_linux.rs)). Passer au PiP change la zone de fenêtre : son contexte GL est perdu, mpv refait son contexte de rendu dans la nouvelle.
+
 ## Plugins
 
 Un plugin ajoute un type de source sans toucher au code de l'app : c'est un composant WebAssembly qui implémente le monde `provider` de [wit/provider.wit](wit/provider.wit). Il se décrit (`describe` : identifiant, nom, champs du formulaire, préréglages) et répond aux mêmes appels que les fournisseurs intégrés (`load-catalog`, `stream-url`, `catchup-url`, `episodes`).
 
-Au lancement, l'app charge chaque `.wasm` de `%APPDATA%\com.marcdownhq.nightglass\plugins` (sur macOS : `~/Library/Application Support/com.marcdownhq.nightglass/plugins`). L'écran Sources montre ce dossier et ce que chaque fichier a donné. Un plugin ne remplace pas un fournisseur intégré : un identifiant déjà pris est refusé.
+Au lancement, l'app charge chaque `.wasm` de `%APPDATA%\com.marcdownhq.nightglass\plugins` (sur macOS : `~/Library/Application Support/com.marcdownhq.nightglass/plugins` ; sous Linux : `~/.local/share/com.marcdownhq.nightglass/plugins`). L'écran Sources montre ce dossier et ce que chaque fichier a donné. Un plugin ne remplace pas un fournisseur intégré : un identifiant déjà pris est refusé.
 
 Un plugin tourne dans un bac à sable : pas de fichiers, pas de variables d'environnement, pas de sockets. Il ne sort que par `http.send` (http et https, faite par l'app) et `log`. Chaque appel a sa propre instance, 256 Mo de mémoire et 5 minutes au plus (10 secondes pour `describe`) ; une réponse HTTP ne dépasse pas 128 Mo. Les adresses de flux qu'il renvoie restent sur le réseau (http, https, rtmp, rtsp, rtp, udp, srt, mms) ; celles des guides, logos et affiches sont en http(s). Les plugins se chargent en arrière-plan : la fenêtre s'ouvre sans les attendre.
 
@@ -118,16 +120,28 @@ npm run tauri dev
 
 `npm run tauri build -- --target universal-apple-darwin` (après `rustup target add x86_64-apple-darwin`) produit `Nightglass.app` et le `.dmg` dans `target/universal-apple-darwin/release/bundle/`. L'app est signée ad hoc, sans hardened runtime (qui refuserait de charger libmpv signé ad hoc) : sans identité Developer ID ni notarisation, macOS demande au premier lancement de l'autoriser dans Réglages Système → Confidentialité et sécurité.
 
+### Linux
+
+```sh
+# Arch : sudo pacman -S rustup nodejs npm webkit2gtk-4.1 mpv
+# Debian, Ubuntu : sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config libmpv2
+cd windows
+npm install
+npm run tauri dev
+```
+
+L'app charge la libmpv du système (`libmpv.so.2`), rien à télécharger. `npm run tauri build` produit un `.deb` et un `.rpm` dans `target/release/bundle/`, qui dépendent du paquet libmpv de la distribution. Il faut un trousseau Secret Service actif (GNOME Keyring, KWallet) pour garder la clé des sources.
+
 ## Publier une version
 
-Les workflows [Windows](../.github/workflows/windows.yml) et [macOS](../.github/workflows/macos.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur et le `.dmg` sont dans les artefacts des runs. Une version sort pour les deux plateformes à la fois ([Release](../.github/workflows/release.yml)) :
+Les workflows [Windows](../.github/workflows/windows.yml), [macOS](../.github/workflows/macos.yml) et [Linux](../.github/workflows/linux.yml) vérifient et construisent l'app à chaque PR et à chaque push sur `master` ; l'installeur, le `.dmg`, le `.deb` et le `.rpm` sont dans les artefacts des runs. Une version sort pour les trois plateformes à la fois ([Release](../.github/workflows/release.yml)) :
 
 1. Monter `version` dans `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` et `package.json`.
 2. Pousser un tag `v<version>` (par exemple `v0.5.0`). Les anciens tags `windows-v*` ne déclenchent plus rien.
-3. Le workflow construit les deux apps et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`) et `latest.json` : la relire sur GitHub, puis la publier.
+3. Le workflow construit l'app pour chaque plateforme et crée une release **brouillon** avec l'installeur Windows, le `.dmg`, l'archive de mise à jour Mac (`Nightglass.app.tar.gz`), le `.deb`, le `.rpm` et `latest.json` : la relire sur GitHub, puis la publier.
 4. Déclarer l'installeur publié à Microsoft (voir [Faux positif Defender](#faux-positif-defender-à-faire-à-chaque-version)).
 
-Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (ou l'archive `.app` sur Mac), vérifie sa signature et s'installe, puis redémarre. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour les deux.
+Une fois la release publiée, les copies installées proposent la mise à jour dans leur barre de titre (bouton « Update ») : l'app lit `releases/latest/download/latest.json`, télécharge l'installeur (l'archive `.app` sur Mac, le `.deb` ou le `.rpm` selon le paquet installé sous Linux), vérifie sa signature et s'installe, puis redémarre. Sous Linux, l'installation passe par `pkexec`, qui demande le mot de passe administrateur. Ce fichier vient de la dernière release publiée : il liste toutes les plateformes, d'où une seule release pour toutes.
 
 La signature des mises à jour utilise une paire de clés Tauri :
 

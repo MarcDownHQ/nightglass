@@ -32,6 +32,13 @@ tauri-plugin-dialog = "2"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_UI_WindowsAndMessaging"] }
 
+[target.'cfg(unix)'.dependencies]
+ring = "0.17"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow", "NSGraphics"] }
@@ -41,5 +48,4 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = ["
 objc2-open-gl = { version = "0.3", default-features = false, features = ["std", "CGLTypes", "CGLCurrent"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase"] }
 security-framework = "3"
-ring = "0.17"
 dispatch2 = "0.3"
