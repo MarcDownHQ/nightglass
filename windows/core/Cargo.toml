@@ -21,7 +21,7 @@ serde_json = "1.0.154"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["macros", "net", "rt", "sync", "time"] }
 url = { version = "2.5.8", features = ["serde"] }
-wreq = { version = "=6.0.0-rc.31", default-features = false, features = ["webpki-roots", "tokio-rt", "gzip", "brotli", "deflate", "zstd", "prefix-symbols", "stream"] }
+wreq = { version = "=6.0.0-rc.31", default-features = false, features = ["webpki-roots", "tokio-rt", "gzip", "brotli", "deflate", "zstd", "stream"] }
 wreq-util = "=3.0.0-rc.14"
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
 
