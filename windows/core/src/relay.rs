@@ -152,7 +152,11 @@ impl Session {
         if let Some(range) = range.filter(|_| !self.relay.filter) {
             headers.push(("Range".into(), range));
         }
-        let mut answer = http.open(Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) }).await?;
+        let request = Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) };
+        let mut answer = http.open(request.clone()).await?;
+        if answer.status == 403 || answer.status >= 500 {
+            answer = http.open(request).await?;
+        }
         let content_type = answer.header("content-type").map(str::to_string);
         if !(200..300).contains(&answer.status) {
             return Ok(passed_on(answer, None));
@@ -393,6 +397,19 @@ mod tests {
         let key_url = &key[key.find("http").unwrap()..key.find("\",IV").unwrap()];
         assert_eq!(get(key_url, None).await.2, "key");
         assert_eq!(get(&segments[1], None).await.0, 404, "upstream 404 is passed on");
+    }
+
+    #[tokio::test]
+    async fn a_refused_answer_is_asked_once_more() {
+        let server = MockServer::start().await;
+        Mock::given(path("/live/index.m3u8")).respond_with(ResponseTemplate::new(403)).up_to_n_times(1).with_priority(1).mount(&server).await;
+        Mock::given(path("/live/index.m3u8")).respond_with(ResponseTemplate::new(200).set_body_raw("#EXTM3U\n#EXTINF:5,\na.ts\n", "application/vnd.apple.mpegurl")).mount(&server).await;
+        Mock::given(path("/live/gone.m3u8")).respond_with(ResponseTemplate::new(404)).expect(1).mount(&server).await;
+
+        let (_relay, local) = open(&server, "/live/index.m3u8", Relay { browser: None, filter: false }).await;
+        assert_eq!(get(local.as_str(), None).await.0, 200);
+        let (_relay, local) = open(&server, "/live/gone.m3u8", Relay { browser: None, filter: false }).await;
+        assert_eq!(get(local.as_str(), None).await.0, 404, "only a refusal or a server error is asked again");
     }
 
     #[tokio::test]
