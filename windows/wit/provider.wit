@@ -127,12 +127,24 @@ interface types {
         filter: bool,
     }
 
+    /// A stream kept apart from the main one: an audio in another language, the audio of a video-only stream,
+    /// subtitles.
+    record track {
+        url: string,
+        /// An ISO 639 code, which the player's language preferences match.
+        language: option<string>,
+        /// Shown in the track menus.
+        title: option<string>,
+    }
+
     /// What the player opens.
     record playback {
         url: string,
-        /// Sent with every request of the stream, over the channel's own.
+        /// Sent with every request of the stream and its tracks, over the channel's own.
         headers: list<tuple<string, string>>,
         relay: option<relay>,
+        /// Played alongside `url`, with the same headers and relay, in order of preference.
+        tracks: list<track>,
     }
 
     /// A playlist, segment or key on its way to the player.

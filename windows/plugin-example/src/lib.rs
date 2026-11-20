@@ -110,7 +110,7 @@ impl Guest for JsonList {
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
         let relay = browser(&config)?.map(|b| Relay { browser: Some(b), filter: false });
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay })
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay, tracks: Vec::new() })
     }
 
     fn catchup_url(_config: Config, _channel: Channel, _start: i64, _end: i64) -> Result<Playback, Error> {
