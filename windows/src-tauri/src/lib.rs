@@ -220,22 +220,28 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<Playback, String> {
+async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, String> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())?;
     playable(&relay, provider, source, &channel, playback).await
 }
 
-/// The channel's headers under those the provider gave; a playback the app fetches itself becomes its 127.0.0.1 address.
-async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, channel: &Channel, mut playback: Playback) -> Result<Playback, String> {
+/// What mpv opens: one address, the playback's tracks joined into it.
+#[derive(serde::Serialize)]
+struct PlayerInput {
+    url: String,
+    headers: HashMap<String, String>,
+}
+
+/// The channel's headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
+async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, channel: &Channel, mut playback: Playback) -> Result<PlayerInput, String> {
     for (name, value) in &channel.headers {
         playback.headers.entry(name.clone()).or_insert_with(|| value.clone());
     }
-    if playback.relay.is_none() {
-        return Ok(playback);
+    if playback.relay.is_some() {
+        playback = relay.relay(provider, source.config, playback).await.map_err(|e| e.to_string())?;
     }
-    let url = relay.open(provider, source.config, playback).await.map_err(|e| e.to_string())?;
-    Ok(url.into())
+    Ok(PlayerInput { url: playback.player_url(), headers: playback.headers })
 }
 
 /// A series' episodes, asked for when its page opens.
@@ -289,7 +295,7 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Playback, String> {
+async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, String> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())?;
     playable(&relay, provider, source, &channel, playback).await

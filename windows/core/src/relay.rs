@@ -20,7 +20,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{Config, Http, IptvError, Media, Playback, Provider, Relay, Request, Result};
+use crate::{Config, Http, IptvError, Media, Playback, Provider, Relay, Request, Result, Track};
 
 /// A session nobody asked anything of for this long is forgotten.
 const IDLE: Duration = Duration::from_secs(6 * 3600);
@@ -59,6 +59,17 @@ struct Urls {
 impl RelayServer {
     pub fn new(http: Http) -> Self {
         RelayServer(Arc::new(Inner { http, port: OnceCell::new(), sessions: Mutex::default() }))
+    }
+
+    /// `playback` with its stream and each of its tracks on 127.0.0.1.
+    pub async fn relay(&self, provider: Arc<dyn Provider>, config: Config, playback: Playback) -> Result<Playback> {
+        let mut tracks = Vec::with_capacity(playback.tracks.len());
+        for track in &playback.tracks {
+            let alone = Playback { url: track.url.clone(), tracks: Vec::new(), ..playback.clone() };
+            tracks.push(Track { url: self.open(provider.clone(), config.clone(), alone).await?, ..track.clone() });
+        }
+        let url = self.open(provider, config, Playback { tracks: Vec::new(), ..playback }).await?;
+        Ok(Playback { tracks, ..url.into() })
     }
 
     /// The address the player opens for `playback`, served by `provider` until it goes unused.
@@ -289,7 +300,7 @@ mod tests {
     /// The relay stops with the last of its handles: keep the first one.
     async fn open(server: &MockServer, path: &str, relay: Relay) -> (RelayServer, Url) {
         let relay_server = RelayServer::new(Http::new());
-        let playback = Playback { url: Url::parse(&format!("{}{path}", server.uri())).unwrap(), headers: [("X-Key".into(), "k".into())].into(), relay: Some(relay) };
+        let playback = Playback { url: Url::parse(&format!("{}{path}", server.uri())).unwrap(), headers: [("X-Key".into(), "k".into())].into(), relay: Some(relay), tracks: Vec::new() };
         let local = relay_server.open(provider(), Config::new(), playback).await.unwrap();
         (relay_server, local)
     }
@@ -364,6 +375,26 @@ mod tests {
         assert_eq!(r.headers()["content-range"], "bytes 0-3/10");
         assert_eq!(r.headers()["content-type"], "video/mp4");
         assert_eq!(r.text().await.unwrap(), "film");
+    }
+
+    #[tokio::test]
+    async fn tracks_are_relayed_each_on_its_own_address() {
+        let server = MockServer::start().await;
+        for (name, body) in [("/video.mp4", "video"), ("/fr.m4a", "audio")] {
+            Mock::given(path(name)).and(header("x-key", "k")).respond_with(ResponseTemplate::new(200).set_body_string(body)).mount(&server).await;
+        }
+        let relay_server = RelayServer::new(Http::new());
+        let mut playback = Playback::from(Url::parse(&format!("{}/video.mp4", server.uri())).unwrap());
+        playback.headers = [("X-Key".into(), "k".into())].into();
+        playback.relay = Some(Relay::default());
+        playback.tracks = vec![Track { url: Url::parse(&format!("{}/fr.m4a", server.uri())).unwrap(), language: Some("fr".into()), title: Some("Français".into()) }];
+        let relayed = relay_server.relay(provider(), Config::new(), playback).await.unwrap();
+        assert_eq!((relayed.relay, relayed.headers.len()), (None, 0));
+        assert_eq!(get(relayed.url.as_str(), None).await.2, "video");
+        let track = &relayed.tracks[0];
+        assert_eq!((track.language.as_deref(), track.title.as_deref()), (Some("fr"), Some("Français")));
+        assert_eq!(track.url.host_str(), Some("127.0.0.1"));
+        assert_eq!(get(track.url.as_str(), None).await.2, "audio");
     }
 
     #[tokio::test]

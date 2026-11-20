@@ -103,7 +103,7 @@ pub fn playback(p: wit::Playback) -> Result<Playback> {
     if relay.is_some() && !matches!(url.scheme(), "http" | "https") {
         return Err(IptvError::BadResponse(format!("only http(s) streams can be relayed: {url}")));
     }
-    Ok(Playback { url, headers: p.headers.into_iter().collect(), relay })
+    Ok(Playback { url, headers: p.headers.into_iter().collect(), relay, tracks: Vec::new() })
 }
 
 pub fn to_wit_media(m: Media) -> wit::Media {
