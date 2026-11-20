@@ -7,16 +7,30 @@ rust-version = "1.90"
 license = "MIT"
 
 [dependencies]
+bytes = "1.12.1"
 flate2 = "1.1.10"
+futures-util = { version = "0.3.34", default-features = false }
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["server", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+log = "0.4"
 percent-encoding = "2.3.2"
 quick-xml = "0.42.0"
-reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "gzip", "http2", "charset"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
-tokio = { version = "1.54.1", features = ["macros"] }
+tokio = { version = "1.54.1", features = ["macros", "net", "rt", "sync", "time"] }
 url = { version = "2.5.8", features = ["serde"] }
+wreq = { version = "=6.0.0-rc.31", default-features = false, features = ["webpki-roots", "tokio-rt", "gzip", "brotli", "deflate", "zstd", "stream"] }
+wreq-util = "=3.0.0-rc.14"
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
+
+# The browser handshakes link BoringSSL, whose libssl and libcrypto would shadow OpenSSL's on Linux.
+[target.'cfg(target_os = "linux")'.dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "http2", "charset"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "gzip", "http2", "charset"] }
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

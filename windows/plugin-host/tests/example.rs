@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use nightglass_core::{Config, Http, IptvError, Providers};
+use nightglass_core::{Browser, Config, Http, IptvError, Media, Providers, Relay};
 use nightglass_plugin_host::Host;
-use wiremock::matchers::{header, path};
+use wiremock::matchers::{header, header_regex, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn example() -> &'static Path {
@@ -34,14 +34,17 @@ async fn describes_itself() {
     let plugin = host.load(example()).await.unwrap();
     let info = plugin.info();
     assert_eq!(info.id, "json-list");
-    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token"]);
+    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token", "browser"]);
 }
 
 #[tokio::test]
 async fn loads_a_catalog_through_the_host() {
     let server = MockServer::start().await;
     let body = r#"{"channels": [
-        {"name": "One", "url": "http://s.test/1.ts", "group": "News"},
+        {"name": "One", "url": "http://s.test/1.ts", "group": "News", "programmes": [
+            {"start": 100, "end": 200, "title": "Morning"},
+            {"start": 300, "end": 300, "title": "Empty"}
+        ]},
         {"name": "Broken", "url": "not an address"}
     ], "epg": "http://s.test/epg.xml"}"#;
     Mock::given(path("/list.json"))
@@ -56,6 +59,39 @@ async fn loads_a_catalog_through_the_host() {
     assert_eq!(catalog.channels.len(), 1);
     assert_eq!(catalog.channels[0].group.as_deref(), Some("News"));
     assert_eq!(catalog.epg_url.unwrap().as_str(), "http://s.test/epg.xml");
+    assert_eq!(catalog.channels[0].epg_id.as_deref(), Some("http://s.test/1.ts"));
+    let titles: Vec<_> = catalog.programmes.iter().map(|p| (p.channel.as_str(), p.title.as_str())).collect();
+    assert_eq!(titles, [("http://s.test/1.ts", "Morning")], "an entry that ends when it starts is dropped");
+}
+
+#[tokio::test]
+async fn browsers_for_the_list_and_the_streams() {
+    let server = MockServer::start().await;
+    Mock::given(path("/list.json"))
+        .and(header_regex("user-agent", "Chrome/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"channels": [{"name": "One", "url": "http://s.test/1.m3u8"}]}"#))
+        .mount(&server)
+        .await;
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let url = format!("{}/list.json", server.uri());
+    let chrome = config(&[("url", &url), ("browser", "Chrome")]);
+    let catalog = plugin.catalog(&chrome).await.unwrap();
+    let channel = &catalog.channels[0];
+    let playback = plugin.stream_url(&chrome, channel).await.unwrap();
+    assert_eq!(playback.url.as_str(), "http://s.test/1.m3u8");
+    assert_eq!(playback.relay, Some(Relay { browser: Some(Browser::Chrome), filter: false }));
+    assert_eq!(plugin.stream_url(&config(&[("url", &url)]), channel).await.unwrap().relay, None);
+    assert_eq!(plugin.stream_url(&config(&[("browser", "lynx")]), channel).await.unwrap_err(), IptvError::Setting("browser".into()));
+}
+
+#[tokio::test]
+async fn filters_round_trip() {
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let media = Media { content_type: Some("video/mp2t".into()), body: vec![0x47; 1 << 20] };
+    let url = url::Url::parse("http://s.test/seg.ts").unwrap();
+    assert_eq!(plugin.filter(&Config::new(), &url, media.clone()).await.unwrap(), media);
 }
 
 #[tokio::test]

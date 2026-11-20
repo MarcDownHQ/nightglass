@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Programme, Provider, ProviderInfo, Providers, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -45,9 +45,7 @@ const PAST: i64 = 3 * 86_400;
 #[tauri::command(async)]
 /// `options` are per-file mpv options, such as `start=93,sid=no`: they don't stick to the next file.
 fn mpv_play(mpv: State<'_, Mpv>, url: String, headers: HashMap<String, String>, options: Option<String>) -> Result<(), String> {
-    // M3U playlists may ask for a user agent and a referrer per channel (`#EXTVLCOPT`).
-    mpv.set("user-agent", headers.get("User-Agent").map_or("libmpv", String::as_str))?;
-    mpv.set("referrer", headers.get("Referer").map_or("", String::as_str))?;
+    mpv.headers(&headers)?;
     let options = options.as_deref().unwrap_or("");
     // mpv before 0.38 (the macOS build is 0.36) has no index argument: options come third there.
     mpv.command(&["loadfile", &url, "replace", "-1", options]).or_else(|_| mpv.command(&["loadfile", &url, "replace", options]))
@@ -220,8 +218,32 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(registry: State<'_, Registry>, source: Source, channel: Channel) -> Result<Url, String> {
-    registry.get(&source.provider).await?.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())
+async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, String> {
+    let provider = registry.get(&source.provider).await?;
+    let playback = provider.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())?;
+    playable(&relay, provider, source, &channel, playback).await
+}
+
+/// What mpv opens: one address, the playback's tracks joined into it. `link` is the stream's own address, to copy.
+#[derive(serde::Serialize)]
+struct PlayerInput {
+    url: String,
+    headers: HashMap<String, String>,
+    link: String,
+}
+
+/// The channel's headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
+async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, channel: &Channel, mut playback: Playback) -> Result<PlayerInput, String> {
+    for (name, value) in &channel.headers {
+        if !playback.headers.keys().any(|k| k.eq_ignore_ascii_case(name)) {
+            playback.headers.insert(name.clone(), value.clone());
+        }
+    }
+    let link = playback.url.to_string();
+    if playback.relay.is_some() {
+        playback = relay.relay(provider, source.config, playback).await.map_err(|e| e.to_string())?;
+    }
+    Ok(PlayerInput { url: playback.player_url(), headers: playback.headers, link })
 }
 
 /// A series' episodes, asked for when its page opens.
@@ -275,8 +297,10 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(registry: State<'_, Registry>, source: Source, channel: Channel, start: i64, end: i64) -> Result<Url, String> {
-    registry.get(&source.provider).await?.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())
+async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, String> {
+    let provider = registry.get(&source.provider).await?;
+    let playback = provider.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())?;
+    playable(&relay, provider, source, &channel, playback).await
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
@@ -357,6 +381,7 @@ pub fn run() {
             app.manage(tiles::Tiles::default());
             let http = Http::new();
             app.manage(load_plugins(app.path().app_data_dir()?.join("plugins"), &http));
+            app.manage(RelayServer::new(http.clone()));
             app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));

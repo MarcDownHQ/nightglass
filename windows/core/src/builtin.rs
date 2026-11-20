@@ -2,10 +2,8 @@
 
 use std::sync::Arc;
 
-use url::Url;
-
 use crate::provider::{BoxFuture, Config, ConfigExt, Field, FieldKind, Preset, Provider, ProviderInfo, Providers};
-use crate::{Catalog, Channel, Episode, Http, M3uSource, Result, Series, StalkerClient, XtreamClient};
+use crate::{Catalog, Channel, Episode, Http, M3uSource, Playback, Result, Series, StalkerClient, XtreamClient};
 
 impl Providers {
     pub fn builtin(http: &Http) -> Self {
@@ -95,8 +93,8 @@ impl Provider for Xtream {
         Box::pin(async move { self.client(config)?.catalog().await })
     }
 
-    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Url>> {
-        Box::pin(async move { self.client(config)?.catchup_url(channel, start, end).await })
+    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Playback>> {
+        Box::pin(async move { Ok(self.client(config)?.catchup_url(channel, start, end).await?.into()) })
     }
 
     fn episodes<'a>(&'a self, config: &'a Config, series: &'a Series) -> BoxFuture<'a, Result<Vec<Episode>>> {
@@ -137,8 +135,8 @@ impl Provider for Stalker {
         Box::pin(async move { self.client(config)?.catalog().await })
     }
 
-    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Url>> {
-        Box::pin(async move { self.client(config)?.stream_url(channel).await })
+    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Playback>> {
+        Box::pin(async move { Ok(self.client(config)?.stream_url(channel).await?.into()) })
     }
 }
 
@@ -157,7 +155,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("nightglass-builtin-{}.m3u", std::process::id()));
         std::fs::write(&path, "#EXTM3U\n#EXTINF:-1,One\nhttp://s.test/1\n").unwrap();
         let providers = Providers::builtin(&Http::new());
-        let config: Config = [("url".to_string(), Url::from_file_path(&path).unwrap().to_string())].into();
+        let config: Config = [("url".to_string(), url::Url::from_file_path(&path).unwrap().to_string())].into();
         let catalog = providers.get("m3u").unwrap().catalog(&config).await.unwrap();
         std::fs::remove_file(path).unwrap();
         assert_eq!(catalog.channels.len(), 1);

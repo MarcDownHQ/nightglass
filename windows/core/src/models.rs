@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::Config;
+use crate::{Browser, Config};
 
 /// A live channel, whatever protocol it came from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -56,6 +56,85 @@ pub struct Episode {
     pub plot: Option<String>,
 }
 
+/// What a player opens for a channel or a replay.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Playback {
+    pub url: Url,
+    /// Sent with every request of the stream, over the channel's own.
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    /// Fetched by the app rather than by the player, which then opens the stream on 127.0.0.1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<Relay>,
+    /// Played alongside `url`, with the same headers and relay, in order of preference.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tracks: Vec<Track>,
+}
+
+impl From<Url> for Playback {
+    fn from(url: Url) -> Self {
+        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new() }
+    }
+}
+
+impl Playback {
+    /// The one address mpv opens: `url` itself, or an EDL joining it and its tracks.
+    pub fn player_url(&self) -> String {
+        if self.tracks.is_empty() {
+            return self.url.to_string();
+        }
+        let mut edl = format!("edl://!no_clip;{}", edl_quote(self.url.as_str()));
+        for track in &self.tracks {
+            edl.push_str(";!new_stream;!no_clip");
+            let meta: Vec<String> = [("lang", &track.language), ("title", &track.title)]
+                .into_iter()
+                .filter_map(|(key, value)| value.as_deref().map(|v| format!("{key}={}", edl_quote(v))))
+                .collect();
+            if !meta.is_empty() {
+                edl.push_str(&format!(";!track_meta,{}", meta.join(",")));
+            }
+            edl.push(';');
+            edl.push_str(&edl_quote(track.url.as_str()));
+        }
+        edl
+    }
+}
+
+/// mpv's length-prefixed quoting, which lets a value hold any character.
+fn edl_quote(value: &str) -> String {
+    format!("%{}%{value}", value.len())
+}
+
+/// A stream kept apart from the main one: an audio in another language, the audio of a video-only stream, subtitles.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Track {
+    pub url: Url,
+    /// An ISO 639 code, which mpv's language preferences match.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Shown in the track menus.
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// How the app fetches a stream for the player: playlists are rewritten to come back through it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Relay {
+    /// For servers that only answer browsers.
+    #[serde(default)]
+    pub browser: Option<Browser>,
+    /// Every answer goes through `Provider::filter` before the player gets it.
+    #[serde(default)]
+    pub filter: bool,
+}
+
+/// A playlist, segment or key on its way to the player.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Media {
+    pub content_type: Option<String>,
+    pub body: Vec<u8>,
+}
+
 /// One guide entry. Times are Unix seconds.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Programme {
@@ -77,6 +156,9 @@ pub struct Catalog {
     /// The subscription, for sources that say (Xtream `user_info`).
     #[serde(default)]
     pub account: Option<Account>,
+    /// Guide entries the source sends with its catalog, matched to channels by `epg_id` like a guide's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programmes: Vec<Programme>,
 }
 
 /// An IPTV subscription as the server describes it.
@@ -163,5 +245,25 @@ mod tests {
         assert_eq!(source.config, Config::from([("url".to_string(), "http://x.test/a.m3u".to_string())]));
         let again: Source = serde_json::from_str(&serde_json::to_string(&source).unwrap()).unwrap();
         assert_eq!(again, source);
+    }
+
+    fn track(url: &str, language: Option<&str>, title: Option<&str>) -> Track {
+        Track { url: Url::parse(url).unwrap(), language: language.map(Into::into), title: title.map(Into::into) }
+    }
+
+    #[test]
+    fn a_playback_without_tracks_plays_its_url() {
+        let playback = Playback::from(Url::parse("http://s.test/a,b.m3u8").unwrap());
+        assert_eq!(playback.player_url(), "http://s.test/a,b.m3u8");
+    }
+
+    #[test]
+    fn tracks_are_joined_into_one_edl() {
+        let mut playback = Playback::from(Url::parse("http://s.test/video.mp4?a=1;b=2").unwrap());
+        playback.tracks = vec![track("http://s.test/fr.m4a", Some("fr"), Some("Français, doublé")), track("http://s.test/en.vtt", None, None)];
+        assert_eq!(
+            playback.player_url(),
+            "edl://!no_clip;%31%http://s.test/video.mp4?a=1;b=2;!new_stream;!no_clip;!track_meta,lang=%2%fr,title=%18%Français, doublé;%20%http://s.test/fr.m4a;!new_stream;!no_clip;%20%http://s.test/en.vtt"
+        );
     }
 }

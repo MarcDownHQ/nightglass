@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Provider, ProviderInfo, Providers, Result, Series};
+use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Media, Playback, Provider, ProviderInfo, Providers, Result, Series};
 use serde::Serialize;
 use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -29,6 +29,8 @@ use bindings::nightglass::provider::{http as wit_http, log as wit_log, types as 
 const MEMORY: usize = 256 << 20;
 const CALL_TIMEOUT: Duration = Duration::from_secs(300);
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// A segment the player is waiting for.
+const FILTER_TIMEOUT: Duration = Duration::from_secs(30);
 const EPOCH: Duration = Duration::from_millis(10);
 
 struct State {
@@ -50,7 +52,7 @@ impl wit::Host for State {}
 impl wit_http::Host for State {
     async fn send(&mut self, request: wit_http::Request) -> std::result::Result<wit_http::Response, wit::Error> {
         let url = Url::parse(&request.url).map_err(|_| wit::Error::Network(format!("invalid URL {}", request.url)))?;
-        let response = self.http.send(&request.method, url, &request.headers, request.body).await.map_err(convert::to_wit_error)?;
+        let response = self.http.send(nightglass_core::Request { method: request.method, url, headers: request.headers, body: request.body, browser: request.browser.map(convert::browser) }).await.map_err(convert::to_wit_error)?;
         Ok(wit_http::Response { status: response.status, headers: response.headers, body: response.body })
     }
 }
@@ -190,11 +192,20 @@ struct WasmProvider {
 
 impl WasmProvider {
     async fn call<R, T>(&self, run: impl AsyncFnOnce(&mut Store<State>, bindings::Provider) -> wasmtime::Result<std::result::Result<R, wit::Error>>, map: impl FnOnce(R) -> Result<T>) -> Result<T> {
+        self.call_within(CALL_TIMEOUT, run, map).await
+    }
+
+    async fn call_within<R, T>(
+        &self,
+        limit: Duration,
+        run: impl AsyncFnOnce(&mut Store<State>, bindings::Provider) -> wasmtime::Result<std::result::Result<R, wit::Error>>,
+        map: impl FnOnce(R) -> Result<T>,
+    ) -> Result<T> {
         let call = async {
             let (mut store, guest) = self.runner.instance(&self.info.id).await?;
             run(&mut store, guest).await
         };
-        map(finish(CALL_TIMEOUT, call, Ok).await?)
+        map(finish(limit, call, Ok).await?)
     }
 }
 
@@ -209,24 +220,31 @@ impl Provider for WasmProvider {
         })
     }
 
-    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Url>> {
+    fn stream_url<'a>(&'a self, config: &'a Config, channel: &'a Channel) -> BoxFuture<'a, Result<Playback>> {
         Box::pin(async move {
             if !self.info.resolves_streams {
-                return Ok(channel.stream.clone());
+                return Ok(channel.stream.clone().into());
             }
-            self.call(async |store, guest| guest.call_stream_url(store, &convert::config(config), &convert::to_wit_channel(channel)).await, |u| convert::stream(&u)).await
+            self.call(async |store, guest| guest.call_stream_url(store, &convert::config(config), &convert::to_wit_channel(channel)).await, convert::playback).await
         })
     }
 
-    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Url>> {
+    fn catchup_url<'a>(&'a self, config: &'a Config, channel: &'a Channel, start: i64, end: i64) -> BoxFuture<'a, Result<Playback>> {
         Box::pin(async move {
-            self.call(async |store, guest| guest.call_catchup_url(store, &convert::config(config), &convert::to_wit_channel(channel), start, end).await, |u| convert::stream(&u)).await
+            self.call(async |store, guest| guest.call_catchup_url(store, &convert::config(config), &convert::to_wit_channel(channel), start, end).await, convert::playback).await
         })
     }
 
     fn episodes<'a>(&'a self, config: &'a Config, series: &'a Series) -> BoxFuture<'a, Result<Vec<Episode>>> {
         Box::pin(async move {
             self.call(async |store, guest| guest.call_episodes(store, &convert::config(config), &convert::to_wit_series(series)).await, |e| Ok(e.into_iter().filter_map(convert::episode).collect())).await
+        })
+    }
+
+    fn filter<'a>(&'a self, config: &'a Config, url: &'a Url, media: Media) -> BoxFuture<'a, Result<Media>> {
+        Box::pin(async move {
+            let media = convert::to_wit_media(media);
+            self.call_within(FILTER_TIMEOUT, async |store, guest| guest.call_filter(store, &convert::config(config), url.as_str(), &media).await, |m| Ok(convert::media(m))).await
         })
     }
 }

@@ -61,8 +61,7 @@ pub fn tile_play(
         }
     };
     mpv::move_host(tile.host, rect);
-    tile.mpv.set("user-agent", headers.get("User-Agent").map_or("libmpv", String::as_str))?;
-    tile.mpv.set("referrer", headers.get("Referer").map_or("", String::as_str))?;
+    tile.mpv.headers(&headers)?;
     tile.mpv.set("mute", if muted { "yes" } else { "no" })?;
     tile.mpv.command(&["loadfile", &url, "replace"])
 }

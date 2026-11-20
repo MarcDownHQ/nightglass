@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Movie, Preset, ProviderInfo, Result, Series};
+use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -80,7 +80,42 @@ pub fn catalog(c: wit::Catalog) -> Catalog {
             active_connections: a.active_connections,
             trial: a.trial,
         }),
+        programmes: c.programmes.into_iter().filter_map(programme).collect(),
     }
+}
+
+fn programme(p: wit::Programme) -> Option<Programme> {
+    (!p.channel.is_empty() && p.end > p.start).then_some(Programme { channel: p.channel, start: p.start, end: p.end, title: p.title, desc: p.desc })
+}
+
+pub fn browser(b: wit::Browser) -> Browser {
+    match b {
+        wit::Browser::Chrome => Browser::Chrome,
+        wit::Browser::Edge => Browser::Edge,
+        wit::Browser::Firefox => Browser::Firefox,
+        wit::Browser::Safari => Browser::Safari,
+    }
+}
+
+pub fn playback(p: wit::Playback) -> Result<Playback> {
+    let relay = p.relay.map(|r| Relay { browser: r.browser.map(browser), filter: r.filter });
+    let url = |raw: &str| {
+        let url = stream(raw)?;
+        if relay.is_some() && !matches!(url.scheme(), "http" | "https") {
+            return Err(IptvError::BadResponse(format!("only http(s) streams can be relayed: {url}")));
+        }
+        Ok(url)
+    };
+    let tracks = p.tracks.iter().map(|t| Ok(Track { url: url(&t.url)?, language: t.language.clone(), title: t.title.clone() })).collect::<Result<_>>()?;
+    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks })
+}
+
+pub fn to_wit_media(m: Media) -> wit::Media {
+    wit::Media { content_type: m.content_type, body: m.body }
+}
+
+pub fn media(m: wit::Media) -> Media {
+    Media { content_type: m.content_type, body: m.body }
 }
 
 fn channel(c: wit::Channel) -> Option<Channel> {
@@ -179,5 +214,19 @@ mod tests {
         assert!(stream("file://attacker/share/x.ts").is_err());
         assert_eq!(optional_url(Some("file://attacker/share/epg.xml".into())), None);
         assert!(optional_url(Some("https://s.test/epg.xml".into())).is_some());
+    }
+
+    fn with_track(url: &str, relay: Option<wit::Relay>) -> wit::Playback {
+        let track = wit::Track { url: url.into(), language: Some("fr".into()), title: Some("Français".into()) };
+        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track] }
+    }
+
+    #[test]
+    fn tracks_are_checked_like_the_stream() {
+        let tracks = playback(with_track("https://s.test/fr.m4a", None)).unwrap().tracks;
+        assert_eq!((tracks[0].url.as_str(), tracks[0].language.as_deref(), tracks[0].title.as_deref()), ("https://s.test/fr.m4a", Some("fr"), Some("Français")));
+        assert!(playback(with_track("file:///home/me/fr.m4a", None)).is_err());
+        assert!(playback(with_track("rtmp://s.test/fr", None)).is_ok());
+        assert!(playback(with_track("rtmp://s.test/fr", Some(wit::Relay { browser: None, filter: false }))).is_err(), "only http(s) tracks can be relayed");
     }
 }

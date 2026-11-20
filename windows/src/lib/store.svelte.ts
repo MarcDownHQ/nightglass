@@ -10,6 +10,7 @@ import {
   type Episode,
   type LiveItem,
   type MovieItem,
+  type Playback,
   type Programme,
   type ProviderInfo,
   type SeriesItem,
@@ -170,7 +171,10 @@ class Store {
         invoke<Catalog | null>('catalog_cached', { id: source.id }),
         invoke<Record<string, Programme[]> | null>('guide_cached', { id: source.id }),
       ]);
-      if (catalog && !this.catalogs[source.id]) this.catalogs = { ...this.catalogs, [source.id]: catalog };
+      if (catalog && !this.catalogs[source.id]) {
+        this.catalogs = { ...this.catalogs, [source.id]: catalog };
+        this.mergeProgrammes(catalog);
+      }
       if (guide) this.mergeGuide(guide);
     } catch (e) {
       console.warn(`cache ${source.name}: ${e}`);
@@ -192,7 +196,15 @@ class Store {
 
   private setCatalog(source: Source, catalog: Catalog) {
     this.catalogs = { ...this.catalogs, [source.id]: catalog };
+    this.mergeProgrammes(catalog);
     if (catalog.epgUrl) void this.loadGuide(source, catalog.epgUrl, catalog.channels);
+  }
+
+  private mergeProgrammes(catalog: Catalog) {
+    if (!catalog.programmes?.length) return;
+    const guide: Record<string, Programme[]> = {};
+    for (const p of catalog.programmes) (guide[epgKey(p.channel)] ??= []).push(p);
+    this.mergeGuide(guide);
   }
 
   /** Downloads the source's guide again: after a channel was matched by hand. */
@@ -274,20 +286,21 @@ class Store {
     return this.providers.find((p) => p.id === source.provider);
   }
 
-  /** The link a player can open: asked at play time for providers whose links are short-lived (Stalker). */
-  async streamUrl(source: Source, channel: Channel): Promise<string> {
-    return this.provider(source)?.resolvesStreams ? invoke<string>('stream_url', { source, channel }) : channel.stream;
+  /** What a player opens: asked at play time for providers whose links are short-lived (Stalker). */
+  async playback(source: Source, channel: Channel): Promise<Playback> {
+    if (this.provider(source)?.resolvesStreams) return invoke<Playback>('stream_url', { source, channel });
+    return { url: channel.stream, headers: channel.headers };
   }
 
   async playable(item: LiveItem): Promise<Playable> {
     const { source, channel } = item;
-    const url = await this.streamUrl(source, channel);
+    const { url, headers } = await this.playback(source, channel);
     return {
       id: item.id,
       title: channel.name,
       subtitle: this.nowNext(channel).now?.title ?? channel.group ?? '',
       url,
-      headers: channel.headers,
+      headers,
       live: true,
       number: channel.number ?? undefined,
       item,
@@ -298,13 +311,13 @@ class Store {
   /** A past programme of a channel whose server keeps them, played like a film. */
   async playReplay(item: LiveItem, p: Programme) {
     try {
-      const url = await invoke<string>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
+      const { url, headers } = await invoke<Playback>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
       player.play({
         id: `replay:${item.id}:${p.start}`,
         title: p.title,
         subtitle: t('{channel} · replay', { channel: item.channel.name }),
         url,
-        headers: item.channel.headers,
+        headers,
         live: false,
       });
       void player.expand();

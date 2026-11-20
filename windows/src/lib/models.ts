@@ -13,6 +13,14 @@ export interface Channel {
   catchupDays?: number | null;
 }
 
+/** What a player opens: `stream_url` and `catchup_url` answer with it. */
+export interface Playback {
+  url: string;
+  headers: Record<string, string>;
+  /** The stream's own address when `url` is the app's relay or joins several tracks. */
+  link?: string;
+}
+
 export interface Movie {
   id: string;
   name: string;
@@ -56,6 +64,8 @@ export interface Catalog {
   series: Series[];
   epgUrl: string | null;
   account?: Account | null;
+  /** Guide entries sent with the catalog, matched to channels by `epgId`. */
+  programmes?: Programme[];
 }
 
 /** An IPTV subscription as the server describes it (Xtream). Times are Unix seconds. */
