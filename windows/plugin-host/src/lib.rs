@@ -2,9 +2,10 @@
 //! fresh instance with no files, sockets or environment: HTTP goes through `Http::send`.
 
 mod convert;
+mod storage;
 
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,7 +25,8 @@ mod bindings {
     });
 }
 
-use bindings::nightglass::provider::{http as wit_http, log as wit_log, types as wit};
+use bindings::nightglass::provider::{http as wit_http, log as wit_log, storage as wit_storage, types as wit};
+use storage::Storage;
 
 const MEMORY: usize = 256 << 20;
 const CALL_TIMEOUT: Duration = Duration::from_secs(300);
@@ -38,6 +40,7 @@ struct State {
     table: ResourceTable,
     limits: StoreLimits,
     http: Http,
+    storage: Arc<Storage>,
     plugin: String,
 }
 
@@ -54,6 +57,20 @@ impl wit_http::Host for State {
         let url = Url::parse(&request.url).map_err(|_| wit::Error::Network(format!("invalid URL {}", request.url)))?;
         let response = self.http.send(nightglass_core::Request { method: request.method, url, headers: request.headers, body: request.body, browser: request.browser.map(convert::browser) }).await.map_err(convert::to_wit_error)?;
         Ok(wit_http::Response { status: response.status, headers: response.headers, body: response.body })
+    }
+}
+
+impl wit_storage::Host for State {
+    async fn get(&mut self, key: String) -> Option<String> {
+        self.storage.get(&self.plugin, &key)
+    }
+
+    async fn set(&mut self, key: String, value: String, ttl: Option<u32>, persist: bool) -> std::result::Result<(), String> {
+        self.storage.set(&self.plugin, key, value, ttl, persist)
+    }
+
+    async fn delete(&mut self, key: String) {
+        self.storage.delete(&self.plugin, &key)
     }
 }
 
@@ -74,6 +91,7 @@ pub struct Host {
     engine: Engine,
     linker: Linker<State>,
     http: Http,
+    storage: Arc<Storage>,
 }
 
 /// What became of one file of the plugins folder.
@@ -101,7 +119,13 @@ impl Host {
                 std::thread::sleep(EPOCH);
             }
         })?;
-        Ok(Host { engine, linker, http: http.clone() })
+        Ok(Host { engine, linker, http: http.clone(), storage: Arc::new(Storage::new(None)) })
+    }
+
+    /// Keeps what plugins store with `persist` in `dir`, one file per plugin; otherwise it lasts until the host is dropped.
+    pub fn with_data_dir(mut self, dir: PathBuf) -> Self {
+        self.storage = Arc::new(Storage::new(Some(dir)));
+        self
     }
 
     /// Adds every `*.wasm` of `dir` to `providers`. A plugin that fails is reported, not fatal.
@@ -135,7 +159,7 @@ impl Host {
         let component = Component::from_file(&self.engine, path).map_err(|e| format!("{e:#}"))?;
         let pre = self.linker.instantiate_pre(&component).map_err(|e| format!("{e:#}"))?;
         let pre = bindings::ProviderPre::new(pre).map_err(|e| format!("{e:#}"))?;
-        let runner = Runner { pre, engine: self.engine.clone(), http: self.http.clone() };
+        let runner = Runner { pre, engine: self.engine.clone(), http: self.http.clone(), storage: self.storage.clone() };
         let file = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
         let call = async {
             let (mut store, guest) = runner.instance(&file).await?;
@@ -150,6 +174,7 @@ struct Runner {
     pre: bindings::ProviderPre<State>,
     engine: Engine,
     http: Http,
+    storage: Arc<Storage>,
 }
 
 impl Runner {
@@ -161,6 +186,7 @@ impl Runner {
             table: ResourceTable::new(),
             limits: StoreLimitsBuilder::new().memory_size(MEMORY).memories(8).tables(64).table_elements(1 << 20).instances(64).build(),
             http: self.http.clone(),
+            storage: self.storage.clone(),
             plugin: plugin.into(),
         };
         let mut store = Store::new(&self.engine, state);

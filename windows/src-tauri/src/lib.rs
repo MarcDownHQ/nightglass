@@ -335,7 +335,7 @@ fn automation() -> HashMap<String, String> {
     std::env::vars().filter(|(k, _)| k.starts_with("NG_")).collect()
 }
 
-fn load_plugins(dir: std::path::PathBuf, http: &Http) -> Registry {
+fn load_plugins(dir: std::path::PathBuf, data: std::path::PathBuf, http: &Http) -> Registry {
     let loaded = Arc::new(RwLock::new(Loaded { providers: Providers::builtin(http), plugins: Vec::new() }));
     let mut guard = loaded.clone().try_write_owned().expect("unshared lock");
     let (http, folder) = (http.clone(), dir.clone());
@@ -345,6 +345,7 @@ fn load_plugins(dir: std::path::PathBuf, http: &Http) -> Registry {
         }
         match nightglass_plugin_host::Host::new(&http) {
             Ok(host) => {
+                let host = host.with_data_dir(data);
                 let Loaded { providers, plugins } = &mut *guard;
                 *plugins = host.load_dir(&folder, providers).await;
             }
@@ -380,7 +381,8 @@ pub fn run() {
             app.manage(tiles::MpvDll(dll));
             app.manage(tiles::Tiles::default());
             let http = Http::new();
-            app.manage(load_plugins(app.path().app_data_dir()?.join("plugins"), &http));
+            let app_data = app.path().app_data_dir()?;
+            app.manage(load_plugins(app_data.join("plugins"), app_data.join("plugin-data"), &http));
             app.manage(RelayServer::new(http.clone()));
             app.manage(http);
             let handle = app.handle().clone();
