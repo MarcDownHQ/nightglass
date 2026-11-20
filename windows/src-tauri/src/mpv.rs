@@ -220,6 +220,19 @@ impl Mpv {
         self.check(unsafe { (self.api.command)(self.handle, ptrs.as_mut_ptr()) })
     }
 
+    /// The headers of the next file. mpv has its own options for the user agent and the referrer.
+    pub fn headers(&self, headers: &std::collections::HashMap<String, String>) -> Result<(), String> {
+        let own = |name: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str());
+        self.set("user-agent", own("User-Agent").unwrap_or("libmpv"))?;
+        self.set("referrer", own("Referer").unwrap_or(""))?;
+        self.command(&["change-list", "http-header-fields", "clr", ""])?;
+        for (name, value) in headers.iter().filter(|(k, _)| !k.eq_ignore_ascii_case("User-Agent") && !k.eq_ignore_ascii_case("Referer")) {
+            // `append` adds one item as is: a value may hold commas.
+            self.command(&["change-list", "http-header-fields", "append", &format!("{name}: {value}")])?;
+        }
+        Ok(())
+    }
+
     pub fn set(&self, name: &str, value: &str) -> Result<(), String> {
         self.check(unsafe { (self.api.set_property_string)(self.handle, c(name).as_ptr(), c(value).as_ptr()) })
     }

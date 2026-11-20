@@ -17,6 +17,8 @@ export interface Channel {
 export interface Playback {
   url: string;
   headers: Record<string, string>;
+  /** The stream's own address when `url` is the app's relay or joins several tracks. */
+  link?: string;
 }
 
 export interface Movie {
