@@ -49,10 +49,16 @@ struct Session {
     used: Mutex<Instant>,
 }
 
-/// The upstream addresses a session has handed out, by number.
+/// A live stream names new segments on every refresh: past this many addresses, those unused for `FORGOTTEN` go.
+const KEPT: usize = 8192;
+const FORGOTTEN: Duration = Duration::from_secs(600);
+
+/// The upstream addresses a session has handed out, by number, and when each was last named or fetched.
 #[derive(Default)]
 struct Urls {
-    list: Vec<Url>,
+    next: usize,
+    sweep_at: usize,
+    by_number: HashMap<usize, (Url, Instant)>,
     numbers: HashMap<Url, usize>,
 }
 
@@ -96,8 +102,18 @@ impl RelayServer {
         let port = listener.local_addr().map_err(|e| IptvError::Network(format!("relay: {e}")))?.port();
         let inner = Arc::downgrade(&self.0);
         tokio::spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
+            loop {
+                let accepted = listener.accept().await;
                 let Some(inner) = inner.upgrade() else { return };
+                let stream = match accepted {
+                    Ok((stream, _)) => stream,
+                    Err(e) => {
+                        log::warn!("relay: {e}");
+                        drop(inner);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                };
                 let server = RelayServer(inner);
                 tokio::spawn(async move {
                     let service = hyper::service::service_fn(move |request| {
@@ -117,7 +133,7 @@ impl RelayServer {
         let number = name.split('.').next().and_then(|n| n.parse::<usize>().ok());
         let session = lock(&self.0.sessions).get(token).cloned();
         let (Some(session), Some(number)) = (session, number) else { return status(StatusCode::NOT_FOUND) };
-        let Some(upstream) = lock(&session.urls).list.get(number).cloned() else { return status(StatusCode::NOT_FOUND) };
+        let Some(upstream) = lock(&session.urls).get(number) else { return status(StatusCode::NOT_FOUND) };
         *lock(&session.used) = Instant::now();
         let range = request.headers().get(RANGE).and_then(|v| v.to_str().ok()).map(str::to_string);
         match session.relay_one(&self.0.http, upstream, range, port, token).await {
@@ -138,11 +154,17 @@ impl Session {
         }
         let mut answer = http.open(Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) }).await?;
         let content_type = answer.header("content-type").map(str::to_string);
-        let ok = (200..300).contains(&answer.status);
-        if !ok || !(self.relay.filter || is_playlist(&answer.url, content_type.as_deref())) {
-            return Ok(passed_on(answer));
+        if !(200..300).contains(&answer.status) {
+            return Ok(passed_on(answer, None));
         }
-        let mut body = Vec::new();
+        let mut first = None;
+        if !self.relay.filter && !is_playlist(&answer.url, content_type.as_deref()) {
+            first = answer.chunk().await?;
+            if !first.as_deref().is_some_and(starts_playlist) {
+                return Ok(passed_on(answer, first));
+            }
+        }
+        let mut body = first.map(Vec::from).unwrap_or_default();
         while let Some(chunk) = answer.chunk().await? {
             if body.len() + chunk.len() > Http::SEND_LIMIT {
                 return Err(IptvError::Network(format!("{upstream}: larger than {} MB", Http::SEND_LIMIT >> 20)));
@@ -153,9 +175,9 @@ impl Session {
         if self.relay.filter {
             media = self.provider.filter(&self.config, &answer.url, media).await?;
         }
-        if is_playlist(&answer.url, media.content_type.as_deref()) || media.body.starts_with(b"#EXTM3U") {
+        if is_playlist(&answer.url, media.content_type.as_deref()) || starts_playlist(&media.body) {
             let text = String::from_utf8_lossy(&media.body);
-            media = Media { content_type: Some("application/vnd.apple.mpegurl".into()), body: self.rewrite(&text, &answer.url, port, token).into_bytes() };
+            media = Media { content_type: Some("application/vnd.apple.mpegurl".into()), body: self.rewrite(text.trim_start_matches('\u{feff}'), &answer.url, port, token).into_bytes() };
         }
         let mut response = Response::new(Full::new(Bytes::from(media.body)).map_err(|e| match e {}).boxed_unsync());
         if let Some(value) = media.content_type.and_then(|ct| HeaderValue::from_str(&ct).ok()) {
@@ -208,16 +230,7 @@ impl Session {
 
     /// The relay's address for `url`, numbered in this session. The extension stays: players guess formats from it.
     fn local(&self, port: u16, token: &str, url: &Url) -> Url {
-        let mut urls = lock(&self.urls);
-        let number = match urls.numbers.get(url) {
-            Some(&n) => n,
-            None => {
-                let n = urls.list.len();
-                urls.list.push(url.clone());
-                urls.numbers.insert(url.clone(), n);
-                n
-            }
-        };
+        let number = lock(&self.urls).number(url);
         let extension = url
             .path_segments()
             .and_then(|mut s| s.next_back())
@@ -230,20 +243,52 @@ impl Session {
     }
 }
 
+impl Urls {
+    fn number(&mut self, url: &Url) -> usize {
+        if let Some(&n) = self.numbers.get(url) {
+            self.get(n);
+            return n;
+        }
+        if self.by_number.len() >= self.sweep_at.max(KEPT) {
+            self.by_number.retain(|_, (_, used)| used.elapsed() < FORGOTTEN);
+            let kept = &self.by_number;
+            self.numbers.retain(|_, n| kept.contains_key(n));
+            self.sweep_at = self.by_number.len() * 2;
+        }
+        let n = self.next;
+        self.next += 1;
+        self.by_number.insert(n, (url.clone(), Instant::now()));
+        self.numbers.insert(url.clone(), n);
+        n
+    }
+
+    fn get(&mut self, number: usize) -> Option<Url> {
+        let (url, used) = self.by_number.get_mut(&number)?;
+        *used = Instant::now();
+        Some(url.clone())
+    }
+}
+
+/// A playlist served under a name or a type that does not say so.
+fn starts_playlist(body: &[u8]) -> bool {
+    body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(body).starts_with(b"#EXTM3U")
+}
+
 fn is_playlist(url: &Url, content_type: Option<&str>) -> bool {
     let path = url.path().to_ascii_lowercase();
     content_type.is_some_and(|ct| ct.to_ascii_lowercase().contains("mpegurl")) || path.ends_with(".m3u8") || path.ends_with(".m3u")
 }
 
 /// The upstream answer as it comes: status, the headers a player needs, and the body as it arrives.
-fn passed_on(answer: crate::Opened) -> Response<Body> {
+fn passed_on(answer: crate::Opened, first: Option<Bytes>) -> Response<Body> {
     let mut response = Response::builder().status(answer.status);
     for (name, value) in &answer.headers {
         if PASSED_ON.contains(&name.to_ascii_lowercase().as_str()) {
             response = response.header(name, value);
         }
     }
-    let chunks = futures_util::stream::unfold(Some(answer.into_body()), |body| async move {
+    let first = futures_util::stream::iter(first.map(|chunk| Ok(Frame::data(chunk))));
+    let rest = futures_util::stream::unfold(Some(answer.into_body()), |body| async move {
         let mut body = body?;
         match body.chunk().await {
             Ok(Some(chunk)) => Some((Ok(Frame::data(chunk)), Some(body))),
@@ -251,6 +296,7 @@ fn passed_on(answer: crate::Opened) -> Response<Body> {
             Err(e) => Some((Err(std::io::Error::other(e.to_string())), None)),
         }
     });
+    let chunks = futures_util::StreamExt::chain(first, rest);
     response.body(BodyExt::boxed_unsync(StreamBody::new(chunks))).unwrap_or_else(|_| status(StatusCode::BAD_GATEWAY))
 }
 
@@ -378,6 +424,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn playlists_are_found_by_their_first_line() {
+        let server = MockServer::start().await;
+        let media = "\u{feff}#EXTM3U\n#EXTINF:5,\nseg-1.ts\n";
+        Mock::given(path("/play.php")).respond_with(ResponseTemplate::new(200).set_body_raw(media, "application/octet-stream")).mount(&server).await;
+        Mock::given(path("/seg-1.ts")).respond_with(ResponseTemplate::new(200).set_body_raw("ts", "video/mp2t")).mount(&server).await;
+        let (_relay, local) = open(&server, "/play.php", Relay::default()).await;
+        let (status, ct, body) = get(local.as_str(), None).await;
+        assert_eq!((status, ct.as_deref()), (200, Some("application/vnd.apple.mpegurl")));
+        let segment = &addresses(&body)[0];
+        assert!(segment.ends_with("/1.ts"), "{body}");
+        assert_eq!(get(segment, None).await.2, "ts");
+    }
+
+    #[tokio::test]
     async fn tracks_are_relayed_each_on_its_own_address() {
         let server = MockServer::start().await;
         for (name, body) in [("/video.mp4", "video"), ("/fr.m4a", "audio")] {
@@ -421,5 +481,24 @@ mod tests {
         assert_eq!(local("http://x.test/a/"), "/t/1");
         assert_eq!(local("http://x.test/a/b.weird-ext"), "/t/2");
         assert_eq!(local("http://x.test/a/seg.ts?x=1"), "/t/0.ts", "the same address keeps its number");
+    }
+
+    #[test]
+    fn old_addresses_go_once_there_are_many() {
+        let mut urls = Urls::default();
+        let url = |i: usize| Url::parse(&format!("http://x.test/{i}.ts")).unwrap();
+        for i in 0..KEPT {
+            assert_eq!(urls.number(&url(i)), i);
+        }
+        let long_ago = Instant::now().checked_sub(FORGOTTEN * 2).unwrap();
+        for (_, used) in urls.by_number.values_mut() {
+            *used = long_ago;
+        }
+        assert_eq!(urls.get(7), Some(url(7)), "fetching an address keeps it");
+        assert_eq!(urls.number(&url(KEPT)), KEPT);
+        assert_eq!(urls.by_number.len(), 2);
+        assert_eq!(urls.get(0), None);
+        assert_eq!(urls.number(&url(7)), 7);
+        assert_eq!(urls.number(&url(0)), KEPT + 1, "a forgotten address gets a new number");
     }
 }
