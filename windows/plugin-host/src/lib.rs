@@ -42,6 +42,8 @@ struct State {
     http: Http,
     storage: Arc<Storage>,
     plugin: String,
+    /// The provider id once `describe` has given it: storage is keyed by it, and refused before.
+    keys: Option<String>,
 }
 
 impl WasiView for State {
@@ -62,16 +64,24 @@ impl wit_http::Host for State {
 
 impl wit_storage::Host for State {
     async fn get(&mut self, key: String) -> Option<String> {
-        self.storage.get(&self.plugin, &key)
+        let (storage, plugin) = (self.storage.clone(), self.keys.clone()?);
+        blocking(move || storage.get(&plugin, &key)).await.flatten()
     }
 
     async fn set(&mut self, key: String, value: String, ttl: Option<u32>, persist: bool) -> std::result::Result<(), String> {
-        self.storage.set(&self.plugin, key, value, ttl, persist)
+        let (storage, plugin) = (self.storage.clone(), self.keys.clone().ok_or("no storage during describe")?);
+        blocking(move || storage.set(&plugin, key, value, ttl, persist)).await.unwrap_or_else(|| Err("storage failed".into()))
     }
 
     async fn delete(&mut self, key: String) {
-        self.storage.delete(&self.plugin, &key)
+        let Some(plugin) = self.keys.clone() else { return };
+        let storage = self.storage.clone();
+        blocking(move || storage.delete(&plugin, &key)).await;
     }
+}
+
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    tokio::task::spawn_blocking(f).await.ok()
 }
 
 impl wit_log::Host for State {
@@ -162,7 +172,7 @@ impl Host {
         let runner = Runner { pre, engine: self.engine.clone(), http: self.http.clone(), storage: self.storage.clone() };
         let file = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
         let call = async {
-            let (mut store, guest) = runner.instance(&file).await?;
+            let (mut store, guest) = runner.instance(&file, None).await?;
             guest.call_describe(&mut store).await
         };
         let info = finish(DESCRIBE_TIMEOUT, call, |info| Ok(Ok(info))).await.map_err(|e| e.to_string())?;
@@ -178,7 +188,7 @@ struct Runner {
 }
 
 impl Runner {
-    async fn instance(&self, plugin: &str) -> wasmtime::Result<(Store<State>, bindings::Provider)> {
+    async fn instance(&self, plugin: &str, keys: Option<&str>) -> wasmtime::Result<(Store<State>, bindings::Provider)> {
         let mut wasi = WasiCtxBuilder::new();
         wasi.allow_tcp(false).allow_udp(false).allow_ip_name_lookup(false);
         let state = State {
@@ -188,6 +198,7 @@ impl Runner {
             http: self.http.clone(),
             storage: self.storage.clone(),
             plugin: plugin.into(),
+            keys: keys.map(str::to_string),
         };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
@@ -228,7 +239,7 @@ impl WasmProvider {
         map: impl FnOnce(R) -> Result<T>,
     ) -> Result<T> {
         let call = async {
-            let (mut store, guest) = self.runner.instance(&self.info.id).await?;
+            let (mut store, guest) = self.runner.instance(&self.info.id, Some(&self.info.id)).await?;
             run(&mut store, guest).await
         };
         map(finish(limit, call, Ok).await?)

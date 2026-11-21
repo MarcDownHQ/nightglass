@@ -1,7 +1,8 @@
-//! What plugins keep between calls. Each plugin has its own keys; the persistent ones live in
-//! `<dir>/<plugin id>.json`, written whenever one of them changes.
+//! What plugins keep between calls. Each plugin has its own keys; the persistent ones live in `<dir>/<plugin id>.json`,
+//! written whenever one of them changes. The calls block on the disk: the host runs them off the async workers.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,10 +38,7 @@ struct Space {
 
 impl Space {
     fn size(&self) -> usize {
-        self.entries
-            .iter()
-            .map(|(k, e)| k.len() + e.value.len())
-            .sum()
+        self.entries.iter().map(|(k, e)| k.len() + e.value.len()).sum()
     }
 }
 
@@ -51,9 +49,7 @@ pub struct Storage {
 }
 
 fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
 }
 
 impl Storage {
@@ -63,82 +59,69 @@ impl Storage {
     }
 
     fn with_clock(dir: Option<PathBuf>, clock: fn() -> i64) -> Self {
-        Storage {
-            dir,
-            spaces: Mutex::default(),
-            clock,
-        }
+        Storage { dir, spaces: Mutex::default(), clock }
     }
 
     fn space(&self, plugin: &str) -> Arc<Mutex<Space>> {
-        self.spaces
-            .lock()
-            .unwrap()
-            .entry(plugin.into())
-            .or_default()
-            .clone()
+        self.spaces.lock().unwrap().entry(plugin.into()).or_default().clone()
     }
 
     fn file(&self, plugin: &str) -> Option<PathBuf> {
         Some(self.dir.as_ref()?.join(format!("{plugin}.json")))
     }
 
-    fn load(&self, plugin: &str, space: &mut Space) {
-        if std::mem::replace(&mut space.loaded, true) {
-            return;
+    /// A file that can't be read leaves the space unloaded, so that nothing overwrites it; one that doesn't parse is
+    /// moved aside.
+    fn load(&self, plugin: &str, space: &mut Space) -> Result<(), String> {
+        if space.loaded {
+            return Ok(());
         }
         let Some(file) = self.file(plugin) else {
-            return;
+            space.loaded = true;
+            return Ok(());
         };
-        let entries: HashMap<String, Entry> = match std::fs::read(&file) {
-            Ok(bytes) => match serde_json::from_slice(&bytes) {
-                Ok(entries) => entries,
-                Err(e) => {
-                    let aside = file.with_extension("json.bad");
-                    log::warn!("{}: {e}, moved to {}", file.display(), aside.display());
-                    if let Err(e) = std::fs::rename(&file, &aside) {
-                        log::warn!("{}: {e}", aside.display());
-                    }
-                    return;
-                }
-            },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+        let bytes = match std::fs::read(&file) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                space.loaded = true;
+                return Ok(());
+            }
             Err(e) => {
                 log::warn!("{}: {e}", file.display());
-                return;
+                return Err(format!("storage unreadable: {e}"));
+            }
+        };
+        space.loaded = true;
+        let entries: HashMap<String, Entry> = match serde_json::from_slice(&bytes) {
+            Ok(entries) => entries,
+            Err(e) => {
+                let aside = file.with_extension(format!("{}.json.bad", (self.clock)()));
+                log::warn!("{}: {e}, moved to {}", file.display(), aside.display());
+                if let Err(e) = std::fs::rename(&file, &aside) {
+                    log::warn!("{}: {e}", aside.display());
+                }
+                return Ok(());
             }
         };
         let now = (self.clock)();
-        space.entries.extend(
-            entries
-                .into_iter()
-                .filter(|(_, e)| e.live(now))
-                .map(|(k, e)| (k, Entry { persist: true, ..e })),
-        );
+        space.entries.extend(entries.into_iter().filter(|(_, e)| e.live(now)).map(|(k, e)| (k, Entry { persist: true, ..e })));
+        Ok(())
     }
 
-    fn save(&self, plugin: &str, space: &Space) {
-        let Some(file) = self.file(plugin) else {
-            return;
-        };
+    fn save(&self, plugin: &str, space: &Space) -> Result<(), String> {
+        let Some(file) = self.file(plugin) else { return Ok(()) };
         let now = (self.clock)();
-        let kept: HashMap<&String, &Entry> = space
-            .entries
-            .iter()
-            .filter(|(_, e)| e.persist && e.live(now))
-            .collect();
-        if let Err(e) = write(
-            &file,
-            &serde_json::to_vec(&kept).expect("strings serialize"),
-        ) {
+        let kept: HashMap<&String, &Entry> = space.entries.iter().filter(|(_, e)| e.persist && e.live(now)).collect();
+        write(&file, &serde_json::to_vec(&kept).expect("strings serialize")).map_err(|e| {
             log::warn!("{}: {e}", file.display());
-        }
+            format!("storage not written: {e}")
+        })
     }
 
     pub fn get(&self, plugin: &str, key: &str) -> Option<String> {
         let space = self.space(plugin);
         let mut space = space.lock().unwrap();
-        self.load(plugin, &mut space);
+        self.load(plugin, &mut space).ok()?;
         let entry = space.entries.get(key)?;
         if entry.live((self.clock)()) {
             return Some(entry.value.clone());
@@ -147,15 +130,8 @@ impl Storage {
         None
     }
 
-    /// `ttl` in seconds.
-    pub fn set(
-        &self,
-        plugin: &str,
-        key: String,
-        value: String,
-        ttl: Option<u32>,
-        persist: bool,
-    ) -> Result<(), String> {
+    /// `ttl` in seconds. A persistent value that can't be written is not kept.
+    pub fn set(&self, plugin: &str, key: String, value: String, ttl: Option<u32>, persist: bool) -> Result<(), String> {
         if key.len() > MAX_KEY {
             return Err(format!("key longer than {MAX_KEY} bytes"));
         }
@@ -164,27 +140,23 @@ impl Storage {
         }
         let space = self.space(plugin);
         let mut space = space.lock().unwrap();
-        self.load(plugin, &mut space);
+        self.load(plugin, &mut space)?;
         let now = (self.clock)();
         space.entries.retain(|_, e| e.live(now));
-        let replaced = space
-            .entries
-            .get(&key)
-            .map_or(0, |e| key.len() + e.value.len());
+        let replaced = space.entries.get(&key).map_or(0, |e| key.len() + e.value.len());
         if space.size() - replaced + key.len() + value.len() > MAX_TOTAL {
             return Err(format!("over {MAX_TOTAL} bytes stored"));
         }
-        let was_persistent = space.entries.get(&key).is_some_and(|e| e.persist);
-        space.entries.insert(
-            key,
-            Entry {
-                value,
-                expires: ttl.map(|t| now + i64::from(t)),
-                persist,
-            },
-        );
-        if persist || was_persistent {
-            self.save(plugin, &space);
+        let entry = Entry { value, expires: ttl.map(|t| now + i64::from(t)), persist };
+        let previous = space.entries.insert(key.clone(), entry);
+        if (persist || previous.as_ref().is_some_and(|e| e.persist))
+            && let Err(e) = self.save(plugin, &space)
+        {
+            match previous {
+                Some(previous) => space.entries.insert(key, previous),
+                None => space.entries.remove(&key),
+            };
+            return Err(e);
         }
         Ok(())
     }
@@ -192,9 +164,11 @@ impl Storage {
     pub fn delete(&self, plugin: &str, key: &str) {
         let space = self.space(plugin);
         let mut space = space.lock().unwrap();
-        self.load(plugin, &mut space);
+        if self.load(plugin, &mut space).is_err() {
+            return;
+        }
         if space.entries.remove(key).is_some_and(|e| e.persist) {
-            self.save(plugin, &space);
+            let _ = self.save(plugin, &space);
         }
     }
 }
@@ -204,7 +178,9 @@ fn write(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, bytes)?;
+    let mut out = std::fs::File::create(&tmp)?;
+    out.write_all(bytes)?;
+    out.sync_all()?;
     std::fs::rename(&tmp, file)
 }
 
@@ -304,14 +280,36 @@ mod tests {
         storage
             .set("a", "k".into(), "1".into(), None, true)
             .unwrap();
-        assert_eq!(
-            std::fs::read_to_string(dir.join("a.json.bad")).unwrap(),
-            "not json"
-        );
+        let aside: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.ends_with(".json.bad")).collect();
+        assert_eq!(aside.len(), 1, "{aside:?}");
+        assert_eq!(std::fs::read_to_string(dir.join(&aside[0])).unwrap(), "not json");
         assert_eq!(
             Storage::new(Some(dir.clone())).get("a", "k").as_deref(),
             Some("1")
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_read_is_left_alone() {
+        let dir = dir();
+        std::fs::create_dir(dir.join("a.json")).unwrap();
+        let storage = Storage::new(Some(dir.clone()));
+        assert_eq!(storage.get("a", "k"), None);
+        assert!(storage.set("a", "k".into(), "1".into(), None, false).is_err());
+        storage.delete("a", "k");
+        assert!(dir.join("a.json").is_dir());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_persistent_value_that_cannot_be_written_is_not_kept() {
+        let dir = dir();
+        let storage = Storage::new(Some(dir.clone()));
+        std::fs::create_dir(dir.join("a.json.tmp")).unwrap();
+        storage.set("a", "k".into(), "1".into(), None, false).unwrap();
+        assert!(storage.set("a", "k".into(), "2".into(), None, true).is_err());
+        assert_eq!(storage.get("a", "k").as_deref(), Some("1"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
