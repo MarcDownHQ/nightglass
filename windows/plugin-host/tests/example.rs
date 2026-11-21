@@ -140,7 +140,8 @@ async fn keeps_the_list_across_launches() {
         .expect(1)
         .mount(&server)
         .await;
-    let data = std::env::temp_dir().join(format!("nightglass-plugin-data-{}", std::process::id()));
+    let data = std::env::temp_dir().join(format!("nightglass-plugin-data-{}-{}", std::process::id(), server.address().port()));
+    let _ = std::fs::remove_dir_all(&data);
     let url = format!("{}/list.json", server.uri());
     for _ in 0..2 {
         let host = Host::new(&Http::new()).unwrap().with_data_dir(data.clone());

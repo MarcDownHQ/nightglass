@@ -49,6 +49,10 @@ struct Show {
     desc: Option<String>,
 }
 
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3))
+}
+
 fn setting<'a>(config: &'a Config, key: &str) -> Option<&'a str> {
     config.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }
@@ -85,7 +89,7 @@ impl Guest for JsonList {
         if let Some(token) = setting(&config, "token") {
             headers.push(("authorization".into(), format!("Bearer {token}")));
         }
-        let key = format!("list:{url}");
+        let key = format!("list:{:016x}", fnv1a(url.as_bytes()));
         let kept: Option<Kept> = storage::get(&key).and_then(|v| serde_json::from_str(&v).ok());
         if let Some(kept) = &kept {
             headers.push(("if-none-match".into(), kept.etag.clone()));
