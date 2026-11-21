@@ -154,7 +154,7 @@ impl Session {
         }
         let request = Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) };
         let mut answer = http.open(request.clone()).await?;
-        if answer.status == 403 || answer.status >= 500 {
+        if matches!(answer.status, 403 | 502 | 503) {
             answer = http.open(request).await?;
         }
         let content_type = answer.header("content-type").map(str::to_string);
@@ -404,12 +404,19 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(path("/live/index.m3u8")).respond_with(ResponseTemplate::new(403)).up_to_n_times(1).with_priority(1).mount(&server).await;
         Mock::given(path("/live/index.m3u8")).respond_with(ResponseTemplate::new(200).set_body_raw("#EXTM3U\n#EXTINF:5,\na.ts\n", "application/vnd.apple.mpegurl")).mount(&server).await;
+        Mock::given(path("/live/busy.m3u8")).respond_with(ResponseTemplate::new(503)).up_to_n_times(1).with_priority(1).mount(&server).await;
+        Mock::given(path("/live/busy.m3u8")).respond_with(ResponseTemplate::new(200).set_body_raw("#EXTM3U\n#EXTINF:5,\na.ts\n", "application/vnd.apple.mpegurl")).mount(&server).await;
         Mock::given(path("/live/gone.m3u8")).respond_with(ResponseTemplate::new(404)).expect(1).mount(&server).await;
+        Mock::given(path("/live/broken.m3u8")).respond_with(ResponseTemplate::new(500)).expect(1).mount(&server).await;
 
         let (_relay, local) = open(&server, "/live/index.m3u8", Relay { browser: None, filter: false }).await;
         assert_eq!(get(local.as_str(), None).await.0, 200);
+        let (_relay, local) = open(&server, "/live/busy.m3u8", Relay { browser: None, filter: false }).await;
+        assert_eq!(get(local.as_str(), None).await.0, 200);
         let (_relay, local) = open(&server, "/live/gone.m3u8", Relay { browser: None, filter: false }).await;
-        assert_eq!(get(local.as_str(), None).await.0, 404, "only a refusal or a server error is asked again");
+        assert_eq!(get(local.as_str(), None).await.0, 404, "only a refusal or a busy server is asked again");
+        let (_relay, local) = open(&server, "/live/broken.m3u8", Relay { browser: None, filter: false }).await;
+        assert_eq!(get(local.as_str(), None).await.0, 500);
     }
 
     #[tokio::test]
