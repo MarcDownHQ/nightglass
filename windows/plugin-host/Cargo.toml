@@ -10,7 +10,8 @@ license = "MIT"
 nightglass-core = { version = "0.1.0", path = "../core" }
 log = "0.4"
 serde = { version = "1.0.229", features = ["derive"] }
-tokio = { version = "1.54.1", features = ["time"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt", "time"] }
 url = "2.5.8"
 wasmtime = { version = "50.0.2", default-features = false, features = ["std", "runtime", "cranelift", "component-model", "async", "parallel-compilation"] }
 wasmtime-wasi = { version = "50.0.2", default-features = false, features = ["p2"] }

@@ -187,6 +187,17 @@ interface http {
     send: func(request: request) -> result<response, error>;
 }
 
+/// What a plugin keeps between calls, each of which runs in a fresh instance: a login token, cookies, the state of a
+/// playback its `filter` follows. Each plugin sees only its own keys, shared by all its sources.
+interface storage {
+    /// None once the value has expired.
+    get: func(key: string) -> option<string>;
+    /// `ttl`: seconds before the value expires. `persist`: kept on disk across launches, otherwise forgotten when the
+    /// app quits. Keys are at most 256 bytes, values 1 MiB, and a plugin's keys and values 16 MiB together.
+    set: func(key: string, value: string, ttl: option<u32>, persist: bool) -> result<_, string>;
+    delete: func(key: string);
+}
+
 interface log {
     enum level {
         debug,
@@ -200,6 +211,7 @@ interface log {
 
 world provider {
     import http;
+    import storage;
     import log;
 
     use types.{config, provider-info, catalog, channel, series, episode, playback, media, error};

@@ -125,3 +125,29 @@ async fn a_folder_of_plugins() {
     assert!(status[2].error.is_some());
     assert!(providers.get("json-list").is_ok());
 }
+
+#[tokio::test]
+async fn keeps_the_list_across_launches() {
+    let server = MockServer::start().await;
+    Mock::given(path("/list.json"))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(path("/list.json"))
+        .respond_with(ResponseTemplate::new(200).insert_header("etag", "\"v1\"").set_body_string(r#"{"channels": [{"name": "One", "url": "http://s.test/1.ts"}]}"#))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let data = std::env::temp_dir().join(format!("nightglass-plugin-data-{}-{}", std::process::id(), server.address().port()));
+    let _ = std::fs::remove_dir_all(&data);
+    let url = format!("{}/list.json", server.uri());
+    for _ in 0..2 {
+        let host = Host::new(&Http::new()).unwrap().with_data_dir(data.clone());
+        let plugin = host.load(example()).await.unwrap();
+        let catalog = plugin.catalog(&config(&[("url", &url)])).await.unwrap();
+        assert_eq!(catalog.channels[0].name, "One");
+    }
+    std::fs::remove_dir_all(data).unwrap();
+}

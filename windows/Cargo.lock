@@ -3111,6 +3111,7 @@ dependencies = [
  "log",
  "nightglass-core",
  "serde",
+ "serde_json",
  "tokio",
  "url",
  "wasmtime",
