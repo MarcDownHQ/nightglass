@@ -242,6 +242,43 @@ mod tests {
         wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track] }
     }
 
+    fn wit_movie(stream: &str) -> wit::Movie {
+        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None }
+    }
+
+    #[test]
+    fn opaque_streams_only_for_providers_that_resolve_them() {
+        assert_eq!(movie(wit_movie("fr-tv:4711"), true).unwrap().stream, "fr-tv:4711", "kept as given, for movie-url");
+        assert!(movie(wit_movie("fr-tv:4711"), false).is_none());
+        assert!(movie(wit_movie("file:///etc/passwd"), false).is_none());
+        assert_eq!(movie(wit_movie("http://s.test/m.mkv"), false).unwrap().stream, "http://s.test/m.mkv");
+        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000) };
+        let e = episode(dated, true).unwrap();
+        assert_eq!((e.season, e.number, e.aired, e.stream.as_str()), (None, None, Some(1_795_300_000), "jt-21-11"));
+        assert_eq!(to_wit_episode(&e).stream, "jt-21-11");
+        assert_eq!(to_wit_movie(&movie(wit_movie("fr-tv:4711"), true).unwrap()).stream, "fr-tv:4711");
+    }
+
+    #[test]
+    fn replay_windows_in_seconds() {
+        let wit_channel = wit::Channel {
+            id: "c".into(),
+            name: "C".into(),
+            number: None,
+            group: None,
+            logo: None,
+            epg_id: None,
+            stream: "http://s.test/c.m3u8".into(),
+            headers: Vec::new(),
+            catchup_window: Some(4 * 3600),
+        };
+        let mut c = channel(wit_channel).unwrap();
+        assert_eq!(c.catchup_window, Some(4 * 3600));
+        assert_eq!(to_wit_channel(&c).catchup_window, Some(4 * 3600));
+        c.catchup_window = Some(i64::MAX);
+        assert_eq!(to_wit_channel(&c).catchup_window, Some(u32::MAX));
+    }
+
     #[test]
     fn tracks_are_checked_like_the_stream() {
         let tracks = playback(with_track("https://s.test/fr.m4a", None)).unwrap().tracks;

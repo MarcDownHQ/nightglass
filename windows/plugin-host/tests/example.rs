@@ -86,6 +86,36 @@ async fn browsers_for_the_list_and_the_streams() {
 }
 
 #[tokio::test]
+async fn movies_and_episodes_resolve_at_play_time() {
+    let server = MockServer::start().await;
+    let body = r#"{"channels": [],
+        "movies": [{"name": "Film", "url": "https://s.test/video.mp4", "audio": "https://s.test/audio.m4a"}],
+        "series": [{"name": "JT", "episodes": [
+            {"title": "JT 20h", "url": "https://s.test/jt.m3u8", "aired": 1795300000},
+            {"title": "Pilot", "url": "https://s.test/pilot.m3u8", "season": 1, "number": 1}
+        ]}]}"#;
+    Mock::given(path("/list.json")).respond_with(ResponseTemplate::new(200).set_body_string(body)).mount(&server).await;
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let url = format!("{}/list.json", server.uri());
+    let chrome = config(&[("url", &url), ("browser", "chrome")]);
+    let catalog = plugin.catalog(&chrome).await.unwrap();
+    let movie = &catalog.movies[0];
+    assert!(url::Url::parse(&movie.stream).is_err(), "the plugin's own text: {}", movie.stream);
+    let playback = plugin.movie_url(&chrome, movie).await.unwrap();
+    assert_eq!(playback.url.as_str(), "https://s.test/video.mp4");
+    assert_eq!(playback.tracks.iter().map(|t| t.url.as_str()).collect::<Vec<_>>(), ["https://s.test/audio.m4a"]);
+    assert_eq!(playback.relay, Some(Relay { browser: Some(Browser::Chrome), filter: false }));
+
+    let series = &catalog.series[0];
+    let episodes = plugin.episodes(&chrome, series).await.unwrap();
+    let dated: Vec<_> = episodes.iter().map(|e| (e.title.as_str(), e.season, e.number, e.aired)).collect();
+    assert_eq!(dated, [("JT 20h", None, None, Some(1_795_300_000)), ("Pilot", Some(1), Some(1), None)]);
+    let playback = plugin.episode_url(&chrome, series, &episodes[0]).await.unwrap();
+    assert_eq!(playback.url.as_str(), "https://s.test/jt.m3u8");
+}
+
+#[tokio::test]
 async fn filters_round_trip() {
     let host = Host::new(&Http::new()).unwrap();
     let plugin = host.load(example()).await.unwrap();

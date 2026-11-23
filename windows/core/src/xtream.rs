@@ -230,7 +230,7 @@ mod tests {
             (Some("get_live_categories"), r#"[{"category_id":"1","category_name":"News"}]"#.into()),
             (
                 Some("get_live_streams"),
-                r#"[{"num":1,"name":"Wire 24","stream_id":42,"stream_icon":"http://logo.test/w.png","epg_channel_id":"wire.fr","category_id":"1"},{"name":"broken"}]"#.into(),
+                r#"[{"num":1,"name":"Wire 24","stream_id":42,"stream_icon":"http://logo.test/w.png","epg_channel_id":"wire.fr","category_id":"1","tv_archive":1,"tv_archive_duration":"3"},{"name":"broken"}]"#.into(),
             ),
             (Some("get_vod_categories"), "[]".into()),
             (
@@ -267,6 +267,7 @@ mod tests {
         let ch = &cat.channels[0];
         assert_eq!((ch.name.as_str(), ch.group.as_deref(), ch.epg_id.as_deref(), ch.number), ("Wire 24", Some("News"), Some("wire.fr"), Some(1)));
         assert_eq!(ch.stream.as_str(), format!("{}/live/u/p/42.ts", s.uri()));
+        assert_eq!(ch.catchup_window, Some(3 * 86_400), "Xtream counts replay in days");
         let movie = &cat.movies[0];
         assert_eq!(movie.stream, format!("{}/movie/u/p/7.mkv", s.uri()));
         assert_eq!(movie.rating, Some(7.5));
@@ -291,6 +292,7 @@ mod tests {
         assert_eq!(eps.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(), ["S1E1", "S2E1"]);
         assert_eq!(eps[0].stream.as_str(), format!("{}/series/u/p/901.mkv", s.uri()));
         assert_eq!(eps[0].plot.as_deref(), Some("Pilot"));
+        assert_eq!((eps[1].season, eps[1].number, eps[1].aired), (Some(2), Some(1), None));
     }
 
     #[test]

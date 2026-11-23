@@ -190,6 +190,11 @@ mod tests {
         let config = Config::new();
         assert_eq!(p.stream_url(&config, &channel).await.unwrap(), channel.stream.clone().into());
         assert!(p.catchup_url(&config, &channel, 0, 1).await.is_err());
+        let movie = Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: "http://x.test/m.mkv".into(), rating: None, plot: None };
+        assert_eq!(p.movie_url(&config, &movie).await.unwrap().url.as_str(), "http://x.test/m.mkv");
+        let series = Series { id: "s".into(), name: "S".into(), group: None, poster: None, rating: None, plot: None };
+        let episode = Episode { id: "e".into(), title: "E".into(), season: None, number: None, stream: "not an address".into(), plot: None, aired: None };
+        assert!(matches!(p.episode_url(&config, &series, &episode).await, Err(IptvError::BadResponse(_))), "a stored stream must be an address");
     }
 
     #[test]
