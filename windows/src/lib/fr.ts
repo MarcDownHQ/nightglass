@@ -118,6 +118,7 @@ export const FR: Record<string, string> = {
   'Click to replay': 'Cliquer pour revoir',
   'Click for a reminder': 'Cliquer pour un rappel',
   'Replay unavailable: {error}': 'Replay indisponible : {error}',
+  'Playback unavailable: {error}': 'Lecture impossible : {error}',
   replay: 'replay',
   now: 'en cours',
   '{channel} · replay': '{channel} · replay',

@@ -228,7 +228,7 @@
         break;
       }
       case 'Movie':
-        store.playMovie(hit.item);
+        void store.playMovie(hit.item);
         break;
       case 'Series':
         void player.collapse();

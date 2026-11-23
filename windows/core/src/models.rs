@@ -78,6 +78,11 @@ impl From<Url> for Playback {
 }
 
 impl Playback {
+    /// A movie's or an episode's stream as kept in the catalog.
+    pub fn stored(stream: &str) -> Result<Self> {
+        Url::parse(stream).map(Self::from).map_err(|_| IptvError::BadResponse(format!("not a stream address: {stream}")))
+    }
+
     /// The one address mpv opens: `url` itself, or an EDL joining it and its tracks.
     pub fn player_url(&self) -> String {
         if self.tracks.is_empty() {

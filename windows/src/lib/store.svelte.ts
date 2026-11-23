@@ -286,7 +286,7 @@ class Store {
     return this.providers.find((p) => p.id === source.provider);
   }
 
-  /** What a player opens: asked at play time for providers whose links are short-lived (Stalker). */
+  /** What a player opens: asked at play time for providers whose links are short-lived (Stalker, plugins). */
   async playback(source: Source, channel: Channel): Promise<Playback> {
     if (this.provider(source)?.resolvesStreams) return invoke<Playback>('stream_url', { source, channel });
     return { url: channel.stream, headers: channel.headers };
@@ -332,14 +332,28 @@ class Store {
     return !!days && p.start <= this.now && p.start > this.now - days * 86_400;
   }
 
+  /** A movie's or an episode's playback: asked at play time for providers whose links are short-lived; null once said why not. */
+  private async vod(source: Source, ask: () => Promise<Playback>, stream: string): Promise<Playback | null> {
+    if (!this.provider(source)?.resolvesStreams) return { url: stream, headers: {} };
+    try {
+      return await ask();
+    } catch (e) {
+      player.notify(t('Playback unavailable: {error}', { error: String(e) }));
+      return null;
+    }
+  }
+
   /** From where it was left, unless `fromStart`. */
-  playMovie({ id, movie }: MovieItem, fromStart = false) {
+  async playMovie({ id, source, movie }: MovieItem, fromStart = false) {
+    const playback = await this.vod(source, () => invoke<Playback>('movie_url', { source, movie }), movie.stream);
+    if (!playback) return;
     const resume = { kind: 'movie' as const, id };
     player.play({
       id,
       title: movie.name,
       subtitle: movie.group ?? '',
-      url: movie.stream,
+      url: playback.url,
+      headers: playback.headers,
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),
@@ -361,11 +375,15 @@ class Store {
     const resume = { kind: 'episode' as const, series: item.id, episode: e };
     const i = episodes?.findIndex((x) => x.id === e.id) ?? -1;
     const next = i >= 0 ? episodes?.[i + 1] : undefined;
+    const { source, series } = item;
+    const playback = await this.vod(source, () => invoke<Playback>('episode_url', { source, series, episode: e }), e.stream);
+    if (!playback) return;
     player.play({
       id,
       title: e.title,
       subtitle: `${item.series.name} · S${e.season}E${e.number}`,
-      url: e.stream,
+      url: playback.url,
+      headers: playback.headers,
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),

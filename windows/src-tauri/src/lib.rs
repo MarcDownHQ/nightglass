@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Episode, Http, Movie, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -246,6 +246,20 @@ async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Sour
     Ok(PlayerInput { url: playback.player_url(), headers: playback.headers, link })
 }
 
+#[tauri::command]
+async fn movie_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, movie: Movie) -> Result<PlayerInput, String> {
+    let provider = registry.get(&source.provider).await?;
+    let playback = provider.movie_url(&source.config, &movie).await.map_err(|e| e.to_string())?;
+    playable(&relay, provider, source, &HashMap::new(), playback).await
+}
+
+#[tauri::command]
+async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, series: Series, episode: Episode) -> Result<PlayerInput, String> {
+    let provider = registry.get(&source.provider).await?;
+    let playback = provider.episode_url(&source.config, &series, &episode).await.map_err(|e| e.to_string())?;
+    playable(&relay, provider, source, &HashMap::new(), playback).await
+}
+
 /// A series' episodes, asked for when its page opens.
 #[tauri::command]
 async fn episodes(registry: State<'_, Registry>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
@@ -423,6 +437,8 @@ pub fn run() {
             guide_cached,
             cache_drop,
             stream_url,
+            movie_url,
+            episode_url,
             episodes,
             guide,
             guide_channels,

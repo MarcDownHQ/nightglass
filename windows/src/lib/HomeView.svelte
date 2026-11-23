@@ -24,7 +24,7 @@
       const r = p.resume;
       if (r.kind === 'movie') {
         const m = movies.get(id);
-        return m ? [{ id, title: m.movie.name, subtitle: t('{time} left', { time: clock(p.duration - p.position) }), poster: m.movie.poster, progress: p.position / p.duration, play: () => store.playMovie(m) }] : [];
+        return m ? [{ id, title: m.movie.name, subtitle: t('{time} left', { time: clock(p.duration - p.position) }), poster: m.movie.poster, progress: p.position / p.duration, play: () => void store.playMovie(m) }] : [];
       }
       const s = shows.get(r.series);
       return s
