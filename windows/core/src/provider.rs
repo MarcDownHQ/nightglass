@@ -184,7 +184,7 @@ mod tests {
             epg_id: None,
             stream: Url::parse("http://x.test/1.ts").unwrap(),
             headers: Default::default(),
-            catchup_days: None,
+            catchup_window: None,
         };
         let p = fake("a");
         let config = Config::new();

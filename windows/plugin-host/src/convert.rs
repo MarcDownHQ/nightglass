@@ -128,7 +128,7 @@ fn channel(c: wit::Channel) -> Option<Channel> {
         logo: optional_url(c.logo),
         epg_id: c.epg_id,
         headers: c.headers.into_iter().collect(),
-        catchup_days: c.catchup_days,
+        catchup_window: c.catchup_days.map(|days| days * 86_400),
     })
 }
 
@@ -154,7 +154,7 @@ pub fn to_wit_channel(c: &Channel) -> wit::Channel {
         epg_id: c.epg_id.clone(),
         stream: c.stream.to_string(),
         headers: c.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-        catchup_days: c.catchup_days,
+        catchup_days: c.catchup_window.map(|seconds| seconds / 86_400),
     }
 }
 

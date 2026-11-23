@@ -20,9 +20,9 @@ pub struct Channel {
     pub stream: Url,
     #[serde(default)]
     pub headers: HashMap<String, String>,
-    /// Days of past programmes the server can replay (Xtream `tv_archive`); none without replay.
+    /// Seconds of past programmes the server can replay (Xtream `tv_archive`); none without replay.
     #[serde(default)]
-    pub catchup_days: Option<i64>,
+    pub catchup_window: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

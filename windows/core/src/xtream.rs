@@ -115,7 +115,7 @@ impl XtreamClient {
                     stream: self.media("live", &id, "ts"),
                     headers: HashMap::new(),
                     // `tv_archive_duration` is in days; some panels leave it empty with replay on.
-                    catchup_days: (int(s.get("tv_archive")) == Some(1)).then(|| int(s.get("tv_archive_duration")).unwrap_or(1).max(1)),
+                    catchup_window: (int(s.get("tv_archive")) == Some(1)).then(|| int(s.get("tv_archive_duration")).unwrap_or(1).max(1) * 86_400),
                     id: format!("xt-live-{id}"),
                 })
             })

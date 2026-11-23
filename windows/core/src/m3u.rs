@@ -84,7 +84,7 @@ impl Parser {
                 epg_id: a.get("tvg-id").filter(|id| !id.is_empty()).cloned(),
                 stream,
                 headers: std::mem::take(&mut self.headers),
-                catchup_days: None,
+                catchup_window: None,
             });
             self.info = None;
         }

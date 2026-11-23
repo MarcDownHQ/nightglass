@@ -9,8 +9,8 @@ export interface Channel {
   epgId: string | null;
   stream: string;
   headers: Record<string, string>;
-  /** Days of past programmes the server can replay; null without replay. */
-  catchupDays?: number | null;
+  /** Seconds of past programmes the server can replay; null without replay. */
+  catchupWindow?: number | null;
 }
 
 /** What a player opens: `stream_url`, `catchup_url`, `movie_url` and `episode_url` answer with it. */

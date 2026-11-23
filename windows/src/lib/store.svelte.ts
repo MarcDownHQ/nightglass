@@ -328,8 +328,8 @@ class Store {
 
   /** Whether `p` can be replayed: the channel keeps past programmes and `p` started within that window. */
   canReplay(item: LiveItem, p: Programme): boolean {
-    const days = item.channel.catchupDays;
-    return !!days && p.start <= this.now && p.start > this.now - days * 86_400;
+    const seconds = item.channel.catchupWindow;
+    return !!seconds && p.start <= this.now && p.start > this.now - seconds;
   }
 
   /** A movie's or an episode's playback: asked at play time for providers whose links are short-lived; null once said why not. */
