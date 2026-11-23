@@ -89,6 +89,7 @@ Ce que le contrat offre en plus des appels de base :
 - **Films et épisodes à la lecture.** Avec `resolves-streams`, l'app demande `movie-url` ou `episode-url` au moment de jouer, pour des liens signés qui expirent. Le `stream` d'un film ou d'un épisode est alors un texte quelconque que le plugin relit dans cet appel (un identifiant, du JSON), pas forcément une adresse ; sans `resolves-streams`, il doit être une adresse de flux.
 - **Replay.** `channel.catchup-window` donne en secondes ce que le serveur garde de son passé : quelques heures pour un direct, des jours pour un serveur Xtream.
 - **Émissions datées.** La saison et le numéro d'un épisode sont facultatifs, et `aired` (Unix secondes) donne sa date de diffusion : un journal ou un magazine s'affiche avec sa date plutôt qu'avec un faux numéro.
+- **Durée, vignette, expiration.** Un film ou un épisode peut donner sa durée (`duration`, en secondes) et la fin de sa disponibilité (`available-until`, Unix secondes), un épisode sa propre image (`thumbnail`, en http(s)). L'app les garde dans le catalogue mais ne les affiche pas encore.
 
 Pour en écrire un en Rust, partir de [plugin-example](plugin-example/src/lib.rs) (une liste de chaînes, de films et de séries en JSON) :
 
