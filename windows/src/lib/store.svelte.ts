@@ -332,20 +332,30 @@ class Store {
     return !!seconds && p.start <= this.now && p.start > this.now - seconds;
   }
 
-  /** A movie's or an episode's playback: asked at play time for providers whose links are short-lived; null once said why not. */
-  private async vod(source: Source, ask: () => Promise<Playback>, stream: string): Promise<Playback | null> {
-    if (!this.provider(source)?.resolvesStreams) return { url: stream, headers: {} };
+  /** The last movie or episode asked for: an answer to an earlier one comes too late. */
+  private vodRequest = 0;
+
+  /** Whether an answer still matters: nothing else was asked for or started playing meanwhile. */
+  private stillWanted(request: number, playing: Playable | null): boolean {
+    return request === this.vodRequest && player.current === playing;
+  }
+
+  /** A movie's or an episode's playback, from its provider (which checks a stored link); null once said why not, or when overtaken. */
+  private async vod(ask: () => Promise<Playback>): Promise<Playback | null> {
+    const request = ++this.vodRequest;
+    const playing = player.current;
     try {
-      return await ask();
+      const playback = await ask();
+      return this.stillWanted(request, playing) ? playback : null;
     } catch (e) {
-      player.notify(t('Playback unavailable: {error}', { error: String(e) }));
+      if (this.stillWanted(request, playing)) player.notify(t('Playback unavailable: {error}', { error: String(e) }));
       return null;
     }
   }
 
   /** From where it was left, unless `fromStart`. */
   async playMovie({ id, source, movie }: MovieItem, fromStart = false) {
-    const playback = await this.vod(source, () => invoke<Playback>('movie_url', { source, movie }), movie.stream);
+    const playback = await this.vod(() => invoke<Playback>('movie_url', { source, movie }));
     if (!playback) return;
     const resume = { kind: 'movie' as const, id };
     player.play({
@@ -376,7 +386,7 @@ class Store {
     const i = episodes?.findIndex((x) => x.id === e.id) ?? -1;
     const next = i >= 0 ? episodes?.[i + 1] : undefined;
     const { source, series } = item;
-    const playback = await this.vod(source, () => invoke<Playback>('episode_url', { source, series, episode: e }), e.stream);
+    const playback = await this.vod(() => invoke<Playback>('episode_url', { source, series, episode: e }));
     if (!playback) return;
     player.play({
       id,
