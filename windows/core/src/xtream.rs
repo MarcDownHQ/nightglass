@@ -192,10 +192,11 @@ impl XtreamClient {
                 let ext = str(e.get("container_extension")).unwrap_or_else(|| "mp4".into());
                 Some(Episode {
                     title: str(e.get("title")).unwrap_or_else(|| format!("Episode {number}")),
-                    season: int(e.get("season")).unwrap_or(1),
-                    number,
+                    season: Some(int(e.get("season")).unwrap_or(1)),
+                    number: Some(number),
                     stream: self.media("series", &id, &ext).into(),
                     plot: str(e.get("info").and_then(|i| i.get("plot"))),
+                    aired: None,
                     id,
                 })
             })

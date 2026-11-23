@@ -3,7 +3,7 @@
   import { fade } from 'svelte/transition';
   import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
-  import { episodeKey, library } from './library.svelte';
+  import { episodeKey, episodeLabel, library } from './library.svelte';
   import type { Episode, SeriesItem } from './models';
   import { nav } from './nav.svelte';
   import NeonText from './NeonText.svelte';
@@ -13,11 +13,13 @@
   let { item, close }: { item: SeriesItem; close: () => void } = $props();
 
   let episodes = $state.raw<Episode[]>([]);
-  let season = $state(1);
+  let season = $state<number | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  const seasons = $derived([...new Set(episodes.map((e) => e.season))].sort((a, b) => a - b));
+  /** Numbered seasons in order, then the episodes that have none. */
+  const bySeason = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
+  const seasons = $derived([...new Set(episodes.map((e) => e.season))].sort(bySeason));
   const list = $derived(episodes.filter((e) => e.season === season));
 
   $effect(() => {
@@ -29,7 +31,7 @@
       .then((list) => {
         if (current !== item) return;
         episodes = list;
-        season = list.length ? Math.min(...list.map((e) => e.season)) : 1;
+        season = list.map((e) => e.season).sort(bySeason)[0] ?? null;
       })
       .catch((e) => (error = String(e)))
       .finally(() => (loading = false));
@@ -43,13 +45,14 @@
   function menu(ev: MouseEvent, e: Episode) {
     const key = episodeKey(item.id, e);
     const started = library.startAt(key) > 0;
+    const its = e.season;
     contextMenu.open(ev, [
       { label: started ? t('Resume') : t('Play'), icon: "", action: () => void store.playEpisode(item, e, episodes) },
       ...(started ? [{ label: t('Play from the start'), icon: "", action: () => void store.playEpisode(item, e, episodes, true) }] : []),
       library.progress[key]?.watched
         ? { label: t('Mark as unwatched'), icon: "", action: () => toggleWatched(e) }
         : { label: t('Mark as watched'), icon: "", action: () => toggleWatched(e) },
-      { label: t('Mark the season as watched'), icon: "", action: () => markSeason(e.season) },
+      ...(its != null ? [{ label: t('Mark the season as watched'), icon: "", action: () => markSeason(its) }] : []),
     ]);
   }
 
@@ -82,7 +85,7 @@
       {#if seasons.length > 1}
         <div class="seasons">
           {#each seasons as s (s)}
-            <button class:on={s === season} onclick={() => (season = s)}>{t('Season {n}', { n: s })}</button>
+            <button class:on={s === season} onclick={() => (season = s)}>{s == null ? t('Other episodes') : t('Season {n}', { n: s })}</button>
           {/each}
         </div>
       {/if}
@@ -99,9 +102,10 @@
             {@const p = library.progress[episodeKey(item.id, e)]}
             <div class="episode" class:watched={p?.watched}>
               <button class="main" onclick={() => store.playEpisode(item, e, episodes)} oncontextmenu={(ev) => menu(ev, e)}>
-                <span class="num mono">{e.number}</span>
+                <span class="num mono">{e.number ?? ''}</span>
                 <span class="text">
                   <b>{e.title}</b>
+                  {#if e.number == null && e.aired}<small class="mono">{episodeLabel(e)}</small>{/if}
                   {#if e.plot}<small>{e.plot}</small>{/if}
                   {#if p && !p.watched && p.position > 30}<span class="bar"><span style:width="{(p.position / p.duration) * 100}%"></span></span>{/if}
                 </span>

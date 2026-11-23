@@ -141,7 +141,7 @@ fn series(s: wit::Series) -> Series {
 }
 
 pub fn episode(e: wit::Episode) -> Option<Episode> {
-    Some(Episode { stream: stream(&e.stream).ok()?.into(), id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
+    Some(Episode { stream: stream(&e.stream).ok()?.into(), id: e.id, title: e.title, season: Some(e.season), number: Some(e.number), plot: e.plot, aired: None })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {

@@ -287,3 +287,14 @@ export function listLabel(list: FavoriteList): string {
 export function episodeKey(series: string, episode: Episode): string {
   return `${series}/${episode.id}`;
 }
+
+/** "S2E5", "E5", or for a dated broadcast the day it aired. */
+export function episodeLabel(e: Episode): string {
+  if (e.number != null) return e.season != null ? `S${e.season}E${e.number}` : `E${e.number}`;
+  return e.aired ? new Date(e.aired * 1000).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+}
+
+/** The episode's label and title, either left out when missing. */
+export function episodeLine(e: Episode): string {
+  return [episodeLabel(e), e.title].filter(Boolean).join(' · ');
+}

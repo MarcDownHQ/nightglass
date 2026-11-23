@@ -50,10 +50,14 @@ pub struct Series {
 pub struct Episode {
     pub id: String,
     pub title: String,
-    pub season: i64,
-    pub number: i64,
+    /// Dated broadcasts (news, magazines) have neither season nor number.
+    pub season: Option<i64>,
+    pub number: Option<i64>,
     pub stream: String,
     pub plot: Option<String>,
+    /// Unix seconds.
+    #[serde(default)]
+    pub aired: Option<i64>,
 }
 
 /// What a player opens for a channel or a replay.

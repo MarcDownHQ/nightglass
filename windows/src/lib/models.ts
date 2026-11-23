@@ -43,10 +43,13 @@ export interface Series {
 export interface Episode {
   id: string;
   title: string;
-  season: number;
-  number: number;
+  /** Dated broadcasts (news, magazines) have neither season nor number. */
+  season: number | null;
+  number: number | null;
   stream: string;
   plot: string | null;
+  /** Unix seconds. */
+  aired?: number | null;
 }
 
 /** Times are Unix seconds. */

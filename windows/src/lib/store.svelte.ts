@@ -1,7 +1,7 @@
 import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
-import { episodeKey, library } from './library.svelte';
+import { episodeKey, episodeLabel, episodeLine, library } from './library.svelte';
 import { categoryKey, categoryLabel, channelKey, fold, groupDuplicates, splitCountry } from './lineup';
 import {
   epgKey,
@@ -381,14 +381,14 @@ class Store {
     player.play({
       id,
       title: e.title,
-      subtitle: `${item.series.name} · S${e.season}E${e.number}`,
+      subtitle: [item.series.name, episodeLabel(e)].filter(Boolean).join(' · '),
       url: playback.url,
       headers: playback.headers,
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),
       next: next && {
-        title: `S${next.season}E${next.number} · ${next.title}`,
+        title: episodeLine(next),
         play: () => void this.playEpisode(item, next, episodes),
       },
     });
