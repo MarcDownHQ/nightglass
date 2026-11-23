@@ -273,6 +273,31 @@ mod tests {
     }
 
     #[test]
+    fn durations_stills_and_expiry_carried_through() {
+        let mut m = wit_movie("http://s.test/m.mkv");
+        (m.duration, m.available_until) = (Some(5400), Some(1_796_000_000));
+        let kept = movie(m, false).unwrap();
+        assert_eq!((kept.duration, kept.available_until), (Some(5400), Some(1_796_000_000)));
+        assert_eq!((to_wit_movie(&kept).duration, to_wit_movie(&kept).available_until), (Some(5400), Some(1_796_000_000)));
+        let still = |thumbnail: &str| wit::Episode {
+            id: "e".into(),
+            title: "JT".into(),
+            season: None,
+            number: None,
+            stream: "jt".into(),
+            plot: None,
+            aired: None,
+            duration: Some(1800),
+            thumbnail: Some(thumbnail.into()),
+            available_until: Some(1_796_000_000),
+        };
+        let e = episode(still("https://img.test/jt.jpg"), true).unwrap();
+        assert_eq!((e.duration, e.thumbnail.as_ref().map(Url::as_str), e.available_until), (Some(1800), Some("https://img.test/jt.jpg"), Some(1_796_000_000)));
+        assert_eq!(to_wit_episode(&e).thumbnail.as_deref(), Some("https://img.test/jt.jpg"));
+        assert_eq!(episode(still("file:///home/me/still.jpg"), true).unwrap().thumbnail, None, "stills are fetched by the app: http(s) only");
+    }
+
+    #[test]
     fn replay_windows_in_seconds() {
         let wit_channel = wit::Channel {
             id: "c".into(),
