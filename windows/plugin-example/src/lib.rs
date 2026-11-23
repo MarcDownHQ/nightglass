@@ -1,7 +1,9 @@
-//! Channels listed in a JSON file: `{"channels": [{"name", "url", "logo"?, "group"?, "epgId"?, "programmes"?}], "epg"?}`,
-//! where a programme is `{"start", "end", "title", "desc"?}` in Unix seconds. With the `browser` setting, the list and
-//! the streams are fetched with that browser's handshake, the streams through the app. A list served with an `ETag` is
-//! kept, and asked again with `If-None-Match`.
+//! Channels, movies and series listed in a JSON file:
+//! `{"channels": [{"name", "url", "logo"?, "group"?, "epgId"?, "programmes"?}], "movies"?: [{"name", "url", "audio"?}],
+//! "series"?: [{"name", "episodes": [{"title", "url", "season"?, "number"?, "aired"?}]}], "epg"?}`, where a programme is
+//! `{"start", "end", "title", "desc"?}` and `aired` in Unix seconds. A movie's `audio` is played alongside its video.
+//! With the `browser` setting, the list and the streams are fetched with that browser's handshake, the streams through
+//! the app. A list served with an `ETag` is kept, and asked again with `If-None-Match`.
 
 #![allow(clippy::too_many_arguments, reason = "the lowered signature wit-bindgen generates for the filter export")]
 
@@ -12,7 +14,7 @@ wit_bindgen::generate!({ path: "../wit", world: "provider" });
 use nightglass::provider::http::{Request, send};
 use nightglass::provider::log::{Level, log};
 use nightglass::provider::storage;
-use nightglass::provider::types::{Browser, Field, FieldKind, Programme, Relay};
+use nightglass::provider::types::{Browser, Field, FieldKind, Programme, Relay, Track};
 
 struct JsonList;
 
@@ -26,7 +28,33 @@ struct Kept {
 #[serde(rename_all = "camelCase")]
 struct List {
     channels: Vec<Entry>,
+    #[serde(default)]
+    movies: Vec<Film>,
+    #[serde(default)]
+    series: Vec<Show>,
     epg: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Film {
+    name: String,
+    url: String,
+    audio: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Show {
+    name: String,
+    episodes: Vec<Part>,
+}
+
+#[derive(Deserialize)]
+struct Part {
+    title: String,
+    url: String,
+    season: Option<i64>,
+    number: Option<i64>,
+    aired: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -38,11 +66,11 @@ struct Entry {
     group: Option<String>,
     epg_id: Option<String>,
     #[serde(default)]
-    programmes: Vec<Show>,
+    programmes: Vec<Slot>,
 }
 
 #[derive(Deserialize)]
-struct Show {
+struct Slot {
     start: i64,
     end: i64,
     title: String,
@@ -84,36 +112,7 @@ impl Guest for JsonList {
     }
 
     fn load_catalog(config: Config) -> Result<Catalog, Error> {
-        let url = setting(&config, "url").ok_or_else(|| Error::Setting("url".into()))?;
-        let mut headers = vec![("accept".to_string(), "application/json".to_string())];
-        if let Some(token) = setting(&config, "token") {
-            headers.push(("authorization".into(), format!("Bearer {token}")));
-        }
-        let key = format!("list:{:016x}", fnv1a(url.as_bytes()));
-        let kept: Option<Kept> = storage::get(&key).and_then(|v| serde_json::from_str(&v).ok());
-        if let Some(kept) = &kept {
-            headers.push(("if-none-match".into(), kept.etag.clone()));
-        }
-        let response = send(&Request { method: "GET".into(), url: url.into(), headers, body: None, browser: browser(&config)? })?;
-        let body = match (response.status, kept) {
-            (304, Some(kept)) => kept.body,
-            (200..=299, _) => {
-                let body = String::from_utf8(response.body).map_err(|e| Error::BadResponse(e.to_string()))?;
-                match response.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("etag")) {
-                    Some((_, etag)) => {
-                        let kept = serde_json::to_string(&Kept { etag: etag.clone(), body: body.clone() }).expect("strings serialize");
-                        if let Err(e) = storage::set(&key, &kept, None, true) {
-                            log(Level::Warn, &format!("list not kept: {e}"));
-                        }
-                    }
-                    None => storage::delete(&key),
-                }
-                body
-            }
-            (401 | 403, _) => return Err(Error::AuthFailed),
-            (status, _) => return Err(Error::Http(status)),
-        };
-        let list: List = serde_json::from_str(&body).map_err(|e| Error::BadResponse(e.to_string()))?;
+        let list = list(&config)?;
         log(Level::Info, &format!("{} channels", list.channels.len()));
         let mut programmes = Vec::new();
         let mut channels = Vec::new();
@@ -132,15 +131,33 @@ impl Guest for JsonList {
                 epg_id,
                 stream: e.url,
                 headers: Vec::new(),
-                catchup_days: None,
+                catchup_window: None,
             });
         }
-        Ok(Catalog { channels, movies: Vec::new(), series: Vec::new(), epg_url: list.epg, account: None, programmes })
+        let movies = list
+            .movies
+            .into_iter()
+            .map(|m| {
+                let stream = serde_json::to_string(&(&m.url, &m.audio)).expect("strings serialize");
+                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None }
+            })
+            .collect();
+        let series = list.series.into_iter().map(|s| Series { id: s.name.clone(), name: s.name, group: None, poster: None, rating: None, plot: None }).collect();
+        Ok(Catalog { channels, movies, series, epg_url: list.epg, account: None, programmes })
     }
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
-        let relay = browser(&config)?.map(|b| Relay { browser: Some(b), filter: false });
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay, tracks: Vec::new() })
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
+    }
+
+    fn movie_url(config: Config, movie: Movie) -> Result<Playback, Error> {
+        let (url, audio): (String, Option<String>) = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
+        let tracks = audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
+        Ok(Playback { url, headers: Vec::new(), relay: relay(&config)?, tracks })
+    }
+
+    fn episode_url(config: Config, _series: Series, episode: Episode) -> Result<Playback, Error> {
+        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
     }
 
     fn catchup_url(_config: Config, _channel: Channel, _start: i64, _end: i64) -> Result<Playback, Error> {
@@ -151,9 +168,51 @@ impl Guest for JsonList {
         Ok(media)
     }
 
-    fn episodes(_config: Config, _series: Series) -> Result<Vec<Episode>, Error> {
-        Ok(Vec::new())
+    fn episodes(config: Config, series: Series) -> Result<Vec<Episode>, Error> {
+        let show = list(&config)?.series.into_iter().find(|s| s.name == series.id);
+        let parts = show.map(|s| s.episodes).unwrap_or_default();
+        Ok(parts
+            .into_iter()
+            .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired, duration: None, thumbnail: None, available_until: None })
+            .collect())
     }
+}
+
+fn relay(config: &Config) -> Result<Option<Relay>, Error> {
+    Ok(browser(config)?.map(|b| Relay { browser: Some(b), filter: false }))
+}
+
+fn list(config: &Config) -> Result<List, Error> {
+    let url = setting(config, "url").ok_or_else(|| Error::Setting("url".into()))?;
+    let mut headers = vec![("accept".to_string(), "application/json".to_string())];
+    if let Some(token) = setting(config, "token") {
+        headers.push(("authorization".into(), format!("Bearer {token}")));
+    }
+    let key = format!("list:{:016x}", fnv1a(url.as_bytes()));
+    let kept: Option<Kept> = storage::get(&key).and_then(|v| serde_json::from_str(&v).ok());
+    if let Some(kept) = &kept {
+        headers.push(("if-none-match".into(), kept.etag.clone()));
+    }
+    let response = send(&Request { method: "GET".into(), url: url.into(), headers, body: None, browser: browser(config)? })?;
+    let body = match (response.status, kept) {
+        (304, Some(kept)) => kept.body,
+        (200..=299, _) => {
+            let body = String::from_utf8(response.body).map_err(|e| Error::BadResponse(e.to_string()))?;
+            match response.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("etag")) {
+                Some((_, etag)) => {
+                    let kept = serde_json::to_string(&Kept { etag: etag.clone(), body: body.clone() }).expect("strings serialize");
+                    if let Err(e) = storage::set(&key, &kept, None, true) {
+                        log(Level::Warn, &format!("list not kept: {e}"));
+                    }
+                }
+                None => storage::delete(&key),
+            }
+            body
+        }
+        (401 | 403, _) => return Err(Error::AuthFailed),
+        (status, _) => return Err(Error::Http(status)),
+    };
+    serde_json::from_str(&body).map_err(|e| Error::BadResponse(e.to_string()))
 }
 
 export!(JsonList);

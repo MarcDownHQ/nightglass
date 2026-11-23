@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import ChannelLogo from './ChannelLogo.svelte';
-  import { library, listLabel } from './library.svelte';
+  import { episodeLine, library, listLabel } from './library.svelte';
   import type { LiveItem } from './models';
   import { nav } from './nav.svelte';
   import { player } from './player.svelte';
@@ -24,11 +24,11 @@
       const r = p.resume;
       if (r.kind === 'movie') {
         const m = movies.get(id);
-        return m ? [{ id, title: m.movie.name, subtitle: t('{time} left', { time: clock(p.duration - p.position) }), poster: m.movie.poster, progress: p.position / p.duration, play: () => store.playMovie(m) }] : [];
+        return m ? [{ id, title: m.movie.name, subtitle: t('{time} left', { time: clock(p.duration - p.position) }), poster: m.movie.poster, progress: p.position / p.duration, play: () => void store.playMovie(m) }] : [];
       }
       const s = shows.get(r.series);
       return s
-        ? [{ id, title: s.series.name, subtitle: `S${r.episode.season}E${r.episode.number} · ${r.episode.title}`, poster: s.series.poster, progress: p.position / p.duration, play: () => void store.playEpisode(s, r.episode) }]
+        ? [{ id, title: s.series.name, subtitle: episodeLine(r.episode), poster: s.series.poster, progress: p.position / p.duration, play: () => void store.playEpisode(s, r.episode) }]
         : [];
     }),
   );

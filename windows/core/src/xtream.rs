@@ -115,7 +115,7 @@ impl XtreamClient {
                     stream: self.media("live", &id, "ts"),
                     headers: HashMap::new(),
                     // `tv_archive_duration` is in days; some panels leave it empty with replay on.
-                    catchup_days: (int(s.get("tv_archive")) == Some(1)).then(|| int(s.get("tv_archive_duration")).unwrap_or(1).max(1)),
+                    catchup_window: (int(s.get("tv_archive")) == Some(1)).then(|| int(s.get("tv_archive_duration")).unwrap_or(1).max(1).saturating_mul(86_400)),
                     id: format!("xt-live-{id}"),
                 })
             })
@@ -129,9 +129,11 @@ impl XtreamClient {
                     name: str(s.get("name"))?,
                     group: group(&vc, s),
                     poster: url(s.get("stream_icon")),
-                    stream: self.media("movie", &id, &ext),
+                    stream: self.media("movie", &id, &ext).into(),
                     rating: double(s.get("rating")),
                     plot: str(s.get("plot")),
+                    duration: None,
+                    available_until: None,
                     id: format!("xt-vod-{id}"),
                 })
             })
@@ -192,10 +194,14 @@ impl XtreamClient {
                 let ext = str(e.get("container_extension")).unwrap_or_else(|| "mp4".into());
                 Some(Episode {
                     title: str(e.get("title")).unwrap_or_else(|| format!("Episode {number}")),
-                    season: int(e.get("season")).unwrap_or(1),
-                    number,
-                    stream: self.media("series", &id, &ext),
+                    season: Some(int(e.get("season")).unwrap_or(1)),
+                    number: Some(number),
+                    stream: self.media("series", &id, &ext).into(),
                     plot: str(e.get("info").and_then(|i| i.get("plot"))),
+                    aired: None,
+                    duration: None,
+                    thumbnail: None,
+                    available_until: None,
                     id,
                 })
             })
@@ -229,7 +235,7 @@ mod tests {
             (Some("get_live_categories"), r#"[{"category_id":"1","category_name":"News"}]"#.into()),
             (
                 Some("get_live_streams"),
-                r#"[{"num":1,"name":"Wire 24","stream_id":42,"stream_icon":"http://logo.test/w.png","epg_channel_id":"wire.fr","category_id":"1"},{"name":"broken"}]"#.into(),
+                r#"[{"num":1,"name":"Wire 24","stream_id":42,"stream_icon":"http://logo.test/w.png","epg_channel_id":"wire.fr","category_id":"1","tv_archive":1,"tv_archive_duration":"3"},{"name":"broken"}]"#.into(),
             ),
             (Some("get_vod_categories"), "[]".into()),
             (
@@ -266,8 +272,9 @@ mod tests {
         let ch = &cat.channels[0];
         assert_eq!((ch.name.as_str(), ch.group.as_deref(), ch.epg_id.as_deref(), ch.number), ("Wire 24", Some("News"), Some("wire.fr"), Some(1)));
         assert_eq!(ch.stream.as_str(), format!("{}/live/u/p/42.ts", s.uri()));
+        assert_eq!(ch.catchup_window, Some(3 * 86_400), "Xtream counts replay in days");
         let movie = &cat.movies[0];
-        assert_eq!(movie.stream.as_str(), format!("{}/movie/u/p/7.mkv", s.uri()));
+        assert_eq!(movie.stream, format!("{}/movie/u/p/7.mkv", s.uri()));
         assert_eq!(movie.rating, Some(7.5));
         assert_eq!(movie.poster, None);
         assert!(cat.series.is_empty());
@@ -290,6 +297,7 @@ mod tests {
         assert_eq!(eps.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(), ["S1E1", "S2E1"]);
         assert_eq!(eps[0].stream.as_str(), format!("{}/series/u/p/901.mkv", s.uri()));
         assert_eq!(eps[0].plot.as_deref(), Some("Pilot"));
+        assert_eq!((eps[1].season, eps[1].number, eps[1].aired), (Some(2), Some(1), None));
     }
 
     #[test]

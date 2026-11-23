@@ -20,20 +20,27 @@ pub struct Channel {
     pub stream: Url,
     #[serde(default)]
     pub headers: HashMap<String, String>,
-    /// Days of past programmes the server can replay (Xtream `tv_archive`); none without replay.
+    /// Seconds of past programmes the server can replay (Xtream `tv_archive`); none without replay.
     #[serde(default)]
-    pub catchup_days: Option<i64>,
+    pub catchup_window: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Movie {
     pub id: String,
     pub name: String,
     pub group: Option<String>,
     pub poster: Option<Url>,
-    pub stream: Url,
+    pub stream: String,
     pub rating: Option<f64>,
     pub plot: Option<String>,
+    /// Seconds.
+    #[serde(default)]
+    pub duration: Option<u32>,
+    /// Unix seconds, for a replay that expires.
+    #[serde(default)]
+    pub available_until: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -47,13 +54,27 @@ pub struct Series {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Episode {
     pub id: String,
     pub title: String,
-    pub season: i64,
-    pub number: i64,
-    pub stream: Url,
+    /// Dated broadcasts (news, magazines) have neither season nor number.
+    pub season: Option<i64>,
+    pub number: Option<i64>,
+    pub stream: String,
     pub plot: Option<String>,
+    /// Unix seconds.
+    #[serde(default)]
+    pub aired: Option<i64>,
+    /// Seconds.
+    #[serde(default)]
+    pub duration: Option<u32>,
+    /// A still of this episode; the series' poster stands for the show.
+    #[serde(default)]
+    pub thumbnail: Option<Url>,
+    /// Unix seconds, for a replay that expires.
+    #[serde(default)]
+    pub available_until: Option<i64>,
 }
 
 /// What a player opens for a channel or a replay.
@@ -77,7 +98,19 @@ impl From<Url> for Playback {
     }
 }
 
+/// What the player may open from a catalog or a plugin: never `file:` or anything else outside the network.
+pub const STREAM_SCHEMES: [&str; 9] = ["http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "srt", "mms"];
+
 impl Playback {
+    /// A movie's or an episode's stream as kept in the catalog.
+    pub fn stored(stream: &str) -> Result<Self> {
+        Url::parse(stream)
+            .ok()
+            .filter(|u| STREAM_SCHEMES.contains(&u.scheme()))
+            .map(Self::from)
+            .ok_or_else(|| IptvError::BadResponse(format!("not a stream address: {stream}")))
+    }
+
     /// The one address mpv opens: `url` itself, or an EDL joining it and its tracks.
     pub fn player_url(&self) -> String {
         if self.tracks.is_empty() {
@@ -236,6 +269,15 @@ pub type Result<T> = std::result::Result<T, IptvError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn episodes_reach_the_page_in_camel_case() {
+        let episode = Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: Some(1) };
+        let json = serde_json::to_value(&episode).unwrap();
+        assert_eq!(json["availableUntil"], 1);
+        let old: Episode = serde_json::from_str(r#"{"id":"e","title":"S1E1","season":1,"number":1,"stream":"http://s.test/1.mkv","plot":null}"#).unwrap();
+        assert_eq!((old.season, old.aired), (Some(1), None), "an episode kept before 0.3.0 still reads");
+    }
 
     #[test]
     fn reads_sources_saved_by_older_versions() {

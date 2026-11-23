@@ -9,11 +9,11 @@ export interface Channel {
   epgId: string | null;
   stream: string;
   headers: Record<string, string>;
-  /** Days of past programmes the server can replay; null without replay. */
-  catchupDays?: number | null;
+  /** Seconds of past programmes the server can replay; null without replay. */
+  catchupWindow?: number | null;
 }
 
-/** What a player opens: `stream_url` and `catchup_url` answer with it. */
+/** What a player opens: `stream_url`, `catchup_url`, `movie_url` and `episode_url` answer with it. */
 export interface Playback {
   url: string;
   headers: Record<string, string>;
@@ -29,6 +29,10 @@ export interface Movie {
   stream: string;
   rating: number | null;
   plot: string | null;
+  /** Seconds. */
+  duration?: number | null;
+  /** Unix seconds, for a replay that expires. */
+  availableUntil?: number | null;
 }
 
 export interface Series {
@@ -43,10 +47,19 @@ export interface Series {
 export interface Episode {
   id: string;
   title: string;
-  season: number;
-  number: number;
+  /** Dated broadcasts (news, magazines) have neither season nor number. */
+  season: number | null;
+  number: number | null;
   stream: string;
   plot: string | null;
+  /** Unix seconds. */
+  aired?: number | null;
+  /** Seconds. */
+  duration?: number | null;
+  /** A still of this episode; the series' poster stands for the show. */
+  thumbnail?: string | null;
+  /** Unix seconds, for a replay that expires. */
+  availableUntil?: number | null;
 }
 
 /** Times are Unix seconds. */

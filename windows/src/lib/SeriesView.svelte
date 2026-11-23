@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import { contextMenu } from './menuState.svelte';
-  import { episodeKey, library } from './library.svelte';
+  import { episodeKey, episodeLine, library } from './library.svelte';
   import type { Episode, SeriesItem } from './models';
   import { nav } from './nav.svelte';
   import PosterBrowser, { type ContinueCard } from './PosterBrowser.svelte';
@@ -40,7 +40,7 @@
         {
           id,
           title: item.series.name,
-          subtitle: `S${r.episode.season}E${r.episode.number} · ${r.episode.title}`,
+          subtitle: episodeLine(r.episode),
           poster: item.series.poster,
           progress: p.position / p.duration,
           play: () => void store.playEpisode(item, r.episode),

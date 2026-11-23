@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, Series, Track};
+use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -52,8 +52,6 @@ fn duplicate<'a>(items: impl Iterator<Item = &'a String>) -> Option<&'a String> 
     items.into_iter().find(|i| !seen.insert(*i))
 }
 
-const STREAM_SCHEMES: [&str; 9] = ["http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "srt", "mms"];
-
 /// A playable address: never `file:` or anything else mpv would open outside the network.
 pub fn stream(s: &str) -> Result<Url> {
     Url::parse(s.trim())
@@ -67,10 +65,15 @@ fn optional_url(s: Option<String>) -> Option<Url> {
     s.and_then(|s| Url::parse(s.trim()).ok()).filter(|u| matches!(u.scheme(), "http" | "https"))
 }
 
-pub fn catalog(c: wit::Catalog) -> Catalog {
+/// With `resolves_streams`, a movie's or an episode's stream is the plugin's own text, given back at play time.
+fn vod_stream(s: String, resolves: bool) -> Option<String> {
+    if resolves { Some(s) } else { stream(&s).ok().map(String::from) }
+}
+
+pub fn catalog(c: wit::Catalog, resolves: bool) -> Catalog {
     Catalog {
         channels: c.channels.into_iter().filter_map(channel).collect(),
-        movies: c.movies.into_iter().filter_map(movie).collect(),
+        movies: c.movies.into_iter().filter_map(|m| movie(m, resolves)).collect(),
         series: c.series.into_iter().map(series).collect(),
         epg_url: optional_url(c.epg_url),
         account: c.account.map(|a| Account {
@@ -128,20 +131,20 @@ fn channel(c: wit::Channel) -> Option<Channel> {
         logo: optional_url(c.logo),
         epg_id: c.epg_id,
         headers: c.headers.into_iter().collect(),
-        catchup_days: c.catchup_days,
+        catchup_window: c.catchup_window.map(i64::from),
     })
 }
 
-fn movie(m: wit::Movie) -> Option<Movie> {
-    Some(Movie { stream: stream(&m.stream).ok()?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
+fn movie(m: wit::Movie, resolves: bool) -> Option<Movie> {
+    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot, duration: m.duration, available_until: m.available_until })
 }
 
 fn series(s: wit::Series) -> Series {
     Series { id: s.id, name: s.name, group: s.group, poster: optional_url(s.poster), rating: s.rating, plot: s.plot }
 }
 
-pub fn episode(e: wit::Episode) -> Option<Episode> {
-    Some(Episode { stream: stream(&e.stream).ok()?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
+pub fn episode(e: wit::Episode, resolves: bool) -> Option<Episode> {
+    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired, duration: e.duration, thumbnail: optional_url(e.thumbnail), available_until: e.available_until })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {
@@ -154,7 +157,36 @@ pub fn to_wit_channel(c: &Channel) -> wit::Channel {
         epg_id: c.epg_id.clone(),
         stream: c.stream.to_string(),
         headers: c.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-        catchup_days: c.catchup_days,
+        catchup_window: c.catchup_window.map(|seconds| u32::try_from(seconds.max(0)).unwrap_or(u32::MAX)),
+    }
+}
+
+pub fn to_wit_movie(m: &Movie) -> wit::Movie {
+    wit::Movie {
+        id: m.id.clone(),
+        name: m.name.clone(),
+        group: m.group.clone(),
+        poster: m.poster.as_ref().map(Url::to_string),
+        stream: m.stream.clone(),
+        rating: m.rating,
+        plot: m.plot.clone(),
+        duration: m.duration,
+        available_until: m.available_until,
+    }
+}
+
+pub fn to_wit_episode(e: &Episode) -> wit::Episode {
+    wit::Episode {
+        id: e.id.clone(),
+        title: e.title.clone(),
+        season: e.season,
+        number: e.number,
+        stream: e.stream.clone(),
+        plot: e.plot.clone(),
+        aired: e.aired,
+        duration: e.duration,
+        thumbnail: e.thumbnail.as_ref().map(Url::to_string),
+        available_until: e.available_until,
     }
 }
 
@@ -219,6 +251,68 @@ mod tests {
     fn with_track(url: &str, relay: Option<wit::Relay>) -> wit::Playback {
         let track = wit::Track { url: url.into(), language: Some("fr".into()), title: Some("Français".into()) };
         wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track] }
+    }
+
+    fn wit_movie(stream: &str) -> wit::Movie {
+        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None, duration: None, available_until: None }
+    }
+
+    #[test]
+    fn opaque_streams_only_for_providers_that_resolve_them() {
+        assert_eq!(movie(wit_movie("fr-tv:4711"), true).unwrap().stream, "fr-tv:4711", "kept as given, for movie-url");
+        assert!(movie(wit_movie("fr-tv:4711"), false).is_none());
+        assert!(movie(wit_movie("file:///etc/passwd"), false).is_none());
+        assert_eq!(movie(wit_movie("http://s.test/m.mkv"), false).unwrap().stream, "http://s.test/m.mkv");
+        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000), duration: None, thumbnail: None, available_until: None };
+        let e = episode(dated, true).unwrap();
+        assert_eq!((e.season, e.number, e.aired, e.stream.as_str()), (None, None, Some(1_795_300_000), "jt-21-11"));
+        assert_eq!(to_wit_episode(&e).stream, "jt-21-11");
+        assert_eq!(to_wit_movie(&movie(wit_movie("fr-tv:4711"), true).unwrap()).stream, "fr-tv:4711");
+    }
+
+    #[test]
+    fn durations_stills_and_expiry_carried_through() {
+        let mut m = wit_movie("http://s.test/m.mkv");
+        (m.duration, m.available_until) = (Some(5400), Some(1_796_000_000));
+        let kept = movie(m, false).unwrap();
+        assert_eq!((kept.duration, kept.available_until), (Some(5400), Some(1_796_000_000)));
+        assert_eq!((to_wit_movie(&kept).duration, to_wit_movie(&kept).available_until), (Some(5400), Some(1_796_000_000)));
+        let still = |thumbnail: &str| wit::Episode {
+            id: "e".into(),
+            title: "JT".into(),
+            season: None,
+            number: None,
+            stream: "jt".into(),
+            plot: None,
+            aired: None,
+            duration: Some(1800),
+            thumbnail: Some(thumbnail.into()),
+            available_until: Some(1_796_000_000),
+        };
+        let e = episode(still("https://img.test/jt.jpg"), true).unwrap();
+        assert_eq!((e.duration, e.thumbnail.as_ref().map(Url::as_str), e.available_until), (Some(1800), Some("https://img.test/jt.jpg"), Some(1_796_000_000)));
+        assert_eq!(to_wit_episode(&e).thumbnail.as_deref(), Some("https://img.test/jt.jpg"));
+        assert_eq!(episode(still("file:///home/me/still.jpg"), true).unwrap().thumbnail, None, "stills are fetched by the app: http(s) only");
+    }
+
+    #[test]
+    fn replay_windows_in_seconds() {
+        let wit_channel = wit::Channel {
+            id: "c".into(),
+            name: "C".into(),
+            number: None,
+            group: None,
+            logo: None,
+            epg_id: None,
+            stream: "http://s.test/c.m3u8".into(),
+            headers: Vec::new(),
+            catchup_window: Some(4 * 3600),
+        };
+        let mut c = channel(wit_channel).unwrap();
+        assert_eq!(c.catchup_window, Some(4 * 3600));
+        assert_eq!(to_wit_channel(&c).catchup_window, Some(4 * 3600));
+        c.catchup_window = Some(i64::MAX);
+        assert_eq!(to_wit_channel(&c).catchup_window, Some(u32::MAX));
     }
 
     #[test]

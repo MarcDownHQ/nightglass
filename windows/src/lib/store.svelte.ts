@@ -1,7 +1,7 @@
 import { t } from './i18n.svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
-import { episodeKey, library } from './library.svelte';
+import { episodeKey, episodeLabel, episodeLine, library } from './library.svelte';
 import { categoryKey, categoryLabel, channelKey, fold, groupDuplicates, splitCountry } from './lineup';
 import {
   epgKey,
@@ -286,7 +286,7 @@ class Store {
     return this.providers.find((p) => p.id === source.provider);
   }
 
-  /** What a player opens: asked at play time for providers whose links are short-lived (Stalker). */
+  /** What a player opens: asked at play time for providers whose links are short-lived (Stalker, plugins). */
   async playback(source: Source, channel: Channel): Promise<Playback> {
     if (this.provider(source)?.resolvesStreams) return invoke<Playback>('stream_url', { source, channel });
     return { url: channel.stream, headers: channel.headers };
@@ -328,18 +328,42 @@ class Store {
 
   /** Whether `p` can be replayed: the channel keeps past programmes and `p` started within that window. */
   canReplay(item: LiveItem, p: Programme): boolean {
-    const days = item.channel.catchupDays;
-    return !!days && p.start <= this.now && p.start > this.now - days * 86_400;
+    const seconds = item.channel.catchupWindow;
+    return !!seconds && p.start <= this.now && p.start > this.now - seconds;
+  }
+
+  /** The last movie or episode asked for: an answer to an earlier one comes too late. */
+  private vodRequest = 0;
+
+  /** Whether an answer still matters: nothing else was asked for or started playing meanwhile. */
+  private stillWanted(request: number, playing: Playable | null): boolean {
+    return request === this.vodRequest && player.current === playing;
+  }
+
+  /** A movie's or an episode's playback, from its provider (which checks a stored link); null once said why not, or when overtaken. */
+  private async vod(ask: () => Promise<Playback>): Promise<Playback | null> {
+    const request = ++this.vodRequest;
+    const playing = player.current;
+    try {
+      const playback = await ask();
+      return this.stillWanted(request, playing) ? playback : null;
+    } catch (e) {
+      if (this.stillWanted(request, playing)) player.notify(t('Playback unavailable: {error}', { error: String(e) }));
+      return null;
+    }
   }
 
   /** From where it was left, unless `fromStart`. */
-  playMovie({ id, movie }: MovieItem, fromStart = false) {
+  async playMovie({ id, source, movie }: MovieItem, fromStart = false) {
+    const playback = await this.vod(() => invoke<Playback>('movie_url', { source, movie }));
+    if (!playback) return;
     const resume = { kind: 'movie' as const, id };
     player.play({
       id,
       title: movie.name,
       subtitle: movie.group ?? '',
-      url: movie.stream,
+      url: playback.url,
+      headers: playback.headers,
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),
@@ -361,16 +385,20 @@ class Store {
     const resume = { kind: 'episode' as const, series: item.id, episode: e };
     const i = episodes?.findIndex((x) => x.id === e.id) ?? -1;
     const next = i >= 0 ? episodes?.[i + 1] : undefined;
+    const { source, series } = item;
+    const playback = await this.vod(() => invoke<Playback>('episode_url', { source, series, episode: e }));
+    if (!playback) return;
     player.play({
       id,
       title: e.title,
-      subtitle: `${item.series.name} · S${e.season}E${e.number}`,
-      url: e.stream,
+      subtitle: [item.series.name, episodeLabel(e)].filter(Boolean).join(' · '),
+      url: playback.url,
+      headers: playback.headers,
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),
       next: next && {
-        title: `S${next.season}E${next.number} · ${next.title}`,
+        title: episodeLine(next),
         play: () => void this.playEpisode(item, next, episodes),
       },
     });

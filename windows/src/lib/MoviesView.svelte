@@ -22,8 +22,8 @@
     const resume = { kind: 'movie' as const, id: i.id };
     const started = library.startAt(i.id) > 0;
     contextMenu.open(e, [
-      { label: started ? t('Resume') : t('Play'), icon: '', action: () => store.playMovie(i) },
-      ...(started ? [{ label: t('Play from the start'), icon: '', action: () => store.playMovie(i, true) }] : []),
+      { label: started ? t('Resume') : t('Play'), icon: '', action: () => void store.playMovie(i) },
+      ...(started ? [{ label: t('Play from the start'), icon: '', action: () => void store.playMovie(i, true) }] : []),
       library.progress[i.id]?.watched
         ? { label: t('Mark as unwatched'), icon: '', action: () => library.setWatched(i.id, resume, false) }
         : { label: t('Mark as watched'), icon: '', action: () => library.setWatched(i.id, resume, true) },
@@ -42,7 +42,7 @@
           subtitle: t('{time} left', { time: clock(p.duration - p.position) }),
           poster: m.movie.poster,
           progress: p.position / p.duration,
-          play: () => store.playMovie(m),
+          play: () => void store.playMovie(m),
           menu: (e) => menu(e, m),
         },
       ];
@@ -54,7 +54,7 @@
   items={store.movies}
   info={(i) => i.movie}
   empty={t('No movies. M3U playlists don’t carry any; add an Xtream account.')}
-  onpick={(i) => store.playMovie(i)}
+  onpick={(i) => void store.playMovie(i)}
   {menu}
   {status}
   {continuing}
@@ -74,12 +74,12 @@
       {#if p?.watched}<span>{t('Watched')}</span>{/if}
     </div>
     <div class="actions">
-      <button class="btn accent" onclick={() => store.playMovie(i)}><span class="icon">&#xE768;</span>{started ? t('Resume') : t('Play')}</button>
+      <button class="btn accent" onclick={() => void store.playMovie(i)}><span class="icon">&#xE768;</span>{started ? t('Resume') : t('Play')}</button>
       <button class="btn" class:on={saved} aria-pressed={saved} onclick={() => toggleMine(i)}><span class="icon">{saved ? '' : ''}</span>{t('My list')}</button>
     </div>
     {#if started && p}
       <div class="left"><span class="bar"><span style:width="{(p.position / p.duration) * 100}%"></span></span>{t('{time} left', { time: clock(p.duration - p.position) })}</div>
-      <button class="link" onclick={() => store.playMovie(i, true)}>{t('Play from the start')}</button>
+      <button class="link" onclick={() => void store.playMovie(i, true)}>{t('Play from the start')}</button>
     {/if}
     {#if i.movie.plot}<p class="plot">{i.movie.plot}</p>{/if}
   </div>
