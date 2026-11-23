@@ -221,7 +221,7 @@ type Guide = HashMap<String, Vec<Programme>>;
 async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, String> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &channel, playback).await
+    playable(&relay, provider, source, &channel.headers, playback).await
 }
 
 /// What mpv opens: one address, the playback's tracks joined into it. `link` is the stream's own address, to copy.
@@ -232,9 +232,9 @@ struct PlayerInput {
     link: String,
 }
 
-/// The channel's headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
-async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, channel: &Channel, mut playback: Playback) -> Result<PlayerInput, String> {
-    for (name, value) in &channel.headers {
+/// The item's own headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
+async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, headers: &HashMap<String, String>, mut playback: Playback) -> Result<PlayerInput, String> {
+    for (name, value) in headers {
         if !playback.headers.keys().any(|k| k.eq_ignore_ascii_case(name)) {
             playback.headers.insert(name.clone(), value.clone());
         }
@@ -300,7 +300,7 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, String> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &channel, playback).await
+    playable(&relay, provider, source, &channel.headers, playback).await
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
