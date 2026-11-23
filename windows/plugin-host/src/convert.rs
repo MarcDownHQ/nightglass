@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, Series, Track};
+use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -51,8 +51,6 @@ fn duplicate<'a>(items: impl Iterator<Item = &'a String>) -> Option<&'a String> 
     let mut seen = std::collections::HashSet::new();
     items.into_iter().find(|i| !seen.insert(*i))
 }
-
-const STREAM_SCHEMES: [&str; 9] = ["http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "srt", "mms"];
 
 /// A playable address: never `file:` or anything else mpv would open outside the network.
 pub fn stream(s: &str) -> Result<Url> {

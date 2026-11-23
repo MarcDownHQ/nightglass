@@ -195,6 +195,8 @@ mod tests {
         let series = Series { id: "s".into(), name: "S".into(), group: None, poster: None, rating: None, plot: None };
         let episode = Episode { id: "e".into(), title: "E".into(), season: None, number: None, stream: "not an address".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: None };
         assert!(matches!(p.episode_url(&config, &series, &episode).await, Err(IptvError::BadResponse(_))), "a stored stream must be an address");
+        let local = Movie { stream: "file:///etc/passwd".into(), ..movie };
+        assert!(p.movie_url(&config, &local).await.is_err(), "a stored stream stays on the network");
     }
 
     #[test]

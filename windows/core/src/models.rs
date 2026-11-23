@@ -96,10 +96,17 @@ impl From<Url> for Playback {
     }
 }
 
+/// What the player may open from a catalog or a plugin: never `file:` or anything else outside the network.
+pub const STREAM_SCHEMES: [&str; 9] = ["http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "srt", "mms"];
+
 impl Playback {
     /// A movie's or an episode's stream as kept in the catalog.
     pub fn stored(stream: &str) -> Result<Self> {
-        Url::parse(stream).map(Self::from).map_err(|_| IptvError::BadResponse(format!("not a stream address: {stream}")))
+        Url::parse(stream)
+            .ok()
+            .filter(|u| STREAM_SCHEMES.contains(&u.scheme()))
+            .map(Self::from)
+            .ok_or_else(|| IptvError::BadResponse(format!("not a stream address: {stream}")))
     }
 
     /// The one address mpv opens: `url` itself, or an EDL joining it and its tracks.
