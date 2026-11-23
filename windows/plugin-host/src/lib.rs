@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Media, Playback, Provider, ProviderInfo, Providers, Result, Series};
+use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Media, Movie, Playback, Provider, ProviderInfo, Providers, Result, Series};
 use serde::Serialize;
 use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -253,7 +253,7 @@ impl Provider for WasmProvider {
 
     fn catalog<'a>(&'a self, config: &'a Config) -> BoxFuture<'a, Result<Catalog>> {
         Box::pin(async move {
-            self.call(async |store, guest| guest.call_load_catalog(store, &convert::config(config)).await, |c| Ok(convert::catalog(c))).await
+            self.call(async |store, guest| guest.call_load_catalog(store, &convert::config(config)).await, |c| Ok(convert::catalog(c, self.info.resolves_streams))).await
         })
     }
 
@@ -274,7 +274,26 @@ impl Provider for WasmProvider {
 
     fn episodes<'a>(&'a self, config: &'a Config, series: &'a Series) -> BoxFuture<'a, Result<Vec<Episode>>> {
         Box::pin(async move {
-            self.call(async |store, guest| guest.call_episodes(store, &convert::config(config), &convert::to_wit_series(series)).await, |e| Ok(e.into_iter().filter_map(convert::episode).collect())).await
+            self.call(async |store, guest| guest.call_episodes(store, &convert::config(config), &convert::to_wit_series(series)).await, |e| Ok(e.into_iter().filter_map(|e| convert::episode(e, self.info.resolves_streams)).collect())).await
+        })
+    }
+
+    fn movie_url<'a>(&'a self, config: &'a Config, movie: &'a Movie) -> BoxFuture<'a, Result<Playback>> {
+        Box::pin(async move {
+            if !self.info.resolves_streams {
+                return Playback::stored(&movie.stream);
+            }
+            self.call(async |store, guest| guest.call_movie_url(store, &convert::config(config), &convert::to_wit_movie(movie)).await, convert::playback).await
+        })
+    }
+
+    fn episode_url<'a>(&'a self, config: &'a Config, series: &'a Series, episode: &'a Episode) -> BoxFuture<'a, Result<Playback>> {
+        Box::pin(async move {
+            if !self.info.resolves_streams {
+                return Playback::stored(&episode.stream);
+            }
+            let (series, episode) = (convert::to_wit_series(series), convert::to_wit_episode(episode));
+            self.call(async |store, guest| guest.call_episode_url(store, &convert::config(config), &series, &episode).await, convert::playback).await
         })
     }
 

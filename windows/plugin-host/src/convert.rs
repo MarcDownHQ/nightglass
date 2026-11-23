@@ -67,10 +67,15 @@ fn optional_url(s: Option<String>) -> Option<Url> {
     s.and_then(|s| Url::parse(s.trim()).ok()).filter(|u| matches!(u.scheme(), "http" | "https"))
 }
 
-pub fn catalog(c: wit::Catalog) -> Catalog {
+/// With `resolves_streams`, a movie's or an episode's stream is the plugin's own text, given back at play time.
+fn vod_stream(s: String, resolves: bool) -> Option<String> {
+    if resolves { Some(s) } else { stream(&s).ok().map(String::from) }
+}
+
+pub fn catalog(c: wit::Catalog, resolves: bool) -> Catalog {
     Catalog {
         channels: c.channels.into_iter().filter_map(channel).collect(),
-        movies: c.movies.into_iter().filter_map(movie).collect(),
+        movies: c.movies.into_iter().filter_map(|m| movie(m, resolves)).collect(),
         series: c.series.into_iter().map(series).collect(),
         epg_url: optional_url(c.epg_url),
         account: c.account.map(|a| Account {
@@ -128,20 +133,20 @@ fn channel(c: wit::Channel) -> Option<Channel> {
         logo: optional_url(c.logo),
         epg_id: c.epg_id,
         headers: c.headers.into_iter().collect(),
-        catchup_window: c.catchup_days.map(|days| days * 86_400),
+        catchup_window: c.catchup_window.map(i64::from),
     })
 }
 
-fn movie(m: wit::Movie) -> Option<Movie> {
-    Some(Movie { stream: stream(&m.stream).ok()?.into(), id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
+fn movie(m: wit::Movie, resolves: bool) -> Option<Movie> {
+    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
 }
 
 fn series(s: wit::Series) -> Series {
     Series { id: s.id, name: s.name, group: s.group, poster: optional_url(s.poster), rating: s.rating, plot: s.plot }
 }
 
-pub fn episode(e: wit::Episode) -> Option<Episode> {
-    Some(Episode { stream: stream(&e.stream).ok()?.into(), id: e.id, title: e.title, season: Some(e.season), number: Some(e.number), plot: e.plot, aired: None })
+pub fn episode(e: wit::Episode, resolves: bool) -> Option<Episode> {
+    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {
@@ -154,8 +159,24 @@ pub fn to_wit_channel(c: &Channel) -> wit::Channel {
         epg_id: c.epg_id.clone(),
         stream: c.stream.to_string(),
         headers: c.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-        catchup_days: c.catchup_window.map(|seconds| seconds / 86_400),
+        catchup_window: c.catchup_window.map(|seconds| u32::try_from(seconds.max(0)).unwrap_or(u32::MAX)),
     }
+}
+
+pub fn to_wit_movie(m: &Movie) -> wit::Movie {
+    wit::Movie {
+        id: m.id.clone(),
+        name: m.name.clone(),
+        group: m.group.clone(),
+        poster: m.poster.as_ref().map(Url::to_string),
+        stream: m.stream.clone(),
+        rating: m.rating,
+        plot: m.plot.clone(),
+    }
+}
+
+pub fn to_wit_episode(e: &Episode) -> wit::Episode {
+    wit::Episode { id: e.id.clone(), title: e.title.clone(), season: e.season, number: e.number, stream: e.stream.clone(), plot: e.plot.clone(), aired: e.aired }
 }
 
 pub fn to_wit_series(s: &Series) -> wit::Series {

@@ -1,4 +1,4 @@
-package nightglass:provider@0.2.0;
+package nightglass:provider@0.3.0;
 
 interface types {
     /// A source's settings, keyed by `field.key`. Fields left empty are absent.
@@ -43,7 +43,8 @@ interface types {
         id: string,
         name: string,
         fields: list<field>,
-        /// Channel links are short-lived: `stream-url` is called at play time.
+        /// Links are short-lived: `stream-url`, `movie-url` and `episode-url` are called at play time, and the `stream`
+        /// of a movie or an episode can be any text the plugin reads back there, not only an address.
         resolves-streams: bool,
         presets: list<preset>,
     }
@@ -57,8 +58,8 @@ interface types {
         epg-id: option<string>,
         %stream: string,
         headers: list<tuple<string, string>>,
-        /// Days of replay the server keeps.
-        catchup-days: option<s64>,
+        /// Seconds of past programmes the server can replay.
+        catchup-window: option<u32>,
     }
 
     record movie {
@@ -83,10 +84,13 @@ interface types {
     record episode {
         id: string,
         title: string,
-        season: s64,
-        number: s64,
+        /// Dated broadcasts (news, magazines) have neither season nor number.
+        season: option<s64>,
+        number: option<s64>,
         %stream: string,
         plot: option<string>,
+        /// Unix seconds.
+        aired: option<s64>,
     }
 
     /// A guide entry, matched to channels by `epg-id`. Times are Unix seconds.
@@ -214,7 +218,7 @@ world provider {
     import storage;
     import log;
 
-    use types.{config, provider-info, catalog, channel, series, episode, playback, media, error};
+    use types.{config, provider-info, catalog, channel, movie, series, episode, playback, media, error};
 
     export describe: func() -> provider-info;
     export load-catalog: func(config: config) -> result<catalog, error>;
@@ -222,6 +226,10 @@ world provider {
     export stream-url: func(config: config, channel: channel) -> result<playback, error>;
     export catchup-url: func(config: config, channel: channel, start: s64, end: s64) -> result<playback, error>;
     export episodes: func(config: config, series: series) -> result<list<episode>, error>;
+    /// Only called when `resolves-streams` is set.
+    export movie-url: func(config: config, movie: movie) -> result<playback, error>;
+    /// Only called when `resolves-streams` is set.
+    export episode-url: func(config: config, series: series, episode: episode) -> result<playback, error>;
     /// Only called while the app relays a playback whose `relay.filter` is set: an answer from `url`, changed before
     /// the player gets it.
     export filter: func(config: config, url: string, media: media) -> result<media, error>;
