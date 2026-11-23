@@ -34,6 +34,12 @@ pub struct Movie {
     pub stream: String,
     pub rating: Option<f64>,
     pub plot: Option<String>,
+    /// Seconds.
+    #[serde(default)]
+    pub duration: Option<u32>,
+    /// Unix seconds, for a replay that expires.
+    #[serde(default)]
+    pub available_until: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -58,6 +64,15 @@ pub struct Episode {
     /// Unix seconds.
     #[serde(default)]
     pub aired: Option<i64>,
+    /// Seconds.
+    #[serde(default)]
+    pub duration: Option<u32>,
+    /// A still of this episode; the series' poster stands for the show.
+    #[serde(default)]
+    pub thumbnail: Option<Url>,
+    /// Unix seconds, for a replay that expires.
+    #[serde(default)]
+    pub available_until: Option<i64>,
 }
 
 /// What a player opens for a channel or a replay.

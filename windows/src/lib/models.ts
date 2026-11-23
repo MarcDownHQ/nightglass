@@ -29,6 +29,10 @@ export interface Movie {
   stream: string;
   rating: number | null;
   plot: string | null;
+  /** Seconds. */
+  duration?: number | null;
+  /** Unix seconds, for a replay that expires. */
+  availableUntil?: number | null;
 }
 
 export interface Series {
@@ -50,6 +54,12 @@ export interface Episode {
   plot: string | null;
   /** Unix seconds. */
   aired?: number | null;
+  /** Seconds. */
+  duration?: number | null;
+  /** A still of this episode; the series' poster stands for the show. */
+  thumbnail?: string | null;
+  /** Unix seconds, for a replay that expires. */
+  availableUntil?: number | null;
 }
 
 /** Times are Unix seconds. */

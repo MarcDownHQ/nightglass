@@ -139,7 +139,7 @@ impl Guest for JsonList {
             .into_iter()
             .map(|m| {
                 let stream = serde_json::to_string(&(&m.url, &m.audio)).expect("strings serialize");
-                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None }
+                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None }
             })
             .collect();
         let series = list.series.into_iter().map(|s| Series { id: s.name.clone(), name: s.name, group: None, poster: None, rating: None, plot: None }).collect();
@@ -173,7 +173,7 @@ impl Guest for JsonList {
         let parts = show.map(|s| s.episodes).unwrap_or_default();
         Ok(parts
             .into_iter()
-            .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired })
+            .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired, duration: None, thumbnail: None, available_until: None })
             .collect())
     }
 }

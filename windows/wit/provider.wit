@@ -70,6 +70,10 @@ interface types {
         %stream: string,
         rating: option<f64>,
         plot: option<string>,
+        /// Seconds.
+        duration: option<u32>,
+        /// Unix seconds, for a replay that expires.
+        available-until: option<s64>,
     }
 
     record series {
@@ -91,6 +95,12 @@ interface types {
         plot: option<string>,
         /// Unix seconds.
         aired: option<s64>,
+        /// Seconds.
+        duration: option<u32>,
+        /// A still of this episode, http(s); the series' poster stands for the show.
+        thumbnail: option<string>,
+        /// Unix seconds, for a replay that expires.
+        available-until: option<s64>,
     }
 
     /// A guide entry, matched to channels by `epg-id`. Times are Unix seconds.

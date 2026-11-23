@@ -138,7 +138,7 @@ fn channel(c: wit::Channel) -> Option<Channel> {
 }
 
 fn movie(m: wit::Movie, resolves: bool) -> Option<Movie> {
-    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
+    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot, duration: m.duration, available_until: m.available_until })
 }
 
 fn series(s: wit::Series) -> Series {
@@ -146,7 +146,7 @@ fn series(s: wit::Series) -> Series {
 }
 
 pub fn episode(e: wit::Episode, resolves: bool) -> Option<Episode> {
-    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired })
+    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired, duration: e.duration, thumbnail: optional_url(e.thumbnail), available_until: e.available_until })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {
@@ -172,11 +172,24 @@ pub fn to_wit_movie(m: &Movie) -> wit::Movie {
         stream: m.stream.clone(),
         rating: m.rating,
         plot: m.plot.clone(),
+        duration: m.duration,
+        available_until: m.available_until,
     }
 }
 
 pub fn to_wit_episode(e: &Episode) -> wit::Episode {
-    wit::Episode { id: e.id.clone(), title: e.title.clone(), season: e.season, number: e.number, stream: e.stream.clone(), plot: e.plot.clone(), aired: e.aired }
+    wit::Episode {
+        id: e.id.clone(),
+        title: e.title.clone(),
+        season: e.season,
+        number: e.number,
+        stream: e.stream.clone(),
+        plot: e.plot.clone(),
+        aired: e.aired,
+        duration: e.duration,
+        thumbnail: e.thumbnail.as_ref().map(Url::to_string),
+        available_until: e.available_until,
+    }
 }
 
 pub fn to_wit_series(s: &Series) -> wit::Series {
@@ -243,7 +256,7 @@ mod tests {
     }
 
     fn wit_movie(stream: &str) -> wit::Movie {
-        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None }
+        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None, duration: None, available_until: None }
     }
 
     #[test]
@@ -252,7 +265,7 @@ mod tests {
         assert!(movie(wit_movie("fr-tv:4711"), false).is_none());
         assert!(movie(wit_movie("file:///etc/passwd"), false).is_none());
         assert_eq!(movie(wit_movie("http://s.test/m.mkv"), false).unwrap().stream, "http://s.test/m.mkv");
-        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000) };
+        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000), duration: None, thumbnail: None, available_until: None };
         let e = episode(dated, true).unwrap();
         assert_eq!((e.season, e.number, e.aired, e.stream.as_str()), (None, None, Some(1_795_300_000), "jt-21-11"));
         assert_eq!(to_wit_episode(&e).stream, "jt-21-11");

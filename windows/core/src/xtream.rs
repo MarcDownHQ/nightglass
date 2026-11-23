@@ -132,6 +132,8 @@ impl XtreamClient {
                     stream: self.media("movie", &id, &ext).into(),
                     rating: double(s.get("rating")),
                     plot: str(s.get("plot")),
+                    duration: None,
+                    available_until: None,
                     id: format!("xt-vod-{id}"),
                 })
             })
@@ -197,6 +199,9 @@ impl XtreamClient {
                     stream: self.media("series", &id, &ext).into(),
                     plot: str(e.get("info").and_then(|i| i.get("plot"))),
                     aired: None,
+                    duration: None,
+                    thumbnail: None,
+                    available_until: None,
                     id,
                 })
             })
