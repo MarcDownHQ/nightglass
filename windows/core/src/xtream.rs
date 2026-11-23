@@ -129,7 +129,7 @@ impl XtreamClient {
                     name: str(s.get("name"))?,
                     group: group(&vc, s),
                     poster: url(s.get("stream_icon")),
-                    stream: self.media("movie", &id, &ext),
+                    stream: self.media("movie", &id, &ext).into(),
                     rating: double(s.get("rating")),
                     plot: str(s.get("plot")),
                     id: format!("xt-vod-{id}"),
@@ -194,7 +194,7 @@ impl XtreamClient {
                     title: str(e.get("title")).unwrap_or_else(|| format!("Episode {number}")),
                     season: int(e.get("season")).unwrap_or(1),
                     number,
-                    stream: self.media("series", &id, &ext),
+                    stream: self.media("series", &id, &ext).into(),
                     plot: str(e.get("info").and_then(|i| i.get("plot"))),
                     id,
                 })
@@ -267,7 +267,7 @@ mod tests {
         assert_eq!((ch.name.as_str(), ch.group.as_deref(), ch.epg_id.as_deref(), ch.number), ("Wire 24", Some("News"), Some("wire.fr"), Some(1)));
         assert_eq!(ch.stream.as_str(), format!("{}/live/u/p/42.ts", s.uri()));
         let movie = &cat.movies[0];
-        assert_eq!(movie.stream.as_str(), format!("{}/movie/u/p/7.mkv", s.uri()));
+        assert_eq!(movie.stream, format!("{}/movie/u/p/7.mkv", s.uri()));
         assert_eq!(movie.rating, Some(7.5));
         assert_eq!(movie.poster, None);
         assert!(cat.series.is_empty());

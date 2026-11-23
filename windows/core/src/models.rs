@@ -31,7 +31,7 @@ pub struct Movie {
     pub name: String,
     pub group: Option<String>,
     pub poster: Option<Url>,
-    pub stream: Url,
+    pub stream: String,
     pub rating: Option<f64>,
     pub plot: Option<String>,
 }
@@ -52,7 +52,7 @@ pub struct Episode {
     pub title: String,
     pub season: i64,
     pub number: i64,
-    pub stream: Url,
+    pub stream: String,
     pub plot: Option<String>,
 }
 

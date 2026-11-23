@@ -133,7 +133,7 @@ fn channel(c: wit::Channel) -> Option<Channel> {
 }
 
 fn movie(m: wit::Movie) -> Option<Movie> {
-    Some(Movie { stream: stream(&m.stream).ok()?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
+    Some(Movie { stream: stream(&m.stream).ok()?.into(), id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot })
 }
 
 fn series(s: wit::Series) -> Series {
@@ -141,7 +141,7 @@ fn series(s: wit::Series) -> Series {
 }
 
 pub fn episode(e: wit::Episode) -> Option<Episode> {
-    Some(Episode { stream: stream(&e.stream).ok()?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
+    Some(Episode { stream: stream(&e.stream).ok()?.into(), id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {
