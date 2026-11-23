@@ -26,6 +26,7 @@ pub struct Channel {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Movie {
     pub id: String,
     pub name: String,
@@ -53,6 +54,7 @@ pub struct Series {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Episode {
     pub id: String,
     pub title: String,
@@ -267,6 +269,15 @@ pub type Result<T> = std::result::Result<T, IptvError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn episodes_reach_the_page_in_camel_case() {
+        let episode = Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: Some(1) };
+        let json = serde_json::to_value(&episode).unwrap();
+        assert_eq!(json["availableUntil"], 1);
+        let old: Episode = serde_json::from_str(r#"{"id":"e","title":"S1E1","season":1,"number":1,"stream":"http://s.test/1.mkv","plot":null}"#).unwrap();
+        assert_eq!((old.season, old.aired), (Some(1), None), "an episode kept before 0.3.0 still reads");
+    }
 
     #[test]
     fn reads_sources_saved_by_older_versions() {
