@@ -109,8 +109,10 @@ class Player {
     return videoQualities(this.tracks);
   }
 
+  /** Those that start before the end, once the duration is known: seeking past it would end the film. */
   get chapters(): Chapter[] {
-    return this.current?.chapters ?? [];
+    const all = this.current?.chapters ?? [];
+    return this.duration > 0 ? all.filter((c) => c.start < this.duration) : all;
   }
 
   /** The index of the chapter playing, -1 before the first or without chapters. */
