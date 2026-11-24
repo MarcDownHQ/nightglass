@@ -1,5 +1,6 @@
 import { t } from './i18n.svelte';
 import { epgMatch, prompt } from './dialogs.svelte';
+import { errorText } from './errors';
 import { library, listLabel } from './library.svelte';
 import { categoryKey, categoryLabel } from './lineup';
 import { contextMenu, type MenuEntry } from './menuState.svelte';
@@ -99,6 +100,6 @@ async function copyUrl(item: LiveItem) {
     await navigator.clipboard.writeText(link ?? url);
     player.notify(t('Stream URL copied'));
   } catch (e) {
-    player.notify(t('Copy failed: {error}', { error: String(e) }));
+    player.notify(t('Copy failed: {error}', { error: errorText(e) }));
   }
 }

@@ -12,6 +12,7 @@ import {
   type MovieItem,
   type Playback,
   type Programme,
+  type Prompt,
   type ProviderInfo,
   type SeriesItem,
   type Source,
@@ -19,6 +20,7 @@ import {
 import { options } from './options.svelte';
 import { player, type Playable } from './player.svelte';
 import { withoutOverlaps } from './epg';
+import { errorText, promptOf } from './errors';
 import { prefs } from './prefs';
 
 class Store {
@@ -27,6 +29,8 @@ class Store {
   catalogs = $state.raw<Record<string, Catalog>>({});
   loading = new SvelteSet<string>();
   errors = $state<Record<string, string>>({});
+  /** Sources whose plugin waits for the user (a sign-in on another device), by id. */
+  prompts = $state<Record<string, Prompt>>({});
   /** Why the saved sources could not be read (keyring locked…): until the next launch, saving would replace them. */
   sourcesError = $state<string | null>(null);
   /** Programmes per normalised EPG id, sorted by start. */
@@ -185,10 +189,17 @@ class Store {
     this.loading.add(source.id);
     delete this.errors[source.id];
     try {
-      this.setCatalog(source, await invoke<Catalog>('catalog', { source }));
+      const catalog = await invoke<Catalog>('catalog', { source });
+      delete this.prompts[source.id];
+      this.setCatalog(source, catalog);
       this.refreshed[source.id] = Date.now();
     } catch (e) {
-      this.errors[source.id] = String(e);
+      const prompt = promptOf(e);
+      if (prompt && this.sources.some((s) => s.id === source.id)) this.prompts[source.id] = prompt;
+      else if (!prompt) {
+        delete this.prompts[source.id];
+        this.errors[source.id] = String(e);
+      }
     } finally {
       this.loading.delete(source.id);
     }
@@ -239,6 +250,13 @@ class Store {
     this.setCatalog(source, catalog);
   }
 
+  /** A source whose plugin first waits for the user: its catalog comes once the prompt is answered. */
+  addWaiting(source: Source, prompt: Prompt) {
+    this.sources = [...this.sources, source];
+    void this.save();
+    this.prompts[source.id] = prompt;
+  }
+
   /** From a settings file: same ids replace, others are added; then everything reloads. */
   async importSources(list: Source[]) {
     const ids = new Set(list.map((s) => s.id));
@@ -250,6 +268,7 @@ class Store {
     this.sources = this.sources.filter((s) => s.id !== source.id);
     const { [source.id]: _, ...rest } = this.catalogs;
     this.catalogs = rest;
+    delete this.prompts[source.id];
     if (this.activeSource === source.id) this.setActive(null);
     if (player.current?.item?.source.id === source.id) player.stop();
     void invoke('cache_drop', { id: source.id });
@@ -323,7 +342,7 @@ class Store {
       });
       void player.expand();
     } catch (e) {
-      player.notify(t('Replay unavailable: {error}', { error: String(e) }));
+      this.unavailable(e, (error) => t('Replay unavailable: {error}', { error }));
     }
   }
 
@@ -349,9 +368,15 @@ class Store {
       const playback = await ask();
       return this.stillWanted(request, playing) ? playback : null;
     } catch (e) {
-      if (this.stillWanted(request, playing)) player.notify(t('Playback unavailable: {error}', { error: String(e) }));
+      if (this.stillWanted(request, playing)) this.unavailable(e, (error) => t('Playback unavailable: {error}', { error }));
       return null;
     }
+  }
+
+  /** Why a film, an episode or a replay can't play; a plugin waiting for the user says what to do, long enough to read the code. */
+  private unavailable(e: unknown, said: (error: string) => string) {
+    if (promptOf(e)) player.notify(errorText(e), 15_000);
+    else player.notify(said(String(e)));
   }
 
   /** From where it was left, unless `fromStart`. */
@@ -447,7 +472,8 @@ class Store {
     try {
       player.play(await this.playable(item));
     } catch (e) {
-      player.error = String(e);
+      if (promptOf(e)) player.notify(errorText(e), 15_000);
+      else player.error = String(e);
     }
   }
 }

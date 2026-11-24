@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { errorText } from './errors';
 import type { LiveItem } from './models';
 import { player } from './player.svelte';
 import { store } from './store.svelte';
@@ -88,7 +89,7 @@ class MultiView {
       const p = await store.playable(item);
       await invoke('tile_play', { index, url: p.url, headers: p.headers ?? {}, rect, muted: index !== this.active });
     } catch (e) {
-      this.tiles[index] = { item, loading: false, error: String(e) };
+      this.tiles[index] = { item, loading: false, error: errorText(e) };
     }
   }
 

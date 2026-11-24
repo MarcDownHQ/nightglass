@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, Movie, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, chapters_in_order, xmltv};
+use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, IptvError, Movie, Playback, Programme, Prompt, Provider, ProviderInfo, Providers, RelayServer, Series, Source, chapters_in_order, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -170,10 +170,33 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
     sources::save(&sources::file(&app)?, &sources)
 }
 
+/// A command's error as the page gets it: a message, or `{ prompt }` when a plugin waits for the user.
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+enum Failure {
+    Message(String),
+    ActionRequired { prompt: Box<Prompt> },
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure::Message(message)
+    }
+}
+
+impl From<IptvError> for Failure {
+    fn from(e: IptvError) -> Self {
+        match e {
+            IptvError::ActionRequired(prompt) => Failure::ActionRequired { prompt },
+            e => Failure::Message(e.to_string()),
+        }
+    }
+}
+
 // shortcut: whole catalogs cross the IPC bridge as JSON; page them from Rust if a provider's tens of thousands of entries get slow.
 #[tauri::command]
-async fn catalog(app: AppHandle, registry: State<'_, Registry>, source: Source) -> Result<Catalog, String> {
-    let catalog = registry.get(&source.provider).await?.catalog(&source.config).await.map_err(|e| e.to_string())?;
+async fn catalog(app: AppHandle, registry: State<'_, Registry>, source: Source) -> Result<Catalog, Failure> {
+    let catalog = registry.get(&source.provider).await?.catalog(&source.config).await?;
     let (id, copy) = (source.id.to_string(), catalog.clone());
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(e) = cache::write(&app, "catalog", &id, &copy) {
@@ -218,10 +241,10 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, String> {
+async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
-    let playback = provider.stream_url(&source.config, &channel).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &channel.headers, playback).await
+    let playback = provider.stream_url(&source.config, &channel).await?;
+    Ok(playable(&relay, provider, source, &channel.headers, playback).await?)
 }
 
 /// What mpv opens: one address, the playback's tracks joined into it. `link` is the stream's own address, to copy.
@@ -250,17 +273,17 @@ async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Sour
 }
 
 #[tauri::command]
-async fn movie_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, movie: Movie) -> Result<PlayerInput, String> {
+async fn movie_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, movie: Movie) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
-    let playback = provider.movie_url(&source.config, &movie).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &HashMap::new(), playback).await
+    let playback = provider.movie_url(&source.config, &movie).await?;
+    Ok(playable(&relay, provider, source, &HashMap::new(), playback).await?)
 }
 
 #[tauri::command]
-async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, series: Series, episode: Episode) -> Result<PlayerInput, String> {
+async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, series: Series, episode: Episode) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
-    let playback = provider.episode_url(&source.config, &series, &episode).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &HashMap::new(), playback).await
+    let playback = provider.episode_url(&source.config, &series, &episode).await?;
+    Ok(playable(&relay, provider, source, &HashMap::new(), playback).await?)
 }
 
 /// A series' episodes, asked for when its page opens.
@@ -314,10 +337,27 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, String> {
+async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
-    let playback = provider.catchup_url(&source.config, &channel, start, end).await.map_err(|e| e.to_string())?;
-    playable(&relay, provider, source, &channel.headers, playback).await
+    let playback = provider.catchup_url(&source.config, &channel, start, end).await?;
+    Ok(playable(&relay, provider, source, &channel.headers, playback).await?)
+}
+
+/// A link a plugin gave, in the system browser: http(s) only.
+#[tauri::command]
+fn open_link(url: Url) -> Result<(), String> {
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(format!("not a web address: {url}"));
+    }
+    #[cfg(windows)]
+    let (program, before) = ("rundll32", Some("url.dll,FileProtocolHandler"));
+    #[cfg(target_os = "macos")]
+    let (program, before) = ("open", None::<&str>);
+    #[cfg(target_os = "linux")]
+    let (program, before) = ("xdg-open", None::<&str>);
+    let mut child = std::process::Command::new(program).args(before).arg(url.as_str()).spawn().map_err(|e| e.to_string())?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
 }
 
 /// Where a recording goes: `Videos\Nightglass\<name>.ts`, the folder made if needed.
@@ -455,6 +495,7 @@ pub fn run() {
             tiles::tile_close,
             tiles::tiles_mode,
             parse_location,
+            open_link,
             automation
         ])
         .run(tauri::generate_context!())

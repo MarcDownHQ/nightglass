@@ -97,6 +97,11 @@ export const FR: Record<string, string> = {
   'Take “{name}” out of the PIN': 'Retirer « {name} » de la protection',
   'Stream URL copied': 'URL du flux copiée',
   'Copy failed: {error}': 'Copie impossible : {error}',
+  'Code copied': 'Code copié',
+  'Copy the code': 'Copier le code',
+  'Open in the browser': 'Ouvrir dans le navigateur',
+  '{message} · code {code}': '{message} · code {code}',
+  'Added · waiting for you: see the list of sources': 'Ajoutée · en attente de votre part : voir la liste des sources',
   'Feed failed: trying {name}': 'Flux en panne : essai de {name}',
 
   // Guide

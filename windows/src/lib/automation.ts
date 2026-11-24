@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { errorText, promptOf } from './errors';
 import type { Catalog, Source } from './models';
 import { nav, type Section } from './nav.svelte';
 import { player } from './player.svelte';
@@ -24,7 +25,9 @@ export async function runAutomation() {
         store.add(source, await invoke<Catalog>('catalog', { source }));
         log(`seeded ${source.name}`);
       } catch (e) {
-        log(`seed ${source.name} failed: ${e}`);
+        const prompt = promptOf(e);
+        if (prompt) store.addWaiting(source, prompt);
+        log(`seed ${source.name} failed: ${errorText(e)}`);
       }
     }
   }

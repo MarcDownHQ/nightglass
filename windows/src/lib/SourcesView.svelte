@@ -3,6 +3,7 @@
   import AddSource from './AddSource.svelte';
   import HudPanel from './HudPanel.svelte';
   import Plugins from './Plugins.svelte';
+  import SignInPrompt from './SignInPrompt.svelte';
   import type { Source } from './models';
   import { store } from './store.svelte';
   import Tag from './Tag.svelte';
@@ -57,7 +58,9 @@
           <span class="kind"><Tag text={kind} color={neon(kind)} /></span>
           <div class="text">
             <b>{s.name}</b>
-            {#if store.loading.has(s.id)}
+            {#if store.prompts[s.id]}
+              <SignInPrompt source={s} prompt={store.prompts[s.id]} />
+            {:else if store.loading.has(s.id)}
               <small class="busy">{t('Loading…')}</small>
             {:else if store.errors[s.id]}
               <small class="error" title={store.errors[s.id]}>{friendly(store.errors[s.id])}</small>
