@@ -288,8 +288,8 @@ async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer
 
 /// A series' episodes, asked for when its page opens.
 #[tauri::command]
-async fn episodes(registry: State<'_, Registry>, source: Source, series: Series) -> Result<Vec<Episode>, String> {
-    registry.get(&source.provider).await?.episodes(&source.config, &series).await.map_err(|e| e.to_string())
+async fn episodes(registry: State<'_, Registry>, source: Source, series: Series) -> Result<Vec<Episode>, Failure> {
+    Ok(registry.get(&source.provider).await?.episodes(&source.config, &series).await?)
 }
 
 /// Programmes from 3 days ago (for replay) to 24 h ahead, grouped by `xmltv::epg_key` and sorted. Only `keys` are kept when given.

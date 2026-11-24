@@ -405,7 +405,7 @@ class Store {
       try {
         episodes = await this.episodes(item);
       } catch (err) {
-        console.warn(`episodes ${item.series.name}: ${err}`);
+        console.warn(`episodes ${item.series.name}: ${errorText(err)}`);
       }
     }
     const id = episodeKey(item.id, e);

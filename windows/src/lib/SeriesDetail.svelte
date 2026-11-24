@@ -3,6 +3,7 @@
   import { fade } from 'svelte/transition';
   import { contextMenu } from './menuState.svelte';
   import HudPanel from './HudPanel.svelte';
+  import { errorText } from './errors';
   import { episodeKey, episodeLabel, library } from './library.svelte';
   import type { Episode, SeriesItem } from './models';
   import { nav } from './nav.svelte';
@@ -33,7 +34,7 @@
         episodes = list;
         season = list.map((e) => e.season).sort(bySeason)[0] ?? null;
       })
-      .catch((e) => (error = String(e)))
+      .catch((e) => (error = errorText(e)))
       .finally(() => (loading = false));
   });
 
