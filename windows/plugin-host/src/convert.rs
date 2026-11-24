@@ -202,6 +202,9 @@ pub fn to_wit_series(s: &Series) -> wit::Series {
     }
 }
 
+/// How often a shown sign-in prompt is asked again, in seconds: never in a tight loop, never past the browser's timer range.
+const RETRY_IN: (u32, u32) = (2, 3600);
+
 pub fn from_wit_error(e: wit::Error) -> IptvError {
     match e {
         wit::Error::Http(status) => IptvError::Http(status),
@@ -209,7 +212,7 @@ pub fn from_wit_error(e: wit::Error) -> IptvError {
         wit::Error::BadResponse(m) => IptvError::BadResponse(m),
         wit::Error::Network(m) => IptvError::Network(m),
         wit::Error::Setting(m) => IptvError::Setting(m),
-        wit::Error::ActionRequired(p) => IptvError::ActionRequired(Box::new(Prompt { message: p.message, url: optional_url(p.url), code: p.code, retry_in: p.retry_in })),
+        wit::Error::ActionRequired(p) => IptvError::ActionRequired(Box::new(Prompt { message: p.message, url: optional_url(p.url), code: p.code, retry_in: p.retry_in.map(|seconds| seconds.clamp(RETRY_IN.0, RETRY_IN.1)) })),
     }
 }
 

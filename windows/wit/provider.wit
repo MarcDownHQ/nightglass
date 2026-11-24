@@ -196,7 +196,7 @@ interface types {
         /// The named setting is missing or invalid.
         setting(string),
         /// The user must do something outside the app (e.g. open `url` and enter `code`). The app shows the prompt and
-        /// asks again after `retry-in` seconds while it is shown, or when the user presses Retry.
+        /// asks again after `retry-in` seconds (kept between 2 and 3600) while it is shown, or when the user presses Retry.
         action-required(prompt),
     }
 }
