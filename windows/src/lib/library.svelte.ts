@@ -86,6 +86,8 @@ class Library {
   audioLang = $state<string | null>(prefs.json('audioLang', null));
   subLang = $state<string | null>(prefs.json('subLang', null));
   subOff = $state<boolean>(prefs.json('subOff', false));
+  /** Height of the video track last picked, chosen again on the next file that has one. */
+  videoHeight = $state<number | null>(prefs.json('videoHeight', null));
 
   private lastSaved = 0;
 
@@ -262,6 +264,11 @@ class Library {
   setAudioLang(lang: string | null) {
     this.audioLang = lang;
     prefs.setJson('audioLang', lang);
+  }
+
+  setVideoHeight(height: number) {
+    this.videoHeight = height;
+    prefs.setJson('videoHeight', height);
   }
 
   setSubtitles(lang: string | null, off: boolean) {

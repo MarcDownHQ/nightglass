@@ -147,6 +147,7 @@ export const FR: Record<string, string> = {
   Off: 'Désactivés',
   'Track {n}': 'Piste {n}',
   Chapters: 'Chapitres',
+  Quality: 'Qualité',
   Volume: 'Volume',
   'Volume {n}%': 'Volume {n} %',
   Muted: 'Son coupé',

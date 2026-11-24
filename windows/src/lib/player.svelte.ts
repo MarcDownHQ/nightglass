@@ -5,7 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { library } from './library.svelte';
 import { chapterAt, nextChapter, previousChapter } from './chapters';
 import type { Chapter, LiveItem } from './models';
-import type { Track } from './tracks';
+import { videoQualities, type Track } from './tracks';
 import { hole } from './video.svelte';
 
 /** What the player is showing. */
@@ -64,6 +64,8 @@ class Player {
   osd = $state<string | null>(null);
   private osdTimer: ReturnType<typeof setTimeout> | undefined;
   private started = false;
+  /** The preferred video height was looked for in this file's tracks, or a track was picked by hand. */
+  private qualityChosen = false;
   private retunes = 0;
   /** Live TV dropped and is being tuned again: the attempt number, 0 otherwise. */
   reconnecting = $state(0);
@@ -101,6 +103,10 @@ class Player {
 
   get subtitleTracks() {
     return this.tracks.filter((t) => t.type === 'sub');
+  }
+
+  get videoTracks() {
+    return videoQualities(this.tracks);
   }
 
   get chapters(): Chapter[] {
@@ -153,6 +159,7 @@ class Player {
     this.error = null;
     this.loading = true;
     this.started = false;
+    this.qualityChosen = false;
     this.time = 0;
     this.cacheTime = 0;
     this.cacheStart = 0;
@@ -332,14 +339,28 @@ class Player {
     void invoke('mpv_command', { args: ['seek', String(seconds), 'absolute'] });
   }
 
-  /** The language of the track picked becomes the preferred one, for every next file. */
-  selectTrack(type: 'audio' | 'sub', id: number | 'no') {
-    void invoke('mpv_set', { name: type === 'audio' ? 'aid' : 'sid', value: String(id) });
+  /** The language of the track picked becomes the preferred one, for every next file; for a video, its height. */
+  selectTrack(type: 'video' | 'audio' | 'sub', id: number | 'no') {
+    void invoke('mpv_set', { name: { video: 'vid', audio: 'aid', sub: 'sid' }[type], value: String(id) });
+    if (type === 'video') {
+      this.qualityChosen = true;
+      const height = this.tracks.find((t) => t.type === 'video' && t.id === id)?.['demux-h'];
+      if (height) library.setVideoHeight(height);
+      return;
+    }
     const lang = id === 'no' ? null : (this.tracks.find((t) => t.type === type && t.id === id)?.lang ?? null);
     if (type === 'audio') {
       if (lang) library.setAudioLang(lang);
     } else library.setSubtitles(lang ?? library.subLang, id === 'no');
     void this.applyLanguages();
+  }
+
+  private applyQuality() {
+    const height = library.videoHeight;
+    const track = height ? videoQualities(this.tracks).find((t) => t['demux-h'] === height) : undefined;
+    if (this.qualityChosen || !track) return;
+    this.qualityChosen = true;
+    if (!track.selected) void invoke('mpv_set', { name: 'vid', value: String(track.id) });
   }
 
   private async applyLanguages() {
@@ -450,6 +471,7 @@ class Player {
         break;
       case 'track-list':
         this.tracks = Array.isArray(value) ? (value as Track[]) : [];
+        this.applyQuality();
         break;
     }
   }
