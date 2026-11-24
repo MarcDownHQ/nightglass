@@ -341,6 +341,16 @@ mod tests {
     }
 
     #[test]
+    fn prompts_are_asked_again_neither_in_a_tight_loop_nor_past_the_timer_range() {
+        let retry = |seconds| {
+            let prompt = wit::Prompt { message: "Sign in".into(), url: None, code: None, retry_in: seconds };
+            let IptvError::ActionRequired(prompt) = from_wit_error(wit::Error::ActionRequired(prompt)) else { panic!("not a prompt") };
+            prompt.retry_in
+        };
+        assert_eq!([retry(Some(0)), retry(Some(1)), retry(Some(30)), retry(Some(u32::MAX)), retry(None)], [Some(2), Some(2), Some(30), Some(3600), None]);
+    }
+
+    #[test]
     fn tracks_are_checked_like_the_stream() {
         let tracks = playback(with_track("https://s.test/fr.m4a", None)).unwrap().tracks;
         assert_eq!((tracks[0].url.as_str(), tracks[0].language.as_deref(), tracks[0].title.as_deref()), ("https://s.test/fr.m4a", Some("fr"), Some("Français")));

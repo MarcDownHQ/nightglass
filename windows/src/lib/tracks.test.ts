@@ -11,6 +11,7 @@ describe('quality', () => {
     expect(qualityLabel(video(1, { 'demux-h': 480 }))).toBe('480p');
     expect(qualityLabel(video(1, { codec: 'av1' }))).toBe('AV1');
     expect(qualityLabel(video(1, {}))).toBe('');
+    expect(qualityLabel(video(1, { 'demux-h': 720, codec: 'h264', 'hls-bitrate': 2_495_000 }))).toBe('720p H264 2.5 Mb/s');
   });
 
   it('lists the video tracks highest first, without cover art', () => {
@@ -23,5 +24,10 @@ describe('quality', () => {
       video(5, {}),
     ];
     expect(videoQualities(tracks).map((t) => t.id)).toEqual([3, 2, 1, 5]);
+  });
+
+  it('puts the richer of two HLS variants of the same height first', () => {
+    const tracks = [video(1, { 'demux-h': 720, 'hls-bitrate': 1_200_000 }), video(2, { 'demux-h': 720, 'hls-bitrate': 2_500_000 })];
+    expect(videoQualities(tracks).map((t) => t.id)).toEqual([2, 1]);
   });
 });
