@@ -319,6 +319,25 @@ mod tests {
     }
 
     #[test]
+    fn chapters_carried_through() {
+        let mut p = with_track("https://s.test/fr.m4a", None);
+        p.chapters = vec![wit::Chapter { start: 600.5, title: "Two".into() }, wit::Chapter { start: 0.0, title: "One".into() }];
+        let chapters = playback(p).unwrap().chapters;
+        assert_eq!(chapters, [Chapter { start: 600.5, title: "Two".into() }, Chapter { start: 0.0, title: "One".into() }], "as given: the app sorts them");
+    }
+
+    #[test]
+    fn prompts_round_trip() {
+        let wit_prompt = |url: &str| wit::Prompt { message: "Sign in".into(), url: Some(url.into()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) };
+        let IptvError::ActionRequired(prompt) = from_wit_error(wit::Error::ActionRequired(wit_prompt("https://tv.test/activate"))) else { panic!("not a prompt") };
+        assert_eq!(*prompt, Prompt { message: "Sign in".into(), url: Some(Url::parse("https://tv.test/activate").unwrap()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) });
+        let wit::Error::ActionRequired(back) = to_wit_error(IptvError::ActionRequired(prompt)) else { panic!("not a prompt") };
+        assert_eq!((back.message.as_str(), back.url.as_deref(), back.code.as_deref(), back.retry_in), ("Sign in", Some("https://tv.test/activate"), Some("WDJB-MJHT"), Some(5)));
+        let IptvError::ActionRequired(local) = from_wit_error(wit::Error::ActionRequired(wit_prompt("file:///etc/passwd"))) else { panic!("not a prompt") };
+        assert_eq!((local.url, local.code.as_deref()), (None, Some("WDJB-MJHT")), "the app opens the link: http(s) only");
+    }
+
+    #[test]
     fn tracks_are_checked_like_the_stream() {
         let tracks = playback(with_track("https://s.test/fr.m4a", None)).unwrap().tracks;
         assert_eq!((tracks[0].url.as_str(), tracks[0].language.as_deref(), tracks[0].title.as_deref()), ("https://s.test/fr.m4a", Some("fr"), Some("Français")));

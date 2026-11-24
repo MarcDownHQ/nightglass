@@ -501,3 +501,16 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running Nightglass");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_prompt_reaches_the_page_as_an_object_other_errors_as_text() {
+        let prompt = Prompt { message: "Sign in".into(), url: None, code: Some("WDJB-MJHT".into()), retry_in: Some(5) };
+        let json = serde_json::to_value(Failure::from(IptvError::ActionRequired(Box::new(prompt)))).unwrap();
+        assert_eq!(json, serde_json::json!({"prompt": {"message": "Sign in", "url": null, "code": "WDJB-MJHT", "retryIn": 5}}));
+        assert_eq!(serde_json::to_value(Failure::from(IptvError::AuthFailed)).unwrap(), "The server refused the credentials.");
+    }
+}

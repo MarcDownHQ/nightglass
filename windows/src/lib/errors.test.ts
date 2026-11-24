@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { friendly } from './errors';
+import { errorText, friendly, promptOf } from './errors';
 import { i18n } from './i18n.svelte';
 
 describe('friendly', () => {
@@ -31,5 +31,23 @@ describe('friendly', () => {
 
   it('passes unknown messages through', () => {
     expect(friendly('Something else')).toBe('Something else');
+  });
+});
+
+describe('prompts', () => {
+  beforeAll(() => i18n.set('en'));
+  const prompt = { message: 'Sign in on another device', url: 'https://tv.test/activate', code: 'WDJB-MJHT', retryIn: 5 };
+
+  it('tells a plugin waiting for the user from an error', () => {
+    expect(promptOf({ prompt })).toEqual(prompt);
+    expect(promptOf('The server answered 403.')).toBeNull();
+    expect(promptOf(null)).toBeNull();
+    expect(promptOf(new Error('boom'))).toBeNull();
+  });
+
+  it('says a prompt with its code, and other errors as they are', () => {
+    expect(errorText({ prompt })).toBe('Sign in on another device · code WDJB-MJHT');
+    expect(errorText({ prompt: { ...prompt, code: null } })).toBe('Sign in on another device');
+    expect(errorText('The server answered 403.')).toBe('The server answered 403.');
   });
 });

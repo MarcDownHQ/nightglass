@@ -318,6 +318,35 @@ mod tests {
         assert_eq!(again, source);
     }
 
+    #[test]
+    fn prompts_reach_the_page_in_camel_case() {
+        let prompt = Prompt { message: "Sign in".into(), url: Some(Url::parse("https://tv.test/activate").unwrap()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) };
+        let json = serde_json::to_value(&prompt).unwrap();
+        assert_eq!(json, serde_json::json!({"message": "Sign in", "url": "https://tv.test/activate", "code": "WDJB-MJHT", "retryIn": 5}));
+        assert_eq!(serde_json::from_value::<Prompt>(json).unwrap(), prompt);
+        assert_eq!(IptvError::ActionRequired(Box::new(prompt)).to_string(), "Sign in");
+    }
+
+    #[test]
+    fn chapters_are_kept_only_when_there_are_some() {
+        let mut playback = Playback::from(Url::parse("http://s.test/film.mkv").unwrap());
+        assert!(serde_json::to_value(&playback).unwrap().get("chapters").is_none());
+        playback.chapters = vec![Chapter { start: 90.5, title: "Two".into() }];
+        let json = serde_json::to_value(&playback).unwrap();
+        assert_eq!(json["chapters"], serde_json::json!([{"start": 90.5, "title": "Two"}]));
+        assert_eq!(serde_json::from_value::<Playback>(json).unwrap(), playback);
+        let old: Playback = serde_json::from_str(r#"{"url":"http://s.test/film.mkv","headers":{}}"#).unwrap();
+        assert!(old.chapters.is_empty(), "a playback kept before 0.4.0 still reads");
+    }
+
+    #[test]
+    fn chapters_in_order_without_the_unusable() {
+        let chapter = |start: f64, title: &str| Chapter { start, title: title.into() };
+        let given = vec![chapter(600.0, "Three"), chapter(f64::NAN, "Lost"), chapter(0.0, "One"), chapter(120.0, " "), chapter(-4.0, "Before"), chapter(f64::INFINITY, "Never"), chapter(300.0, "Two")];
+        let kept: Vec<_> = chapters_in_order(given).into_iter().map(|c| (c.start, c.title)).collect();
+        assert_eq!(kept, [(0.0, "Before".to_string()), (0.0, "One".into()), (300.0, "Two".into()), (600.0, "Three".into())]);
+    }
+
     fn track(url: &str, language: Option<&str>, title: Option<&str>) -> Track {
         Track { url: Url::parse(url).unwrap(), language: language.map(Into::into), title: title.map(Into::into) }
     }
