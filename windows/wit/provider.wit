@@ -1,4 +1,4 @@
-package nightglass:provider@0.3.0;
+package nightglass:provider@0.4.0;
 
 interface types {
     /// A source's settings, keyed by `field.key`. Fields left empty are absent.
@@ -151,6 +151,13 @@ interface types {
         title: option<string>,
     }
 
+    /// A chapter of a movie or an episode: the seek bar marks it and the player can jump to it.
+    record chapter {
+        /// Seconds from the start.
+        start: f64,
+        title: string,
+    }
+
     /// What the player opens.
     record playback {
         url: string,
@@ -159,12 +166,25 @@ interface types {
         relay: option<relay>,
         /// Played alongside `url`, with the same headers and relay, in order of preference.
         tracks: list<track>,
+        /// In any order; those without a title are left out.
+        chapters: list<chapter>,
     }
 
     /// A playlist, segment or key on its way to the player.
     record media {
         content-type: option<string>,
         body: list<u8>,
+    }
+
+    /// Something the user must do outside the app before the plugin can go on: open `url` and enter `code` there, for
+    /// instance to sign in on another device.
+    record prompt {
+        message: string,
+        /// http(s); the app opens it in the system browser.
+        url: option<string>,
+        code: option<string>,
+        /// Seconds before the app asks again, while it shows the prompt.
+        retry-in: option<u32>,
     }
 
     variant error {
@@ -175,6 +195,9 @@ interface types {
         network(string),
         /// The named setting is missing or invalid.
         setting(string),
+        /// The user must do something outside the app (e.g. open `url` and enter `code`). The app shows the prompt and
+        /// asks again after `retry-in` seconds (kept between 2 and 3600) while it is shown, or when the user presses Retry.
+        action-required(prompt),
     }
 }
 

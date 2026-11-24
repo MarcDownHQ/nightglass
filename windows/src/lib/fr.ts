@@ -97,6 +97,11 @@ export const FR: Record<string, string> = {
   'Take “{name}” out of the PIN': 'Retirer « {name} » de la protection',
   'Stream URL copied': 'URL du flux copiée',
   'Copy failed: {error}': 'Copie impossible : {error}',
+  'Code copied': 'Code copié',
+  'Copy the code': 'Copier le code',
+  'Open in the browser': 'Ouvrir dans le navigateur',
+  'code {code}': 'code {code}',
+  'Added · waiting for you: see the list of sources': 'Ajoutée · en attente de votre part : voir la liste des sources',
   'Feed failed: trying {name}': 'Flux en panne : essai de {name}',
 
   // Guide
@@ -146,6 +151,8 @@ export const FR: Record<string, string> = {
   Subtitles: 'Sous-titres',
   Off: 'Désactivés',
   'Track {n}': 'Piste {n}',
+  Chapters: 'Chapitres',
+  Quality: 'Qualité',
   Volume: 'Volume',
   'Volume {n}%': 'Volume {n} %',
   Muted: 'Son coupé',
@@ -351,6 +358,7 @@ export const FR: Record<string, string> = {
   'This help': 'Cette aide',
   'Previous, next channel': 'Chaîne précédente, suivante',
   'Previous, next tab': 'Onglet précédent, suivant',
+  'Previous, next chapter': 'Chapitre précédent, suivant',
   'Channel number (in a favourites tab: its position)': 'Numéro de chaîne (dans un onglet de favoris : sa position)',
   Fullscreen: 'Plein écran',
   Favourite: 'Favori',

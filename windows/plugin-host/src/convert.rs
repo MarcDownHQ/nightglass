@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
+use nightglass_core::{Account, Browser, Catalog, Channel, Chapter, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, Prompt, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -110,7 +110,8 @@ pub fn playback(p: wit::Playback) -> Result<Playback> {
         Ok(url)
     };
     let tracks = p.tracks.iter().map(|t| Ok(Track { url: url(&t.url)?, language: t.language.clone(), title: t.title.clone() })).collect::<Result<_>>()?;
-    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks })
+    let chapters = p.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
+    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks, chapters })
 }
 
 pub fn to_wit_media(m: Media) -> wit::Media {
@@ -201,6 +202,9 @@ pub fn to_wit_series(s: &Series) -> wit::Series {
     }
 }
 
+/// How often a shown sign-in prompt is asked again, in seconds: never in a tight loop, never past the browser's timer range.
+const RETRY_IN: (u32, u32) = (2, 3600);
+
 pub fn from_wit_error(e: wit::Error) -> IptvError {
     match e {
         wit::Error::Http(status) => IptvError::Http(status),
@@ -208,6 +212,7 @@ pub fn from_wit_error(e: wit::Error) -> IptvError {
         wit::Error::BadResponse(m) => IptvError::BadResponse(m),
         wit::Error::Network(m) => IptvError::Network(m),
         wit::Error::Setting(m) => IptvError::Setting(m),
+        wit::Error::ActionRequired(p) => IptvError::ActionRequired(Box::new(Prompt { message: p.message, url: optional_url(p.url), code: p.code, retry_in: p.retry_in.map(|seconds| seconds.clamp(RETRY_IN.0, RETRY_IN.1)) })),
     }
 }
 
@@ -217,6 +222,7 @@ pub fn to_wit_error(e: IptvError) -> wit::Error {
         IptvError::AuthFailed => wit::Error::AuthFailed,
         IptvError::BadResponse(m) => wit::Error::BadResponse(m),
         IptvError::Setting(m) => wit::Error::Setting(m),
+        IptvError::ActionRequired(p) => wit::Error::ActionRequired(wit::Prompt { message: p.message, url: p.url.map(String::from), code: p.code, retry_in: p.retry_in }),
         other => wit::Error::Network(other.to_string()),
     }
 }
@@ -250,7 +256,7 @@ mod tests {
 
     fn with_track(url: &str, relay: Option<wit::Relay>) -> wit::Playback {
         let track = wit::Track { url: url.into(), language: Some("fr".into()), title: Some("Français".into()) };
-        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track] }
+        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track], chapters: Vec::new() }
     }
 
     fn wit_movie(stream: &str) -> wit::Movie {
@@ -313,6 +319,35 @@ mod tests {
         assert_eq!(to_wit_channel(&c).catchup_window, Some(4 * 3600));
         c.catchup_window = Some(i64::MAX);
         assert_eq!(to_wit_channel(&c).catchup_window, Some(u32::MAX));
+    }
+
+    #[test]
+    fn chapters_carried_through() {
+        let mut p = with_track("https://s.test/fr.m4a", None);
+        p.chapters = vec![wit::Chapter { start: 600.5, title: "Two".into() }, wit::Chapter { start: 0.0, title: "One".into() }];
+        let chapters = playback(p).unwrap().chapters;
+        assert_eq!(chapters, [Chapter { start: 600.5, title: "Two".into() }, Chapter { start: 0.0, title: "One".into() }], "as given: the app sorts them");
+    }
+
+    #[test]
+    fn prompts_round_trip() {
+        let wit_prompt = |url: &str| wit::Prompt { message: "Sign in".into(), url: Some(url.into()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) };
+        let IptvError::ActionRequired(prompt) = from_wit_error(wit::Error::ActionRequired(wit_prompt("https://tv.test/activate"))) else { panic!("not a prompt") };
+        assert_eq!(*prompt, Prompt { message: "Sign in".into(), url: Some(Url::parse("https://tv.test/activate").unwrap()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) });
+        let wit::Error::ActionRequired(back) = to_wit_error(IptvError::ActionRequired(prompt)) else { panic!("not a prompt") };
+        assert_eq!((back.message.as_str(), back.url.as_deref(), back.code.as_deref(), back.retry_in), ("Sign in", Some("https://tv.test/activate"), Some("WDJB-MJHT"), Some(5)));
+        let IptvError::ActionRequired(local) = from_wit_error(wit::Error::ActionRequired(wit_prompt("file:///etc/passwd"))) else { panic!("not a prompt") };
+        assert_eq!((local.url, local.code.as_deref()), (None, Some("WDJB-MJHT")), "the app opens the link: http(s) only");
+    }
+
+    #[test]
+    fn prompts_are_asked_again_neither_in_a_tight_loop_nor_past_the_timer_range() {
+        let retry = |seconds| {
+            let prompt = wit::Prompt { message: "Sign in".into(), url: None, code: None, retry_in: seconds };
+            let IptvError::ActionRequired(prompt) = from_wit_error(wit::Error::ActionRequired(prompt)) else { panic!("not a prompt") };
+            prompt.retry_in
+        };
+        assert_eq!([retry(Some(0)), retry(Some(1)), retry(Some(30)), retry(Some(u32::MAX)), retry(None)], [Some(2), Some(2), Some(30), Some(3600), None]);
     }
 
     #[test]

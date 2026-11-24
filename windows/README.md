@@ -8,7 +8,7 @@ Les deux plateformes ont les mêmes fonctions :
 
 - sources M3U (URL ou fichier local), Xtream Codes et Stalker, chiffrées sur le disque, et d'autres types par des plugins WebAssembly ;
 - écrans **Live** (liste, aperçu, now / next), **Guide** (grille sur 3 h, paginée), **Movies** et **Series** (affiches, saisons, épisodes), **Search** (Ctrl+K) et **Sources** ;
-- lecteur plein écran : pistes audio et sous-titres, avance / retour pour les films, zapping en direct ;
+- lecteur plein écran : pistes audio et sous-titres, qualité quand le flux a plusieurs pistes vidéo, chapitres, avance / retour pour les films, zapping en direct ;
 - installeur NSIS avec les licences de libmpv, FFmpeg et des crates Rust ;
 - mises à jour signées, proposées dans l'app.
 
@@ -19,7 +19,7 @@ En plus de la version macOS :
 - onglets **Recent** (10 dernières chaînes) et **Hidden** dans Live ;
 - **clic droit** sur une chaîne : favori, voir dans le guide, copier l'URL du flux, masquer la chaîne ou sa catégorie (clic droit sur un onglet pour masquer une catégorie) ;
 - films et épisodes **repris là où on s'était arrêté**, marqués vus (à la main ou à 92 %), rangée **Continue watching**, **épisode suivant** dans le lecteur et enchaîné à la fin ;
-- **volume** et langues audio / sous-titres choisies mémorisés d'une lecture à l'autre ;
+- **volume**, langues audio / sous-titres et hauteur de l'image choisies mémorisés d'une lecture à l'autre ;
 - **classement des chaînes** (bouton entonnoir à droite des onglets) : ordre de la playlist, par nom, par numéro ou les plus regardées ; filtre par pays ou langue d'après les préfixes `FR |`, `|FR|`, `[FR]`… ;
 - **doublons regroupés** : « TF1 », « TF1 HD » et « FR | TF1 FHD » font une seule ligne, sur le meilleur flux ; l'étiquette de qualité ouvre la liste des flux, et si un flux tombe, le suivant prend le relais ;
 - **catégories fusionnées** entre sources et préfixes (« FR | Sport » et « Sport » ne font qu'un onglet), noms de chaînes et de catégories affichés sans préfixe ;
@@ -72,7 +72,7 @@ Sous Linux, de même via l'API de rendu, dans une GtkGLArea posée sous la WebVi
 
 ## Plugins
 
-Un plugin ajoute un type de source sans toucher au code de l'app : c'est un composant WebAssembly qui implémente le monde `provider` de [wit/provider.wit](wit/provider.wit). Il se décrit (`describe` : identifiant, nom, champs du formulaire, préréglages) et répond aux mêmes appels que les fournisseurs intégrés (`load-catalog`, `stream-url`, `catchup-url`, `episodes`, `movie-url`, `episode-url`). Le contrat en est à la version 0.3.0 : un plugin compilé pour une version antérieure ne se charge plus, il faut le recompiler avec le nouveau `provider.wit`.
+Un plugin ajoute un type de source sans toucher au code de l'app : c'est un composant WebAssembly qui implémente le monde `provider` de [wit/provider.wit](wit/provider.wit). Il se décrit (`describe` : identifiant, nom, champs du formulaire, préréglages) et répond aux mêmes appels que les fournisseurs intégrés (`load-catalog`, `stream-url`, `catchup-url`, `episodes`, `movie-url`, `episode-url`). Le contrat en est à la version 0.4.0 : un plugin compilé pour une version antérieure (0.3.0 comprise) ne se charge plus, il faut le recompiler avec le nouveau `provider.wit`. Côté code, 0.4.0 ajoute `chapters` à `playback` (une liste vide convient) et un cas `action-required` à `error`, que doit couvrir tout `match` sur les erreurs.
 
 Au lancement, l'app charge chaque `.wasm` de `%APPDATA%\com.marcdownhq.nightglass\plugins` (sur macOS : `~/Library/Application Support/com.marcdownhq.nightglass/plugins` ; sous Linux : `~/.local/share/com.marcdownhq.nightglass/plugins`). L'écran Sources montre ce dossier et ce que chaque fichier a donné. Un plugin ne remplace pas un fournisseur intégré : un identifiant déjà pris est refusé.
 
@@ -82,16 +82,18 @@ Ce que le contrat offre en plus des appels de base :
 
 - **Poignée de main d'un navigateur.** Certains serveurs refusent tout client dont la poignée de main TLS n'est pas celle d'un navigateur, quels que soient les en-têtes. Une requête avec `browser` (`chrome`, `edge`, `firefox`, `safari`) part avec celle de ce navigateur, et ses en-têtes par défaut ; ceux du plugin passent par-dessus. L'app la fait avec wreq (BoringSSL), dans [core/src/http.rs](core/src/http.rs).
 - **Relais.** `stream-url`, `catchup-url`, `movie-url` et `episode-url` rendent une `playback` : le lien, des en-têtes pour chaque requête du flux, et au besoin un `relay`. Le lecteur ouvre alors une adresse en 127.0.0.1 et l'app va chercher le flux à sa place ([core/src/relay.rs](core/src/relay.rs)), avec ces en-têtes et le navigateur demandé. Les listes HLS sont réécrites pour que chaque liste, segment et clé repasse par le relais. Il faut `resolves-streams` pour que `stream-url`, `movie-url` et `episode-url` soient appelés ; seuls les flux http(s) se relaient ; DASH n'est pas réécrit. Une réponse refusée (403) ou d'un serveur débordé (502, 503) est redemandée une fois : des CDN comme celui de Dailymotion refusent au hasard une requête sur vingt environ.
-- **Pistes.** `playback.tracks` ajoute des flux joués avec le principal, chacun avec sa langue (ISO 639) et son titre : l'audio d'une vidéo sans son, d'autres langues, des sous-titres, comme les rendent YouTube ou Dailymotion. Le lecteur les ouvre ensemble (un EDL de mpv), avec les mêmes en-têtes et le même relais ; les préférences de langue de mpv choisissent parmi elles, la première à défaut.
+- **Pistes.** `playback.tracks` ajoute des flux joués avec le principal, chacun avec sa langue (ISO 639) et son titre : l'audio d'une vidéo sans son, d'autres langues, des sous-titres, comme les rendent YouTube ou Dailymotion. Le lecteur les ouvre ensemble (un EDL de mpv), avec les mêmes en-têtes et le même relais ; les préférences de langue de mpv choisissent parmi elles, la première à défaut. Plusieurs pistes vidéo (des hauteurs différentes) se choisissent dans le menu Qualité du lecteur, de la plus haute à la plus basse, sous leur titre s'il y en a un, sinon sous leur hauteur, leur cadence au-delà de 30 i/s et leur codec (« 1080p60 VP9 ») ; la hauteur choisie est reprise au film suivant qui en a une. mpv ouvre chaque piste de l'EDL pour la lire, mais ne télécharge ensuite que celles qui sont choisies.
 - **Filtre.** Avec `relay.filter`, chaque réponse du flux passe par l'export `filter` (adresse, type, corps entier) avant le lecteur : pour un serveur qui déguise ses segments, par exemple. Le relais lit alors chaque réponse en entier, sans `Range` : une liste à plages d'octets (`EXT-X-BYTERANGE`) ne se filtre pas. Sans filtre, il passe la réponse au fil de l'eau, `Range` compris, et reconnaît une liste HLS à sa première ligne même sous un autre nom ou un autre type.
 - **Stockage.** Comme chaque appel repart d'une instance neuve, `storage` garde ce qui doit durer d'un appel à l'autre : un jeton de connexion, des cookies, l'état d'une lecture que suit `filter`. Une valeur est du texte, avec au besoin une durée de vie en secondes ; avec `persist`, elle survit au redémarrage, dans `plugin-data/<identifiant>.json` à côté du dossier `plugins`, sinon elle s'oublie quand l'app se ferme. Chaque plugin ne voit que ses clés, communes à toutes ses sources : une clé de 256 octets au plus, une valeur de 1 Mo, 16 Mo en tout. Pendant `describe`, le plugin n'a pas encore d'identifiant : `get` ne rend rien et `set` échoue. Un fichier qui ne se lit pas comme du JSON est mis de côté en `<identifiant>.<date>.json.bad` ; un fichier que le disque refuse de lire n'est jamais écrasé, et `set` échoue tant qu'il le reste. Une valeur `persist` qui ne s'écrit pas n'est pas gardée. Le plugin d'exemple y garde sa liste et la redemande avec `If-None-Match`.
 - **Programmes.** `catalog.programmes` porte des entrées de guide, rattachées aux chaînes par `epg-id` : une source qui connaît l'heure de ses événements n'a pas à servir de fichier XMLTV.
 - **Films et épisodes à la lecture.** Avec `resolves-streams`, l'app demande `movie-url` ou `episode-url` au moment de jouer, pour des liens signés qui expirent. Le `stream` d'un film ou d'un épisode est alors un texte quelconque que le plugin relit dans cet appel (un identifiant, du JSON), pas forcément une adresse ; sans `resolves-streams`, il doit être une adresse de flux.
 - **Replay.** `channel.catchup-window` donne en secondes ce que le serveur garde de son passé : quelques heures pour un direct, des jours pour un serveur Xtream.
 - **Émissions datées.** La saison et le numéro d'un épisode sont facultatifs, et `aired` (Unix secondes) donne sa date de diffusion : un journal ou un magazine s'affiche avec sa date plutôt qu'avec un faux numéro.
+- **Chapitres.** `playback.chapters` donne les chapitres d'un film ou d'un épisode : un début en secondes depuis le début du flux et un titre. L'app les trie, écarte ceux sans titre ou sans début lisible, les marque sur la barre de progression (le survol donne leur titre), les liste dans un menu Chapitres, affiche le titre du chapitre en cours, et `Page ↑` / `Page ↓` passent au précédent ou au suivant.
+- **Demande de connexion.** L'erreur `action-required` porte un `prompt` : ce que l'utilisateur doit faire hors de l'app (`message`), au besoin une adresse à ouvrir (`url`, en http(s)) et un code à y saisir (`code`), comme la connexion d'une télé sur un autre appareil. Quand `load-catalog` la renvoie, l'écran Sources montre la demande sous la source : le message, l'adresse qui s'ouvre dans le navigateur du système, le code en grand à copier et un bouton Réessayer. Avec `retry-in` (ramené entre 2 s et 1 h), l'app redemande le catalogue toutes les `retry-in` secondes tant que la demande est affichée ; elle s'arrête quand le plugin répond autre chose ou que la source est retirée. Une source dont le plugin attend dès l'ajout est ajoutée quand même. Renvoyée par `stream-url`, `catchup-url`, `movie-url` ou `episode-url`, la demande s'affiche en notification avec son code.
 - **Durée, vignette, expiration.** Un film ou un épisode peut donner sa durée (`duration`, en secondes) et la fin de sa disponibilité (`available-until`, Unix secondes), un épisode sa propre image (`thumbnail`, en http(s)). L'app les garde dans le catalogue mais ne les affiche pas encore.
 
-Pour en écrire un en Rust, partir de [plugin-example](plugin-example/src/lib.rs) (une liste de chaînes, de films et de séries en JSON) :
+Pour en écrire un en Rust, partir de [plugin-example](plugin-example/src/lib.rs) (une liste de chaînes, de films et de séries en JSON ; un film peut y porter ses chapitres, et le réglage `pending` à `yes` fait attendre une connexion pour voir la demande) :
 
 ```powershell
 rustup target add wasm32-wasip2
@@ -186,7 +188,7 @@ Un exe non signé et tout neuf peut être bloqué au lancement par Defender (par
 
 ```powershell
 cargo test --workspace   # les tests de plugin-host compilent plugin-example : rustup target add wasm32-wasip2
-npm test   # Vitest : règles de classement, messages d'erreur, traduction française complète
+npm test   # Vitest : règles de classement, messages d'erreur, chapitres, qualité, traduction française complète
 ```
 
 Tests d'intégration (facultatifs, contre de vrais serveurs) :
@@ -203,7 +205,7 @@ En debug, l'app lit les mêmes variables de test que la version macOS : `NG_SEED
 
 ## Clavier
 
-`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…6` Home, Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · flèches dans le Guide : de programme en programme, `Page ↑/↓` 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
+`↑↓` chaîne · `←→` catégorie (en plein écran : ±10 s pour un film) · `Entrée` plein écran · `0–9` numéro de chaîne · `S` favori · `Ctrl+1…6` Home, Live, Guide, Movies, Series, Sources · `Ctrl+K` recherche · flèches dans le Guide : de programme en programme, `Page ↑/↓` 1 h plus tôt / plus tard · `Espace` lecture / pause · `Échap` quitter le plein écran (dans Live : arrêter) · `Ctrl+.` arrêter · `F11` plein écran de la fenêtre · `+` / `−` / molette sur l'image : volume · `M` muet · `N` épisode suivant · `Page ↑/↓` chapitre précédent / suivant en plein écran · `Alt+↑/↓` déplacer la chaîne dans sa liste de favoris · `R` enregistrer · `P` mini-lecteur · `L` revenir au direct · `Alt+1…4` tuile entendue en multi-vue.
 
 ## Traduire
 

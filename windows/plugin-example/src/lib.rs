@@ -1,9 +1,11 @@
 //! Channels, movies and series listed in a JSON file:
-//! `{"channels": [{"name", "url", "logo"?, "group"?, "epgId"?, "programmes"?}], "movies"?: [{"name", "url", "audio"?}],
-//! "series"?: [{"name", "episodes": [{"title", "url", "season"?, "number"?, "aired"?}]}], "epg"?}`, where a programme is
-//! `{"start", "end", "title", "desc"?}` and `aired` in Unix seconds. A movie's `audio` is played alongside its video.
+//! `{"channels": [{"name", "url", "logo"?, "group"?, "epgId"?, "programmes"?}], "movies"?: [{"name", "url", "audio"?,
+//! "chapters"?}], "series"?: [{"name", "episodes": [{"title", "url", "season"?, "number"?, "aired"?}]}], "epg"?}`, where a
+//! programme is `{"start", "end", "title", "desc"?}`, a chapter `{"start", "title"}` in seconds and `aired` in Unix
+//! seconds. A movie's `audio` is played alongside its video.
 //! With the `browser` setting, the list and the streams are fetched with that browser's handshake, the streams through
-//! the app. A list served with an `ETag` is kept, and asked again with `If-None-Match`.
+//! the app. A list served with an `ETag` is kept, and asked again with `If-None-Match`. With `pending` set to `yes`, the
+//! catalog waits for a sign-in that never comes, to show the app's prompt.
 
 #![allow(clippy::too_many_arguments, reason = "the lowered signature wit-bindgen generates for the filter export")]
 
@@ -14,7 +16,7 @@ wit_bindgen::generate!({ path: "../wit", world: "provider" });
 use nightglass::provider::http::{Request, send};
 use nightglass::provider::log::{Level, log};
 use nightglass::provider::storage;
-use nightglass::provider::types::{Browser, Field, FieldKind, Programme, Relay, Track};
+use nightglass::provider::types::{Browser, Chapter, Field, FieldKind, Programme, Prompt, Relay, Track};
 
 struct JsonList;
 
@@ -40,6 +42,23 @@ struct Film {
     name: String,
     url: String,
     audio: Option<String>,
+    #[serde(default)]
+    chapters: Vec<Mark>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Mark {
+    start: f64,
+    title: String,
+}
+
+/// What a movie's stream holds, read back by `movie-url`.
+#[derive(Serialize, Deserialize)]
+struct Reel {
+    url: String,
+    audio: Option<String>,
+    #[serde(default)]
+    chapters: Vec<Mark>,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +124,7 @@ impl Guest for JsonList {
                 Field { key: "url".into(), label: "List URL".into(), kind: FieldKind::Url, required: true, placeholder: Some("https://… .json".into()), default: None },
                 Field { key: "token".into(), label: "Access token".into(), kind: FieldKind::Secret, required: false, placeholder: None, default: None },
                 Field { key: "browser".into(), label: "Browser".into(), kind: FieldKind::Text, required: false, placeholder: Some("chrome, edge, firefox or safari".into()), default: None },
+                Field { key: "pending".into(), label: "Sign-in pending".into(), kind: FieldKind::Text, required: false, placeholder: Some("yes, to try the sign-in prompt".into()), default: None },
             ],
             resolves_streams: true,
             presets: Vec::new(),
@@ -112,6 +132,14 @@ impl Guest for JsonList {
     }
 
     fn load_catalog(config: Config) -> Result<Catalog, Error> {
+        if setting(&config, "pending").is_some_and(|p| p.trim().eq_ignore_ascii_case("yes")) {
+            return Err(Error::ActionRequired(Prompt {
+                message: "Sign in to JSON list on another device".into(),
+                url: Some("https://example.com/activate".into()),
+                code: Some("WDJB-MJHT".into()),
+                retry_in: Some(5),
+            }));
+        }
         let list = list(&config)?;
         log(Level::Info, &format!("{} channels", list.channels.len()));
         let mut programmes = Vec::new();
@@ -138,7 +166,7 @@ impl Guest for JsonList {
             .movies
             .into_iter()
             .map(|m| {
-                let stream = serde_json::to_string(&(&m.url, &m.audio)).expect("strings serialize");
+                let stream = serde_json::to_string(&Reel { url: m.url.clone(), audio: m.audio, chapters: m.chapters }).expect("strings serialize");
                 Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None }
             })
             .collect();
@@ -147,17 +175,18 @@ impl Guest for JsonList {
     }
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
     }
 
     fn movie_url(config: Config, movie: Movie) -> Result<Playback, Error> {
-        let (url, audio): (String, Option<String>) = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
-        let tracks = audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
-        Ok(Playback { url, headers: Vec::new(), relay: relay(&config)?, tracks })
+        let reel: Reel = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
+        let tracks = reel.audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
+        let chapters = reel.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
+        Ok(Playback { url: reel.url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters })
     }
 
     fn episode_url(config: Config, _series: Series, episode: Episode) -> Result<Playback, Error> {
-        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
+        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
     }
 
     fn catchup_url(_config: Config, _channel: Channel, _start: i64, _end: i64) -> Result<Playback, Error> {

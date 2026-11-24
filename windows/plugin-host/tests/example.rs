@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use nightglass_core::{Browser, Config, Http, IptvError, Media, Providers, Relay};
+use nightglass_core::{Browser, Chapter, Config, Http, IptvError, Media, Providers, Relay};
 use nightglass_plugin_host::Host;
 use wiremock::matchers::{header, header_regex, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -34,7 +34,7 @@ async fn describes_itself() {
     let plugin = host.load(example()).await.unwrap();
     let info = plugin.info();
     assert_eq!(info.id, "json-list");
-    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token", "browser"]);
+    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token", "browser", "pending"]);
 }
 
 #[tokio::test]
@@ -116,6 +116,22 @@ async fn movies_and_episodes_resolve_at_play_time() {
 }
 
 #[tokio::test]
+async fn chapters_reach_the_playback() {
+    let server = MockServer::start().await;
+    let body = r#"{"channels": [], "movies": [{"name": "Film", "url": "https://s.test/video.mp4", "chapters": [
+        {"start": 0, "title": "Opening"}, {"start": 754.5, "title": "The heist"}
+    ]}]}"#;
+    Mock::given(path("/list.json")).respond_with(ResponseTemplate::new(200).set_body_string(body)).mount(&server).await;
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let config = config(&[("url", &format!("{}/list.json", server.uri()))]);
+    let catalog = plugin.catalog(&config).await.unwrap();
+    let playback = plugin.movie_url(&config, &catalog.movies[0]).await.unwrap();
+    assert_eq!(playback.chapters, [Chapter { start: 0.0, title: "Opening".into() }, Chapter { start: 754.5, title: "The heist".into() }]);
+    assert!(playback.tracks.is_empty());
+}
+
+#[tokio::test]
 async fn filters_round_trip() {
     let host = Host::new(&Http::new()).unwrap();
     let plugin = host.load(example()).await.unwrap();
@@ -135,6 +151,16 @@ async fn errors_come_back_typed() {
     assert_eq!(plugin.catalog(&Config::new()).await.unwrap_err(), IptvError::Setting("url".into()));
     let local = plugin.catalog(&config(&[("url", "file:///etc/hosts")])).await.unwrap_err();
     assert!(matches!(local, IptvError::Network(_)), "{local:?}");
+}
+
+#[tokio::test]
+async fn a_pending_sign_in_comes_back_as_a_prompt() {
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let IptvError::ActionRequired(prompt) = plugin.catalog(&config(&[("url", "http://s.test/list.json"), ("pending", "yes")])).await.unwrap_err() else { panic!("not a prompt") };
+    assert_eq!(prompt.url.as_ref().map(url::Url::as_str), Some("https://example.com/activate"));
+    assert_eq!((prompt.code.as_deref(), prompt.retry_in), (Some("WDJB-MJHT"), Some(5)));
+    assert!(!prompt.message.is_empty());
 }
 
 #[tokio::test]

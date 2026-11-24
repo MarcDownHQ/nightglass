@@ -90,11 +90,13 @@ pub struct Playback {
     /// Played alongside `url`, with the same headers and relay, in order of preference.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tracks: Vec<Track>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chapters: Vec<Chapter>,
 }
 
 impl From<Url> for Playback {
     fn from(url: Url) -> Self {
-        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new() }
+        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new(), chapters: Vec::new() }
     }
 }
 
@@ -148,6 +150,20 @@ pub struct Track {
     /// Shown in the track menus.
     #[serde(default)]
     pub title: Option<String>,
+}
+
+/// A chapter of a movie or an episode, `start` in seconds.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Chapter {
+    pub start: f64,
+    pub title: String,
+}
+
+/// The chapters the player can use: in order, without those that have no title or no readable start.
+pub fn chapters_in_order(chapters: Vec<Chapter>) -> Vec<Chapter> {
+    let mut kept: Vec<Chapter> = chapters.into_iter().filter(|c| c.start.is_finite() && !c.title.trim().is_empty()).collect();
+    kept.sort_by(|a, b| a.start.total_cmp(&b.start));
+    kept.into_iter().map(|c| Chapter { start: c.start.max(0.0), ..c }).collect()
 }
 
 /// How the app fetches a stream for the player: playlists are rewritten to come back through it.
@@ -244,6 +260,17 @@ impl From<StoredSource> for Source {
     }
 }
 
+/// What a plugin needs the user to do outside the app before it can go on: open `url`, enter `code`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prompt {
+    pub message: String,
+    pub url: Option<Url>,
+    pub code: Option<String>,
+    /// Seconds before asking again, while the prompt is shown.
+    pub retry_in: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum IptvError {
     #[error("The server answered {0}.")]
@@ -262,6 +289,8 @@ pub enum IptvError {
     UnknownProvider(String),
     #[error("The plugin failed: {0}")]
     Plugin(String),
+    #[error("{}", .0.message)]
+    ActionRequired(Box<Prompt>),
 }
 
 pub type Result<T> = std::result::Result<T, IptvError>;
@@ -287,6 +316,35 @@ mod tests {
         assert_eq!(source.config, Config::from([("url".to_string(), "http://x.test/a.m3u".to_string())]));
         let again: Source = serde_json::from_str(&serde_json::to_string(&source).unwrap()).unwrap();
         assert_eq!(again, source);
+    }
+
+    #[test]
+    fn prompts_reach_the_page_in_camel_case() {
+        let prompt = Prompt { message: "Sign in".into(), url: Some(Url::parse("https://tv.test/activate").unwrap()), code: Some("WDJB-MJHT".into()), retry_in: Some(5) };
+        let json = serde_json::to_value(&prompt).unwrap();
+        assert_eq!(json, serde_json::json!({"message": "Sign in", "url": "https://tv.test/activate", "code": "WDJB-MJHT", "retryIn": 5}));
+        assert_eq!(serde_json::from_value::<Prompt>(json).unwrap(), prompt);
+        assert_eq!(IptvError::ActionRequired(Box::new(prompt)).to_string(), "Sign in");
+    }
+
+    #[test]
+    fn chapters_are_kept_only_when_there_are_some() {
+        let mut playback = Playback::from(Url::parse("http://s.test/film.mkv").unwrap());
+        assert!(serde_json::to_value(&playback).unwrap().get("chapters").is_none());
+        playback.chapters = vec![Chapter { start: 90.5, title: "Two".into() }];
+        let json = serde_json::to_value(&playback).unwrap();
+        assert_eq!(json["chapters"], serde_json::json!([{"start": 90.5, "title": "Two"}]));
+        assert_eq!(serde_json::from_value::<Playback>(json).unwrap(), playback);
+        let old: Playback = serde_json::from_str(r#"{"url":"http://s.test/film.mkv","headers":{}}"#).unwrap();
+        assert!(old.chapters.is_empty(), "a playback kept before 0.4.0 still reads");
+    }
+
+    #[test]
+    fn chapters_in_order_without_the_unusable() {
+        let chapter = |start: f64, title: &str| Chapter { start, title: title.into() };
+        let given = vec![chapter(600.0, "Three"), chapter(f64::NAN, "Lost"), chapter(0.0, "One"), chapter(120.0, " "), chapter(-4.0, "Before"), chapter(f64::INFINITY, "Never"), chapter(300.0, "Two")];
+        let kept: Vec<_> = chapters_in_order(given).into_iter().map(|c| (c.start, c.title)).collect();
+        assert_eq!(kept, [(0.0, "Before".to_string()), (0.0, "One".into()), (300.0, "Two".into()), (600.0, "Three".into())]);
     }
 
     fn track(url: &str, language: Option<&str>, title: Option<&str>) -> Track {

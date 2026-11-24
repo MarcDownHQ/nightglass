@@ -1,4 +1,6 @@
 import { t } from './i18n.svelte';
+import type { Prompt } from './models';
+
 /**
  * What went wrong, said for the user: the raw message from the server, mpv or the network becomes
  * a cause and something to try. Unknown messages pass through unchanged.
@@ -23,4 +25,20 @@ export function friendly(raw: string): string {
   const message = raw.replace(/^Error:\s*/, '');
   const known = RULES.find(([pattern]) => pattern.test(message))?.[1];
   return known ? t(known) : message;
+}
+
+/** The prompt a command failed with, when a plugin waits for the user rather than failing. */
+export function promptOf(e: unknown): Prompt | null {
+  return typeof e === 'object' && e !== null && 'prompt' in e ? (e as { prompt: Prompt }).prompt : null;
+}
+
+/** A prompt in one line: what to do, where, and the code to enter. */
+export function promptLine(p: Prompt): string {
+  return [p.message, p.url, p.code && t('code {code}', { code: p.code })].filter(Boolean).join(' · ');
+}
+
+/** A command's error as text. */
+export function errorText(e: unknown): string {
+  const prompt = promptOf(e);
+  return prompt ? promptLine(prompt) : String(e);
 }

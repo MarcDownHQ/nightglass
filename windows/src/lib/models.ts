@@ -19,6 +19,23 @@ export interface Playback {
   headers: Record<string, string>;
   /** The stream's own address when `url` is the app's relay or joins several tracks. */
   link?: string;
+  /** Sorted by start, each with a title. */
+  chapters?: Chapter[];
+}
+
+/** What a plugin needs the user to do outside the app: open `url`, enter `code`. Sent instead of an error message. */
+export interface Prompt {
+  message: string;
+  url: string | null;
+  code: string | null;
+  /** Seconds before asking again, while the prompt is shown. */
+  retryIn: number | null;
+}
+
+/** `start` in seconds. */
+export interface Chapter {
+  start: number;
+  title: string;
 }
 
 export interface Movie {

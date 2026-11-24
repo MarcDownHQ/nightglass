@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
-  import { friendly } from './errors';
+  import { friendly, promptOf } from './errors';
   import { invoke } from '@tauri-apps/api/core';
   import HudPanel from './HudPanel.svelte';
   import type { Catalog, Field, Preset, ProviderInfo, Source } from './models';
@@ -52,11 +52,12 @@
     const p = provider;
     busy = true;
     message = null;
+    let source: Source | undefined;
     try {
       const config = await settings(p);
       const address = p.fields.find((f) => (f.kind === 'url' || f.kind === 'location') && config[f.key]);
       const host = address ? new URL(config[address.key]).host : '';
-      const source: Source = { id: crypto.randomUUID(), name: name.trim() || host || p.name, provider: p.id, config };
+      source = { id: crypto.randomUUID(), name: name.trim() || host || p.name, provider: p.id, config };
       const catalog = await invoke<Catalog>('catalog', { source });
       store.add(source, catalog);
       message = {
@@ -66,7 +67,13 @@
       name = '';
       typed[p.id] = {};
     } catch (e) {
-      message = { text: friendly(String(e)), error: true };
+      const prompt = promptOf(e);
+      if (prompt && source) {
+        store.addWaiting(source, prompt);
+        message = { text: t('Added · waiting for you: see the list of sources'), error: false };
+        name = '';
+        typed[p.id] = {};
+      } else message = { text: friendly(String(e)), error: true };
     } finally {
       busy = false;
     }
