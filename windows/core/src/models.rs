@@ -90,11 +90,13 @@ pub struct Playback {
     /// Played alongside `url`, with the same headers and relay, in order of preference.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tracks: Vec<Track>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chapters: Vec<Chapter>,
 }
 
 impl From<Url> for Playback {
     fn from(url: Url) -> Self {
-        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new() }
+        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new(), chapters: Vec::new() }
     }
 }
 
@@ -148,6 +150,20 @@ pub struct Track {
     /// Shown in the track menus.
     #[serde(default)]
     pub title: Option<String>,
+}
+
+/// A chapter of a movie or an episode, `start` in seconds.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Chapter {
+    pub start: f64,
+    pub title: String,
+}
+
+/// The chapters the player can use: in order, without those that have no title or no readable start.
+pub fn chapters_in_order(chapters: Vec<Chapter>) -> Vec<Chapter> {
+    let mut kept: Vec<Chapter> = chapters.into_iter().filter(|c| c.start.is_finite() && !c.title.trim().is_empty()).collect();
+    kept.sort_by(|a, b| a.start.total_cmp(&b.start));
+    kept.into_iter().map(|c| Chapter { start: c.start.max(0.0), ..c }).collect()
 }
 
 /// How the app fetches a stream for the player: playlists are rewritten to come back through it.
@@ -244,6 +260,17 @@ impl From<StoredSource> for Source {
     }
 }
 
+/// What a plugin needs the user to do outside the app before it can go on: open `url`, enter `code`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prompt {
+    pub message: String,
+    pub url: Option<Url>,
+    pub code: Option<String>,
+    /// Seconds before asking again, while the prompt is shown.
+    pub retry_in: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum IptvError {
     #[error("The server answered {0}.")]
@@ -262,6 +289,8 @@ pub enum IptvError {
     UnknownProvider(String),
     #[error("The plugin failed: {0}")]
     Plugin(String),
+    #[error("{}", .0.message)]
+    ActionRequired(Box<Prompt>),
 }
 
 pub type Result<T> = std::result::Result<T, IptvError>;

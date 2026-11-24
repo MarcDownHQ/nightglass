@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Browser, Catalog, Channel, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
+use nightglass_core::{Account, Browser, Catalog, Channel, Chapter, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, Prompt, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -110,7 +110,8 @@ pub fn playback(p: wit::Playback) -> Result<Playback> {
         Ok(url)
     };
     let tracks = p.tracks.iter().map(|t| Ok(Track { url: url(&t.url)?, language: t.language.clone(), title: t.title.clone() })).collect::<Result<_>>()?;
-    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks })
+    let chapters = p.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
+    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks, chapters })
 }
 
 pub fn to_wit_media(m: Media) -> wit::Media {
@@ -208,6 +209,7 @@ pub fn from_wit_error(e: wit::Error) -> IptvError {
         wit::Error::BadResponse(m) => IptvError::BadResponse(m),
         wit::Error::Network(m) => IptvError::Network(m),
         wit::Error::Setting(m) => IptvError::Setting(m),
+        wit::Error::ActionRequired(p) => IptvError::ActionRequired(Box::new(Prompt { message: p.message, url: optional_url(p.url), code: p.code, retry_in: p.retry_in })),
     }
 }
 
@@ -217,6 +219,7 @@ pub fn to_wit_error(e: IptvError) -> wit::Error {
         IptvError::AuthFailed => wit::Error::AuthFailed,
         IptvError::BadResponse(m) => wit::Error::BadResponse(m),
         IptvError::Setting(m) => wit::Error::Setting(m),
+        IptvError::ActionRequired(p) => wit::Error::ActionRequired(wit::Prompt { message: p.message, url: p.url.map(String::from), code: p.code, retry_in: p.retry_in }),
         other => wit::Error::Network(other.to_string()),
     }
 }
@@ -250,7 +253,7 @@ mod tests {
 
     fn with_track(url: &str, relay: Option<wit::Relay>) -> wit::Playback {
         let track = wit::Track { url: url.into(), language: Some("fr".into()), title: Some("Français".into()) };
-        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track] }
+        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track], chapters: Vec::new() }
     }
 
     fn wit_movie(stream: &str) -> wit::Movie {

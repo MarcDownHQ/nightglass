@@ -147,17 +147,17 @@ impl Guest for JsonList {
     }
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
     }
 
     fn movie_url(config: Config, movie: Movie) -> Result<Playback, Error> {
         let (url, audio): (String, Option<String>) = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
         let tracks = audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
-        Ok(Playback { url, headers: Vec::new(), relay: relay(&config)?, tracks })
+        Ok(Playback { url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters: Vec::new() })
     }
 
     fn episode_url(config: Config, _series: Series, episode: Episode) -> Result<Playback, Error> {
-        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new() })
+        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
     }
 
     fn catchup_url(_config: Config, _channel: Channel, _start: i64, _end: i64) -> Result<Playback, Error> {
