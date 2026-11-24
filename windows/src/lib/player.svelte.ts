@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { library } from './library.svelte';
 import type { LiveItem } from './models';
+import type { Track } from './tracks';
 import { hole } from './video.svelte';
 
 /** What the player is showing. */
@@ -25,17 +26,6 @@ export interface Playable {
   fallback?: () => void;
   /** The next episode, offered in the HUD and played when this one ends. */
   next?: { title: string; play: () => void };
-}
-
-/** One entry of mpv's `track-list`. */
-export interface Track {
-  id: number;
-  type: 'video' | 'audio' | 'sub';
-  lang?: string;
-  title?: string;
-  codec?: string;
-  selected: boolean;
-  'demux-channel-count'?: number;
 }
 
 type MpvEvent =
@@ -448,10 +438,3 @@ class Player {
 }
 
 export const player = new Player();
-
-export function trackName(track: Track): string {
-  const channels = track['demux-channel-count'] ?? 0;
-  return [track.lang?.toUpperCase(), track.title, track.codec?.toUpperCase(), channels > 2 ? `${channels}ch` : undefined]
-    .filter(Boolean)
-    .join(' · ');
-}

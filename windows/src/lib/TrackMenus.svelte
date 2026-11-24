@@ -1,7 +1,8 @@
 <script lang="ts">
   import { t } from './i18n.svelte';
   import Menu from './Menu.svelte';
-  import { player, trackName } from './player.svelte';
+  import { player } from './player.svelte';
+  import { trackName } from './tracks';
 
   const audio = $derived(player.audioTracks.map((tr) => ({ id: tr.id, name: trackName(tr) || t('Track {n}', { n: tr.id }), selected: tr.selected })));
   const subs = $derived([
