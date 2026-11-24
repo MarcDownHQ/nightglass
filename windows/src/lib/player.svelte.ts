@@ -167,7 +167,7 @@ class Player {
     this.atLive = true;
     this.duration = 0;
     // Per-file options: the start position and the subtitle choice must not carry over to the next file.
-    const options = [p.start ? `start=${Math.floor(p.start)}` : '', 'aid=auto', `sid=${library.subOff ? 'no' : 'auto'}`].filter(Boolean).join(',');
+    const options = [p.start ? `start=${Math.floor(p.start)}` : '', 'vid=auto', 'aid=auto', `sid=${library.subOff ? 'no' : 'auto'}`].filter(Boolean).join(',');
     invoke('mpv_play', { url: p.url, headers: p.headers ?? {}, options }).catch((e) => (this.error = String(e)));
   }
 
