@@ -32,9 +32,9 @@ export function promptOf(e: unknown): Prompt | null {
   return typeof e === 'object' && e !== null && 'prompt' in e ? (e as { prompt: Prompt }).prompt : null;
 }
 
-/** A prompt in one line: what to do, and the code to enter. */
+/** A prompt in one line: what to do, where, and the code to enter. */
 export function promptLine(p: Prompt): string {
-  return p.code ? t('{message} · code {code}', { message: p.message, code: p.code }) : p.message;
+  return [p.message, p.url, p.code && t('code {code}', { code: p.code })].filter(Boolean).join(' · ');
 }
 
 /** A command's error as text. */

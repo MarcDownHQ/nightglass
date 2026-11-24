@@ -45,9 +45,9 @@ describe('prompts', () => {
     expect(promptOf(new Error('boom'))).toBeNull();
   });
 
-  it('says a prompt with its code, and other errors as they are', () => {
-    expect(errorText({ prompt })).toBe('Sign in on another device · code WDJB-MJHT');
-    expect(errorText({ prompt: { ...prompt, code: null } })).toBe('Sign in on another device');
+  it('says a prompt with its address and code, and other errors as they are', () => {
+    expect(errorText({ prompt })).toBe(`Sign in on another device · ${prompt.url} · code WDJB-MJHT`);
+    expect(errorText({ prompt: { ...prompt, url: null, code: null } })).toBe('Sign in on another device');
     expect(errorText('The server answered 403.')).toBe('The server answered 403.');
   });
 });
