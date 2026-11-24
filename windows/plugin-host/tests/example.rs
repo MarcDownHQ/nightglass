@@ -34,7 +34,7 @@ async fn describes_itself() {
     let plugin = host.load(example()).await.unwrap();
     let info = plugin.info();
     assert_eq!(info.id, "json-list");
-    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token", "browser"]);
+    assert_eq!(info.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(), ["url", "token", "browser", "pending"]);
 }
 
 #[tokio::test]
