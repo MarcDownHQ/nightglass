@@ -311,7 +311,7 @@ class Store {
   /** A past programme of a channel whose server keeps them, played like a film. */
   async playReplay(item: LiveItem, p: Programme) {
     try {
-      const { url, headers } = await invoke<Playback>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
+      const { url, headers, chapters } = await invoke<Playback>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
       player.play({
         id: `replay:${item.id}:${p.start}`,
         title: p.title,
@@ -319,6 +319,7 @@ class Store {
         url,
         headers,
         live: false,
+        chapters,
       });
       void player.expand();
     } catch (e) {
@@ -367,6 +368,7 @@ class Store {
       live: false,
       start: fromStart ? 0 : library.startAt(id),
       onprogress: (t, d, final) => library.record(id, resume, t, d, final),
+      chapters: playback.chapters,
     });
     void player.expand();
   }
@@ -401,6 +403,7 @@ class Store {
         title: episodeLine(next),
         play: () => void this.playEpisode(item, next, episodes),
       },
+      chapters: playback.chapters,
     });
     void player.expand();
   }

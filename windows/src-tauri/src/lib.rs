@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Episode, Http, Movie, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, xmltv};
+use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, Movie, Playback, Programme, Provider, ProviderInfo, Providers, RelayServer, Series, Source, chapters_in_order, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -230,6 +230,8 @@ struct PlayerInput {
     url: String,
     headers: HashMap<String, String>,
     link: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    chapters: Vec<Chapter>,
 }
 
 /// The item's own headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
@@ -240,10 +242,11 @@ async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Sour
         }
     }
     let link = playback.url.to_string();
+    let chapters = chapters_in_order(std::mem::take(&mut playback.chapters));
     if playback.relay.is_some() {
         playback = relay.relay(provider, source.config, playback).await.map_err(|e| e.to_string())?;
     }
-    Ok(PlayerInput { url: playback.player_url(), headers: playback.headers, link })
+    Ok(PlayerInput { url: playback.player_url(), headers: playback.headers, link, chapters })
 }
 
 #[tauri::command]

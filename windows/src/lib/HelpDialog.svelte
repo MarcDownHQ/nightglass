@@ -40,6 +40,7 @@
         ['← →', '−10 s, +10 s (live: within the buffer)'],
         ['L', 'Back to live'],
         ['N', 'Next episode'],
+        ['Page ↑ ↓', 'Previous, next chapter'],
         ['R / P', 'Record, mini player'],
         ['Esc or F', 'Back to the list'],
       ],

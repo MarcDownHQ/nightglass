@@ -17,6 +17,7 @@
   import { categoryKey, categoryLabel } from './lineup';
   import type { LiveItem } from './models';
   import { friendly } from './errors';
+  import { chapterAt } from './chapters';
 
   /** Fullscreen playback: the picture, with bars that fade when the pointer rests. */
   let idle = $state(false);
@@ -75,6 +76,8 @@
     else if (e.key === 'ArrowDown') zap(1);
     else if (e.key.toLowerCase() === 'c' && item) drawer = !drawer;
     else if (e.key.toLowerCase() === 'n' && player.current?.next) player.current.next.play();
+    else if (e.key === 'PageUp' && player.chapters.length) player.seekChapter(-1);
+    else if (e.key === 'PageDown' && player.chapters.length) player.seekChapter(1);
     else if (e.key.toLowerCase() === 'r' && player.current?.live) void player.toggleRecording();
     else if (e.key.toLowerCase() === 'p') void player.togglePip();
     else if (e.key.toLowerCase() === 'l' && player.behind) player.goLive();
@@ -123,6 +126,16 @@
     const { left, width } = (e.currentTarget as HTMLElement).getBoundingClientRect();
     player.seekTo((player.duration * (e.clientX - left)) / width);
   }
+
+  /** Films: the chapter under the pointer on the seek bar, and where. */
+  let hovered = $state<{ at: number; title: string } | null>(null);
+
+  function hoverAt(e: PointerEvent) {
+    const { left, width } = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const at = Math.min(1, Math.max(0, (e.clientX - left) / width));
+    const chapter = player.chapters[chapterAt(player.chapters, at * player.duration)];
+    hovered = chapter && player.duration > 0 ? { at: at * 100, title: chapter.title } : null;
+  }
 </script>
 
 <svelte:window {onkeydown} />
@@ -161,6 +174,9 @@
           {/if}
         </div>
         <h1>{item ? (np.now?.title ?? displayName(item.channel.name)) : displayName(player.current?.title ?? '')}</h1>
+        {#if !item && player.chapters[player.chapter]}
+          <p class="chapter">{player.chapters[player.chapter].title}</p>
+        {/if}
         {#if np.now}
           <p class="when mono">{hm(np.now.start)} – {hm(np.now.end)} · {t('{n} min left', { n: left })}</p>
         {/if}
@@ -249,11 +265,17 @@
         <div class="controls">
           <button class="icon play" onclick={() => player.togglePause()} aria-label={player.paused ? t('Play') : t('Pause')}>{@html player.paused ? '&#xE768;' : '&#xE769;'}</button>
           <span class="mono time">{clock(player.time)}</span>
-          <button class="seek" onclick={seekAt} aria-label={t('Seek')}>
+          <button class="seek" onclick={seekAt} onpointermove={hoverAt} onpointerleave={() => (hovered = null)} aria-label={t('Seek')}>
             {#if player.duration > 0 && player.cacheTime > player.time}
               <span class="ahead" style:left="{(player.time / player.duration) * 100}%" style:width="{(Math.min(player.cacheTime, player.duration) - player.time) / player.duration * 100}%"></span>
             {/if}
             <span class="fill" style:width="{player.duration > 0 ? (player.time / player.duration) * 100 : 0}%"></span>
+            {#if player.duration > 0}
+              {#each player.chapters as c}
+                {#if c.start > 0 && c.start < player.duration}<span class="mark" style:left="{(c.start / player.duration) * 100}%"></span>{/if}
+              {/each}
+            {/if}
+            {#if hovered}<span class="tip" style:left="{hovered.at}%">{hovered.title}</span>{/if}
           </button>
           <span class="mono time">{clock(player.duration)}</span>
           <Volume />
@@ -337,7 +359,8 @@
     color: #fff;
     font-weight: 600;
   }
-  .when {
+  .when,
+  .chapter {
     margin: 6px 0 0;
     font-size: 14px;
     color: var(--soft);
@@ -571,6 +594,26 @@
   .bar .ahead {
     top: 6px;
     bottom: 6px;
+  }
+  .seek .mark {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: rgb(3 4 6 / 0.85);
+  }
+  .seek .tip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgb(3 4 6 / 0.9);
+    font-size: 13px;
+    white-space: nowrap;
+    pointer-events: none;
   }
   /* Arrived, not played yet. */
   .ahead {

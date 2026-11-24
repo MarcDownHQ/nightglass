@@ -2,7 +2,10 @@
   import { t } from './i18n.svelte';
   import Menu from './Menu.svelte';
   import { player } from './player.svelte';
+  import { clock } from './theme';
   import { trackName } from './tracks';
+
+  const chapters = $derived(player.chapters.map((c, i) => ({ id: i, name: `${clock(c.start)} · ${c.title}`, selected: i === player.chapter })));
 
   const audio = $derived(player.audioTracks.map((tr) => ({ id: tr.id, name: trackName(tr) || t('Track {n}', { n: tr.id }), selected: tr.selected })));
   const subs = $derived([
@@ -11,6 +14,9 @@
   ]);
 </script>
 
+{#if chapters.length}
+  <Menu label={t('Chapters')} items={chapters} onpick={(i) => player.seekTo(player.chapters[i].start)} />
+{/if}
 {#if audio.length > 1}
   <Menu label={t('Audio')} items={audio} onpick={(id) => player.selectTrack('audio', id)} />
 {/if}

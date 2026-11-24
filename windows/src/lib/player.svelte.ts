@@ -3,7 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { library } from './library.svelte';
-import type { LiveItem } from './models';
+import { chapterAt, nextChapter, previousChapter } from './chapters';
+import type { Chapter, LiveItem } from './models';
 import type { Track } from './tracks';
 import { hole } from './video.svelte';
 
@@ -26,6 +27,8 @@ export interface Playable {
   fallback?: () => void;
   /** The next episode, offered in the HUD and played when this one ends. */
   next?: { title: string; play: () => void };
+  /** Films and episodes: sorted by start. */
+  chapters?: Chapter[];
 }
 
 type MpvEvent =
@@ -98,6 +101,21 @@ class Player {
 
   get subtitleTracks() {
     return this.tracks.filter((t) => t.type === 'sub');
+  }
+
+  get chapters(): Chapter[] {
+    return this.current?.chapters ?? [];
+  }
+
+  /** The index of the chapter playing, -1 before the first or without chapters. */
+  get chapter(): number {
+    return chapterAt(this.chapters, this.time);
+  }
+
+  /** To the previous or the next chapter. */
+  seekChapter(delta: -1 | 1) {
+    const to = delta < 0 ? previousChapter(this.chapters, this.time) : nextChapter(this.chapters, this.time);
+    if (to) this.seekTo(to.start);
   }
 
   /** Live TV behind its live edge, in seconds: after a pause or a rewind. */

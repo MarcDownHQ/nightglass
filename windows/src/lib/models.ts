@@ -19,6 +19,14 @@ export interface Playback {
   headers: Record<string, string>;
   /** The stream's own address when `url` is the app's relay or joins several tracks. */
   link?: string;
+  /** Sorted by start, each with a title. */
+  chapters?: Chapter[];
+}
+
+/** `start` in seconds. */
+export interface Chapter {
+  start: number;
+  title: string;
 }
 
 export interface Movie {
