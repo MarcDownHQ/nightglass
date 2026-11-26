@@ -151,8 +151,8 @@ impl Helper {
     pub async fn license(&self, pssh: Vec<u8>, exchange: Exchange) -> Result<Vec<Key>> {
         let session = self.create_session(pssh).await?;
         loop {
-            let (_, challenge) = self.next_message(&session).await?;
-            let response = exchange(challenge).await?;
+            let (kind, challenge) = self.next_message(&session).await?;
+            let response = exchange(MessageKind::of(kind, &challenge), challenge).await?;
             self.update_session(&session, response).await?;
             let keys = lock(&self.0.shared.sessions).get(&session).map(|s| s.keys.clone()).unwrap_or_default();
             if keys.iter().any(Key::usable) {
@@ -356,7 +356,7 @@ async fn renew(helper: Weak<Inner>, shared: Arc<Shared>, session: String, exchan
             continue;
         }
         let Some(helper) = helper.upgrade().map(Helper) else { return };
-        let answer = exchange(challenge).await;
+        let answer = exchange(MessageKind::of(kind, &challenge), challenge).await;
         match answer {
             Ok(response) => {
                 if let Err(e) = helper.update_session(&session, response).await {

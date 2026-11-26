@@ -9,7 +9,7 @@ use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use base64::Engine;
 
 use crate::mp4::{Init, Segment, clear_init, neutralise};
-use crate::protocol::{Key, Sample, Scheme};
+use crate::protocol::{Key, MessageKind, Sample, Scheme};
 use crate::pssh::Pssh;
 use crate::{BoxFuture, DrmError, Exchange, Result, hex};
 
@@ -103,7 +103,7 @@ impl Cdm for ClearKeys {
 
     fn license(&self, pssh: Pssh, exchange: Exchange) -> BoxFuture<'_, Result<Vec<Key>>> {
         Box::pin(async move {
-            let license = exchange(ClearKeys::request(&pssh)).await?;
+            let license = exchange(MessageKind::LicenseRequest, ClearKeys::request(&pssh)).await?;
             let keys = ClearKeys::read_license(&license)?;
             let mut known = lock(&self.0);
             known.extend(keys.iter().map(|(kid, key)| (kid.to_vec(), *key)));
@@ -359,8 +359,9 @@ mod tests {
     #[tokio::test]
     async fn clear_key_licences_go_through_the_exchange() {
         let pssh = Pssh::new(crate::pssh::WIDEVINE, &[[0x12, 16].as_slice(), &[7; 16]].concat());
-        let exchange: Exchange = Arc::new(|request: Vec<u8>| {
+        let exchange: Exchange = Arc::new(|kind, request: Vec<u8>| {
             Box::pin(async move {
+                assert_eq!(kind, MessageKind::LicenseRequest);
                 let request: serde_json::Value = serde_json::from_slice(&request).unwrap();
                 assert_eq!(request["kids"], serde_json::json!(["BwcHBwcHBwcHBwcHBwcHBw"]));
                 Ok(br#"{"keys":[{"kty":"oct","kid":"BwcHBwcHBwcHBwcHBwcHBw","k":"CQkJCQkJCQkJCQkJCQkJCQ"}]}"#.to_vec())

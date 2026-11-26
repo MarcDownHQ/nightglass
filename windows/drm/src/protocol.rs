@@ -71,9 +71,16 @@ pub enum MessageKind {
     LicenseRenewal,
     LicenseRelease,
     IndividualizationRequest,
+    /// A licence request that only asks for the server's certificate (`SignedMessage` of type 4, `08 04`).
+    CertificateRequest,
 }
 
 impl MessageKind {
+    /// What a session message asks for, from the CDM's message type and the message itself.
+    pub fn of(kind: MessageKind, message: &[u8]) -> Self {
+        if kind == MessageKind::LicenseRequest && message == [0x08, 0x04] { MessageKind::CertificateRequest } else { kind }
+    }
+
     pub fn from_cdm(kind: u32) -> Self {
         match kind {
             1 => MessageKind::LicenseRenewal,
