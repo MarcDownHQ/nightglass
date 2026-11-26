@@ -10,6 +10,7 @@ mod provider;
 mod relay;
 mod stalker;
 pub mod widevine;
+mod xml;
 pub mod xmltv;
 mod xtream;
 
@@ -18,6 +19,6 @@ pub use http::{BodyReader, Browser, Http, OnDisk, Opened, Request, Response};
 pub use m3u::M3uSource;
 pub use models::*;
 pub use provider::{BoxFuture, Config, ConfigExt, Field, FieldKind, Preset, Provider, ProviderInfo, Providers};
-pub use relay::RelayServer;
+pub use relay::{RelayServer, widevine_helper};
 pub use stalker::StalkerClient;
 pub use xtream::XtreamClient;

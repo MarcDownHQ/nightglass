@@ -1,0 +1,15 @@
+[package]
+name = "nightglass-cdm"
+version = "0.1.0"
+description = "Hosts Google's Widevine CDM away from the app, which talks to it over stdin and stdout"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
+[dependencies]
+libloading = "0.9.0"
+nightglass-drm = { path = "../drm", default-features = false }
+
+[dev-dependencies]
+nightglass-drm = { path = "../drm" }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

@@ -30,6 +30,15 @@ libmpv-2.dll in the installation folder with your own build of libmpv (same API,
 version 2) and Nightglass will use it.
 
 
+Chromium's CDM interface
+------------------------
+
+nightglass-cdm ports part of Chromium's media/cdm/api/content_decryption_module.h to Rust.
+Its BSD-3-Clause licence and copyright notice are in chromium-cdm.txt, next to this file.
+The Widevine CDM itself is Google's and is never shipped: it is downloaded from Google on the
+user's request.
+
+
 Rust crates
 -----------
 

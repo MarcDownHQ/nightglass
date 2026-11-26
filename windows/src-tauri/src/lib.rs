@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, IptvError, Movie, Playback, Programme, Prompt, Provider, ProviderInfo, Providers, RelayServer, Series, Source, Unavailable, chapters_in_order, xmltv};
+use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, IptvError, Movie, Playback, Programme, Prompt, Provider, ProviderInfo, Providers, RelayServer, Series, Source, chapters_in_order, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -448,8 +448,9 @@ pub fn run() {
             let http = Http::new();
             let app_data = app.path().app_data_dir()?;
             app.manage(load_plugins(app_data.join("plugins"), app_data.join("plugin-data"), &http));
-            app.manage(RelayServer::new(http.clone()));
-            app.manage(Widevine::new(app_data.join("widevine"), Arc::new(Unavailable)));
+            let relay = RelayServer::new(http.clone());
+            app.manage(relay.clone());
+            app.manage(Widevine::new(app_data.join("widevine"), Arc::new(relay)));
             app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
