@@ -454,4 +454,24 @@ export const FR: Record<string, string> = {
   "Show channel names": "Afficher les noms des chaînes",
   // Search
   "Searching…": "Recherche…",
+  // Protected content
+  'Protected content (Widevine)': 'Contenus protégés (Widevine)',
+  'Play protected channels, movies and episodes': 'Lire les chaînes, films et épisodes protégés',
+  'Google’s Widevine module {version} is installed': 'Le module Widevine {version} de Google est installé',
+  'Off: they are greyed out. Turning it on downloads a module from Google.': 'Désactivé : ils sont grisés. L’activer télécharge un module de Google.',
+  '{name} is protected, and protected content is off.': '{name} est protégé, et les contenus protégés sont désactivés.',
+  'Some channels, movies and episodes are encrypted with Widevine, Google’s DRM. To play them, Nightglass downloads Google’s Widevine module (about 20 MB) from Google and keeps it on this computer.':
+    'Certaines chaînes, certains films et épisodes sont chiffrés avec Widevine, le DRM de Google. Pour les lire, Nightglass télécharge chez Google son module Widevine (environ 20 Mo) et le garde sur cet ordinateur.',
+  'It is a closed program from Google, under Google’s own licence: Nightglass doesn’t ship it, and no plugin can download it.':
+    'C’est un programme fermé de Google, sous la licence de Google : Nightglass ne le fournit pas, et aucun plugin ne peut le télécharger.',
+  'A computer gets Widevine’s software level (L3): services often hold it to SD or 720p, and some refuse it.':
+    'Un ordinateur n’a droit qu’au niveau logiciel de Widevine (L3) : les services le limitent souvent à la SD ou au 720p, et certains le refusent.',
+  'Turning the setting off deletes the module.': 'Désactiver le réglage efface le module.',
+  'Turn on and play': 'Activer et lire',
+  Download: 'Télécharger',
+  'Asking Google for the module…': 'Demande du module à Google…',
+  'Checking Google’s signature…': 'Vérification de la signature de Google…',
+  'Downloading: {received} of {total} MB': 'Téléchargement : {received} sur {total} Mo',
+  'The Widevine module couldn’t be installed: {error}': 'Le module Widevine n’a pas pu être installé : {error}',
+  'This stream is protected: turn on protected content in Settings.': 'Ce flux est protégé : activez les contenus protégés dans les Réglages.',
 };

@@ -35,6 +35,8 @@
   import ResizeEdges from './lib/ResizeEdges.svelte';
   import { updater } from './lib/updater.svelte';
   import { backdropClip, hole } from './lib/video.svelte';
+  import WidevineDialog from './lib/WidevineDialog.svelte';
+  import { widevine } from './lib/widevine.svelte';
 
   const win = getCurrentWindow();
   let W = $state(innerWidth);
@@ -72,6 +74,7 @@
     void listen('pip-ready', sendPip);
     void updater.check();
     void options.applyZoom();
+    void widevine.load();
     startGamepad();
     if (options.startFullscreen) void win.setFullscreen(true);
     nav.section = options.startScreen === 'home' ? 'home' : 'live';
@@ -142,6 +145,7 @@
 <OrganizeDialog />
 <EpgMatchDialog />
 <PromptDialog />
+<WidevineDialog />
 
 {#if player.osd}
   <div class="toast" role="status">{player.osd}</div>

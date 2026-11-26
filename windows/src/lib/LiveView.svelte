@@ -23,6 +23,7 @@
   import { videoHole, wheelScroll } from './video.svelte';
   import VirtualList from './VirtualList.svelte';
   import Volume from './Volume.svelte';
+  import { locked } from './widevine.svelte';
 
   /** The shown list: `list:<id>` a favourites list, `cat:<key>` a category, or all / recent / hidden. */
   let tab = $state('all');
@@ -314,6 +315,7 @@
     class="row"
     class:on={isPlaying(item)}
     class:dragging={dragged === item.id}
+    class:locked={locked(ch)}
     role="listitem"
     ondragover={(e) => listId && e.preventDefault()}
     ondrop={(e) => {
@@ -689,5 +691,8 @@
   }
   .ctl:hover {
     background: rgb(255 255 255 / 0.12);
+  }
+  .row.locked .main {
+    opacity: 0.4;
   }
 </style>
