@@ -386,6 +386,39 @@ mod tests {
         assert_eq!([retry(Some(0)), retry(Some(1)), retry(Some(30)), retry(Some(u32::MAX)), retry(None)], [Some(2), Some(2), Some(30), Some(3600), None]);
     }
 
+    fn wit_drm() -> wit::Drm {
+        wit::Drm { key_system: wit::KeySystem::Widevine, manifest: wit::Manifest::Hls, certificate: Some(vec![1, 2]), pssh: Some(Vec::new()), context: "lic-7".into() }
+    }
+
+    #[test]
+    fn drm_carried_through_and_relayed() {
+        let mut p = with_track("https://s.test/fr.m4a", None);
+        p.drm = Some(wit_drm());
+        let drm = playback(p).unwrap().drm.unwrap();
+        assert_eq!(drm, Drm { key_system: KeySystem::Widevine, manifest: Manifest::Hls, certificate: Some(vec![1, 2]), pssh: None, context: "lic-7".into() }, "an empty pssh is none");
+        let mut rtmp = with_track("rtmp://s.test/fr", None);
+        rtmp.drm = Some(wit_drm());
+        assert!(playback(rtmp).is_err(), "an encrypted stream is relayed: http(s) only");
+    }
+
+    #[test]
+    fn license_requests_reach_the_plugin_whole() {
+        let request = LicenseRequest { kind: LicenseKind::Renewal, challenge: vec![8, 1], url: Url::parse("https://s.test/a.mpd").unwrap(), context: "lic-7".into() };
+        let wit::LicenseRequest { kind, challenge, url, context } = to_wit_license_request(&request);
+        assert!(matches!(kind, wit::LicenseKind::Renewal));
+        assert_eq!((challenge, url.as_str(), context.as_str()), (vec![8, 1], "https://s.test/a.mpd", "lic-7"));
+    }
+
+    #[test]
+    fn protected_marks_carried_both_ways() {
+        let mut m = wit_movie("fr-tv:4711");
+        m.protected = true;
+        let kept = movie(m, true).unwrap();
+        assert!(kept.protected && to_wit_movie(&kept).protected);
+        let wit_channel = wit::Channel { id: "c".into(), name: "C".into(), number: None, group: None, logo: None, epg_id: None, stream: "https://s.test/c.mpd".into(), headers: Vec::new(), catchup_window: None, protected: true };
+        assert!(to_wit_channel(&channel(wit_channel).unwrap()).protected);
+    }
+
     #[test]
     fn tracks_are_checked_like_the_stream() {
         let tracks = playback(with_track("https://s.test/fr.m4a", None)).unwrap().tracks;

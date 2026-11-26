@@ -392,3 +392,172 @@ fn spki_key(spki: &[u8]) -> Option<&[u8]> {
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ring::rand::SystemRandom;
+    use ring::signature::{RSA_PKCS1_SHA256, RsaKeyPair};
+    use zip::write::SimpleFileOptions;
+
+    /// A key made for these tests only; packages signed with it stand for Google's.
+    const TEST_KEY: &[u8] = include_bytes!("../testdata/crx-test-key.der");
+
+    fn der(tag: u8, content: &[u8]) -> Vec<u8> {
+        let mut out = vec![tag];
+        match content.len() {
+            n if n < 0x80 => out.push(n as u8),
+            n if n < 0x100 => out.extend([0x81, n as u8]),
+            n => out.extend([0x82, (n >> 8) as u8, n as u8]),
+        }
+        out.extend_from_slice(content);
+        out
+    }
+
+    fn field(number: u64, value: &[u8]) -> Vec<u8> {
+        fn varint(mut v: u64, out: &mut Vec<u8>) {
+            while v >= 0x80 {
+                out.push((v as u8) | 0x80);
+                v >>= 7;
+            }
+            out.push(v as u8);
+        }
+        let mut out = Vec::new();
+        varint(number << 3 | 2, &mut out);
+        varint(value.len() as u64, &mut out);
+        out.extend_from_slice(value);
+        out
+    }
+
+    fn archive(version: &str, interfaces: &str, library: &[u8]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = SimpleFileOptions::default();
+        let manifest = json!({"name": "WidevineCdm", "version": version, "x-cdm-interface-versions": interfaces});
+        for (name, body) in [
+            ("manifest.json".to_string(), manifest.to_string().into_bytes()),
+            ("LICENSE".to_string(), b"Google's terms".to_vec()),
+            (format!("_platform_specific/test_x64/{}", library_name()), library.to_vec()),
+        ] {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(&body).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    /// A CRX3 package of `zip` signed with the test key, its id `crx_id`; with the SHA-256 of that key.
+    fn package(zip: &[u8], crx_id: Option<&[u8]>) -> (Vec<u8>, [u8; 32]) {
+        let pair = RsaKeyPair::from_der(TEST_KEY).unwrap();
+        let algorithm = der(0x30, &[der(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]), der(0x05, &[])].concat());
+        let spki = der(0x30, &[algorithm, der(0x03, &[&[0u8][..], pair.public().as_ref()].concat())].concat());
+        let hash: [u8; 32] = digest(&SHA256, &spki).as_ref().try_into().unwrap();
+        let signed_data = field(1, crx_id.unwrap_or(&hash[..16]));
+        let mut message = b"CRX3 SignedData\0".to_vec();
+        message.extend((signed_data.len() as u32).to_le_bytes());
+        message.extend(&signed_data);
+        message.extend(zip);
+        let mut signature = vec![0; pair.public().modulus_len()];
+        pair.sign(&RSA_PKCS1_SHA256, &SystemRandom::new(), &message, &mut signature).unwrap();
+        let header = [field(2, &[field(1, &spki), field(2, &signature)].concat()), field(10000, &signed_data)].concat();
+        let mut crx = b"Cr24".to_vec();
+        crx.extend(3u32.to_le_bytes());
+        crx.extend((header.len() as u32).to_le_bytes());
+        crx.extend(header);
+        crx.extend(zip);
+        (crx, hash)
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("nightglass-widevine-{name}-{}", std::process::id()));
+        _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn a_package_signed_with_the_pinned_key_opens() {
+        let zip = archive("4.10.1.0", "10", &[7; 4096]);
+        let (crx, key) = package(&zip, None);
+        assert_eq!(verify_crx3(&crx, &key).unwrap(), &zip[..]);
+        assert!(verify_crx3(&crx, &WIDEVINE_KEY).is_err(), "another key than Widevine's");
+    }
+
+    #[test]
+    fn a_changed_or_misnamed_package_is_refused() {
+        let zip = archive("4.10.1.0", "10", &[7; 4096]);
+        let (mut crx, key) = package(&zip, None);
+        let last = crx.len() - 1;
+        crx[last] ^= 1;
+        assert!(verify_crx3(&crx, &key).unwrap_err().to_string().contains("wrong signature"));
+        let (other, key) = package(&zip, Some(&[0; 16]));
+        assert!(verify_crx3(&other, &key).unwrap_err().to_string().contains("not the Widevine component"));
+        assert!(verify_crx3(b"Cr24\x02\0\0\0\0\0\0\0", &key).is_err(), "CRX2");
+        let mut truncated = b"Cr24\x03\0\0\0".to_vec();
+        truncated.extend(u32::MAX.to_le_bytes());
+        assert!(verify_crx3(&truncated, &key).is_err());
+    }
+
+    #[test]
+    fn unpacks_the_library_beside_a_receipt_and_drops_older_versions() {
+        let dir = scratch("unpack");
+        std::fs::create_dir_all(dir.join("4.9.0.0")).unwrap();
+        let (crx, key) = package(&archive("4.10.1.0", "9,10", &[7; 4096]), None);
+        let cdm = unpack(&dir, "4.10.1.0", &crx, &key).unwrap();
+        assert_eq!(cdm.library, dir.join("4.10.1.0").join(library_name()));
+        assert_eq!(std::fs::read(&cdm.library).unwrap(), [7; 4096]);
+        assert_eq!(std::fs::read(dir.join("4.10.1.0/LICENSE")).unwrap(), b"Google's terms");
+        assert!(!dir.join("4.9.0.0").exists());
+        assert_eq!(installed(&dir), Some(cdm.clone()));
+        cdm.verify().unwrap();
+        std::fs::write(&cdm.library, [8; 4096]).unwrap();
+        assert!(cdm.verify().is_err(), "a library changed on disk");
+        remove(&dir).unwrap();
+        assert_eq!(installed(&dir), None);
+        remove(&dir).unwrap();
+    }
+
+    #[test]
+    fn refuses_another_version_another_interface_or_no_library() {
+        let dir = scratch("refuse");
+        let (crx, key) = package(&archive("4.10.1.0", "10", &[7; 4096]), None);
+        assert!(unpack(&dir, "4.10.2.0", &crx, &key).is_err(), "not the announced version");
+        let (crx, key) = package(&archive("4.10.1.0", "11", &[7; 4096]), None);
+        assert!(unpack(&dir, "4.10.1.0", &crx, &key).unwrap_err().to_string().contains("interface 11"));
+        let (crx, key) = package(&archive("4.10.1.0", "10", &[7; 16]), None);
+        assert!(unpack(&dir, "4.10.1.0", &crx, &key).is_err(), "too small for a CDM");
+        assert_eq!(installed(&dir), None);
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reads_google_s_offer() {
+        let answer = br#")]}'
+{"response":{"app":[{"updatecheck":{"status":"ok","urls":{"url":[{"codebase":"http://dl.google.com/c/"},{"codebase":"https://edgedl.me.gvt1.com/c/"},{"codebase":"https://dl.google.com/c/"}]},
+"manifest":{"version":"4.10.3112.0","packages":{"package":[{"name":"x_linux64.crx3","size":21970001,"hash_sha256":"1BF1F200DCCCD461B2D029D000D0FCF800F0571C932DB31467B9D5D301E0A98F"}]}}}}]}}"#;
+        let offer = parse_offer(answer).unwrap();
+        assert_eq!((offer.version.as_str(), offer.url.as_str(), offer.size), ("4.10.3112.0", "https://dl.google.com/c/x_linux64.crx3", 21_970_001));
+        assert_eq!(offer.sha256, "1bf1f200dcccd461b2d029d000d0fcf800f0571c932db31467b9d5d301e0a98f");
+        assert!(parse_offer(br#"{"response":{"app":[{"updatecheck":{"status":"noupdate"}}]}}"#).is_err());
+        let traversal = String::from_utf8_lossy(answer).replace("4.10.3112.0", "../../evil");
+        assert!(parse_offer(traversal.as_bytes()).is_err(), "a version names a folder");
+        let plain = String::from_utf8_lossy(answer).replace("https://", "http://");
+        assert!(parse_offer(plain.as_bytes()).is_err(), "https only");
+    }
+
+    #[test]
+    fn versions_are_digits_and_dots() {
+        assert!(is_version("4.10.3112.0"));
+        assert!(!is_version(""));
+        assert!(!is_version(".."));
+        assert!(!is_version("4.10/.."));
+    }
+
+    /// Downloads the real CDM, about 22 MB: `cargo test -p nightglass-core -- --ignored widevine`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "downloads from Google"]
+    async fn installs_google_s_cdm() {
+        let dir = scratch("live");
+        let cdm = install(&Http::new(), &dir, &AtomicBool::new(false), |_| {}).await.unwrap();
+        cdm.verify().unwrap();
+        assert_eq!(installed(&dir), Some(cdm));
+        remove(&dir).unwrap();
+    }
+}

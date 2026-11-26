@@ -525,4 +525,10 @@ mod tests {
         assert_eq!(json, serde_json::json!({"prompt": {"message": "Sign in", "url": null, "code": "WDJB-MJHT", "retryIn": 5}}));
         assert_eq!(serde_json::to_value(Failure::from(IptvError::AuthFailed)).unwrap(), "The server refused the credentials.");
     }
+
+    #[test]
+    fn protected_content_off_reaches_the_page_as_an_object() {
+        assert_eq!(serde_json::to_value(Failure::ProtectedOff { protected: "off" }).unwrap(), serde_json::json!({"protected": "off"}));
+        assert_eq!(serde_json::to_value(Failure::from(IptvError::Drm("not implemented yet".into()))).unwrap(), "Protected playback failed: not implemented yet");
+    }
 }
