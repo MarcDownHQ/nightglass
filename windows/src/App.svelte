@@ -35,6 +35,7 @@
   import ResizeEdges from './lib/ResizeEdges.svelte';
   import { updater } from './lib/updater.svelte';
   import { backdropClip, hole } from './lib/video.svelte';
+  import PlayPromptDialog from './lib/PlayPromptDialog.svelte';
   import WidevineDialog from './lib/WidevineDialog.svelte';
   import { widevine } from './lib/widevine.svelte';
 
@@ -146,6 +147,7 @@
 <EpgMatchDialog />
 <PromptDialog />
 <WidevineDialog />
+<PlayPromptDialog />
 
 {#if player.osd}
   <div class="toast" role="status">{player.osd}</div>

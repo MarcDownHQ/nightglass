@@ -454,6 +454,7 @@ export const FR: Record<string, string> = {
   "Show channel names": "Afficher les noms des chaînes",
   // Search
   "Searching…": "Recherche…",
+  'It plays as soon as the provider lets it.': 'La lecture démarre dès que le fournisseur le permet.',
   // Protected content
   'Protected content (Widevine)': 'Contenus protégés (Widevine)',
   'Play protected channels, movies and episodes': 'Lire les chaînes, films et épisodes protégés',

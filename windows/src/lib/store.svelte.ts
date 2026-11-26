@@ -21,6 +21,7 @@ import { options } from './options.svelte';
 import { player, type Playable } from './player.svelte';
 import { withoutOverlaps } from './epg';
 import { errorText, promptOf, protectedOff } from './errors';
+import { playPrompt } from './playPrompt.svelte';
 import { prefs } from './prefs';
 import { locked, widevine } from './widevine.svelte';
 
@@ -330,11 +331,16 @@ class Store {
 
   /** A past programme of a channel whose server keeps them, played like a film. */
   async playReplay(item: LiveItem, p: Programme) {
-    if (locked(item.channel)) return widevine.blocked(p.title, () => void this.playReplay(item, p));
+    const id = `replay:${item.id}:${p.start}`;
+    const again = () => this.playReplay(item, p);
+    if (locked(item.channel)) return widevine.blocked(p.title, again);
+    const token = playPrompt.starting(id);
     try {
       const { url, headers, chapters } = await invoke<Playback>('catchup_url', { source: item.source, channel: item.channel, start: p.start, end: p.end });
+      if (!playPrompt.wanted(token)) return;
+      playPrompt.done(id);
       player.play({
-        id: `replay:${item.id}:${p.start}`,
+        id,
         title: p.title,
         subtitle: t('{channel} · replay', { channel: item.channel.name }),
         url,
@@ -344,7 +350,7 @@ class Store {
       });
       void player.expand();
     } catch (e) {
-      this.unavailable(e, (error) => t('Replay unavailable: {error}', { error }), p.title, () => void this.playReplay(item, p));
+      if (playPrompt.wanted(token)) this.unavailable(e, (error) => t('Replay unavailable: {error}', { error }), id, p.title, again);
     }
   }
 
@@ -363,34 +369,40 @@ class Store {
   }
 
   /** A movie's or an episode's playback, from its provider (which checks a stored link); null once said why not, or when overtaken. */
-  private async vod(ask: () => Promise<Playback>, title: string, again: () => void): Promise<Playback | null> {
+  private async vod(ask: () => Promise<Playback>, key: string, title: string, again: () => Promise<void>): Promise<Playback | null> {
     const request = ++this.vodRequest;
     const playing = player.current;
+    const token = playPrompt.starting(key);
+    const wanted = () => this.stillWanted(request, playing) && playPrompt.wanted(token);
     try {
       const playback = await ask();
-      return this.stillWanted(request, playing) ? playback : null;
+      if (!wanted()) return null;
+      playPrompt.done(key);
+      return playback;
     } catch (e) {
-      if (this.stillWanted(request, playing)) this.unavailable(e, (error) => t('Playback unavailable: {error}', { error }), title, again);
+      if (wanted()) this.unavailable(e, (error) => t('Playback unavailable: {error}', { error }), key, title, again);
       return null;
     }
   }
 
   /**
-   * Why a film, an episode or a replay can't play; a plugin waiting for the user says what to do, long enough to read
-   * the code, and an encrypted stream offers to turn protected content on and play `again`.
+   * Why `key` can't play. A plugin waiting for the user keeps its prompt on screen and tries `again` until it plays;
+   * an encrypted stream offers to turn protected content on and play `again`.
    */
-  private unavailable(e: unknown, said: (error: string) => string, title: string, again: () => void) {
+  private unavailable(e: unknown, said: (error: string) => string, key: string, title: string, again: () => Promise<void>) {
+    const prompt = promptOf(e);
+    if (prompt) return playPrompt.show(key, title, prompt, again);
+    playPrompt.done(key);
     if (protectedOff(e)) widevine.blocked(title, again);
-    else if (promptOf(e)) player.notify(errorText(e), 15_000);
     else player.notify(said(String(e)));
   }
 
   /** From where it was left, unless `fromStart`. */
   async playMovie(item: MovieItem, fromStart = false) {
     const { id, source, movie } = item;
-    const again = () => void this.playMovie(item, fromStart);
+    const again = () => this.playMovie(item, fromStart);
     if (locked(movie)) return widevine.blocked(movie.name, again);
-    const playback = await this.vod(() => invoke<Playback>('movie_url', { source, movie }), movie.name, again);
+    const playback = await this.vod(() => invoke<Playback>('movie_url', { source, movie }), id, movie.name, again);
     if (!playback) return;
     const resume = { kind: 'movie' as const, id };
     player.play({
@@ -409,7 +421,7 @@ class Store {
 
   /** `list` is the series' episodes, for the next one; asked for when missing (the Continue row). */
   async playEpisode(item: SeriesItem, e: Episode, list?: Episode[], fromStart = false) {
-    const again = () => void this.playEpisode(item, e, list, fromStart);
+    const again = () => this.playEpisode(item, e, list, fromStart);
     if (locked(e)) return widevine.blocked(e.title, again);
     let episodes = list;
     if (!episodes) {
@@ -424,7 +436,7 @@ class Store {
     const i = episodes?.findIndex((x) => x.id === e.id) ?? -1;
     const next = i >= 0 ? episodes?.[i + 1] : undefined;
     const { source, series } = item;
-    const playback = await this.vod(() => invoke<Playback>('episode_url', { source, series, episode: e }), e.title, again);
+    const playback = await this.vod(() => invoke<Playback>('episode_url', { source, series, episode: e }), id, e.title, again);
     if (!playback) return;
     player.play({
       id,
@@ -476,17 +488,28 @@ class Store {
   private tunedAt = 0;
 
   async tune(item: LiveItem) {
-    const again = () => void this.tune(item);
-    if (locked(item.channel)) return widevine.blocked(item.channel.name, again);
+    if (locked(item.channel)) return widevine.blocked(item.channel.name, () => this.tune(item));
     const previous = player.current?.item;
     if (previous && this.tunedAt) library.watched(previous.id, (Date.now() - this.tunedAt) / 1000);
     this.tunedAt = Date.now();
     library.tuned(item.id);
+    await this.startLive(item);
+  }
+
+  /** The channel's stream, played; a plugin waiting for the user keeps its prompt on screen and this is tried again. */
+  private async startLive(item: LiveItem): Promise<void> {
+    const token = playPrompt.starting(item.id);
     try {
-      player.play(await this.playable(item));
+      const playable = await this.playable(item);
+      if (!playPrompt.wanted(token)) return;
+      playPrompt.done(item.id);
+      player.play(playable);
     } catch (e) {
-      if (protectedOff(e)) widevine.blocked(item.channel.name, again);
-      else if (promptOf(e)) player.notify(errorText(e), 15_000);
+      if (!playPrompt.wanted(token)) return;
+      const prompt = promptOf(e);
+      if (prompt) return playPrompt.show(item.id, item.channel.name, prompt, () => this.startLive(item));
+      playPrompt.done(item.id);
+      if (protectedOff(e)) widevine.blocked(item.channel.name, () => this.tune(item));
       else player.error = String(e);
     }
   }
