@@ -184,3 +184,20 @@ pub fn media_segment_with_groups(track: &TrackSpec, samples: &[SampleSpec], grou
         bx(b"moof", &[full(b"mfhd", 0, 0, &[0, 0, 0, 1]), bx(b"traf", &traf)].concat())
     })
 }
+
+/// `samples` as a packager encrypts them for `track`, each with its own IV unless the track has a constant one.
+pub fn encrypt(track: &TrackSpec, key: &[u8; 16], samples: &[SampleSpec]) -> Vec<SampleSpec> {
+    use crate::protocol::{Sample, Scheme};
+    let scheme = if &track.scheme == b"cbcs" { Scheme::Cbcs } else { Scheme::Cenc };
+    samples
+        .iter()
+        .map(|s| {
+            let mut iv = if s.iv.is_empty() { track.crypto.constant_iv.clone() } else { s.iv.clone() };
+            iv.resize(16, 0);
+            let sample = Sample { size: s.data.len() as u32, scheme, kid: track.crypto.kid.to_vec(), iv, pattern: Some(track.crypto.pattern), subsamples: s.subsamples.clone() };
+            let mut data = s.data.clone();
+            crate::cenc::encrypt_sample(key, &sample, &mut data).expect("encrypted");
+            SampleSpec { data, ..s.clone() }
+        })
+        .collect()
+}

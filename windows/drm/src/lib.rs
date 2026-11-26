@@ -3,6 +3,7 @@
 //! The CDM runs in a helper process (`nightglass-cdm`) that speaks `protocol`; `client` starts and drives it.
 //! Nothing that crosses that boundary depends on the OS or on which CDM build answers.
 
+pub mod cenc;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod mp4;
@@ -35,6 +36,11 @@ pub enum DrmError {
 }
 
 pub type Result<T> = std::result::Result<T, DrmError>;
+
+pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
+/// The licence round trip, done by whoever knows the service: a challenge in, the server's answer out.
+pub type Exchange = std::sync::Arc<dyn Fn(Vec<u8>) -> BoxFuture<'static, Result<Vec<u8>>> + Send + Sync>;
 
 pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

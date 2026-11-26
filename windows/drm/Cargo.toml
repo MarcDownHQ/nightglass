@@ -12,6 +12,7 @@ client = ["dep:tokio", "dep:log"]
 testing = []
 
 [dependencies]
+aes = "0.8.4"
 base64 = "0.22.1"
 log = { version = "0.4", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }

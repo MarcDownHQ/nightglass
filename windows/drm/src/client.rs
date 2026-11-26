@@ -2,9 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
-use std::future::Future;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -15,7 +13,9 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Notify, oneshot};
 
 use crate::protocol::{self, Envelope, Failure, FailureKind, Key, Message, MessageKind, Reply, Request, Sample};
-use crate::{DrmError, Result, hex};
+use crate::cenc::Cdm;
+use crate::pssh::Pssh;
+use crate::{BoxFuture, DrmError, Exchange, Result, hex};
 
 /// How long the helper may take to load the CDM and say it is ready.
 pub const START: Duration = Duration::from_secs(30);
@@ -23,9 +23,6 @@ pub const START: Duration = Duration::from_secs(30);
 pub const CALL: Duration = Duration::from_secs(60);
 /// How long a session may wait for its next message, a licence answer included.
 pub const MESSAGE: Duration = Duration::from_secs(30);
-
-/// The licence round trip, done by whoever knows the service: a challenge in, the server's answer out.
-pub type Exchange = Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send>> + Send + Sync>;
 
 /// A program that speaks `protocol` on its stdin and stdout.
 #[derive(Clone, Debug, PartialEq)]
@@ -208,6 +205,24 @@ impl Helper {
                 Err(DrmError::Helper(format!("no answer after {} s", CALL.as_secs())))
             }
         }
+    }
+}
+
+impl Cdm for Helper {
+    fn decrypt(&self, samples: Vec<Sample>, data: Vec<u8>) -> BoxFuture<'_, Result<Vec<u8>>> {
+        Box::pin(Helper::decrypt(self, samples, data))
+    }
+
+    fn license(&self, pssh: Pssh, exchange: Exchange) -> BoxFuture<'_, Result<Vec<Key>>> {
+        Box::pin(Helper::license(self, pssh.bytes, exchange))
+    }
+
+    fn probe<'a>(&'a self, kid: &'a [u8]) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Helper::probe(self, kid))
+    }
+
+    fn keys(&self) -> Vec<Key> {
+        Helper::keys(self)
     }
 }
 
