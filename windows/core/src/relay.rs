@@ -22,6 +22,11 @@ use uuid::Uuid;
 
 use crate::{Config, Http, IptvError, Media, Playback, Provider, Relay, Request, Result, Track};
 
+mod dash;
+mod protected;
+
+pub use protected::widevine_helper;
+
 /// A session nobody asked anything of for this long is forgotten.
 const IDLE: Duration = Duration::from_secs(6 * 3600);
 
@@ -47,6 +52,7 @@ struct Session {
     relay: Relay,
     urls: Mutex<Urls>,
     used: Mutex<Instant>,
+    protected: Option<protected::Protected>,
 }
 
 /// A live stream names new segments on every refresh: past this many addresses, those unused for `FORGOTTEN` go.
@@ -94,6 +100,7 @@ impl RelayServer {
             relay: playback.relay.unwrap_or_default(),
             urls: Mutex::default(),
             used: Mutex::new(Instant::now()),
+            protected: None,
         });
         let local = session.local(port, &token, &playback.url);
         let mut sessions = lock(&self.0.sessions);
@@ -135,12 +142,15 @@ impl RelayServer {
     async fn answer(&self, request: hyper::Request<hyper::body::Incoming>, port: u16) -> Response<Body> {
         let mut parts = request.uri().path().trim_start_matches('/').splitn(2, '/');
         let (token, name) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
-        let number = name.split('.').next().and_then(|n| n.parse::<usize>().ok());
-        let session = lock(&self.0.sessions).get(token).cloned();
-        let (Some(session), Some(number)) = (session, number) else { return status(StatusCode::NOT_FOUND) };
-        let Some(upstream) = lock(&session.urls).get(number) else { return status(StatusCode::NOT_FOUND) };
-        *lock(&session.used) = Instant::now();
+        let Some(session) = lock(&self.0.sessions).get(token).cloned() else { return status(StatusCode::NOT_FOUND) };
         let range = request.headers().get(RANGE).and_then(|v| v.to_str().ok()).map(str::to_string);
+        if let Some(protected) = &session.protected {
+            *lock(&session.used) = Instant::now();
+            return protected::answer(&self.0.http, &session, protected, name, request.uri().query(), range, port, token).await;
+        }
+        let number = name.split('.').next().and_then(|n| n.parse::<usize>().ok());
+        let Some(upstream) = number.and_then(|n| lock(&session.urls).get(n)) else { return status(StatusCode::NOT_FOUND) };
+        *lock(&session.used) = Instant::now();
         match session.relay_one(&self.0.http, upstream, range, port, token).await {
             Ok(response) => response,
             Err(e) => {
@@ -510,6 +520,7 @@ mod tests {
             relay: Relay::default(),
             urls: Mutex::default(),
             used: Mutex::new(Instant::now()),
+            protected: None,
         };
         let local = |s: &str| session.local(1, "t", &Url::parse(s).unwrap()).path().to_string();
         assert_eq!(local("http://x.test/a/seg.ts?x=1"), "/t/0.ts");

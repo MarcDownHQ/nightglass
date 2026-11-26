@@ -3099,6 +3099,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "log",
+ "nightglass-drm",
  "percent-encoding",
  "quick-xml",
  "reqwest",

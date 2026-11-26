@@ -14,6 +14,7 @@ http-body-util = "0.1.5"
 hyper = { version = "1.12.0", features = ["server", "http1"] }
 hyper-util = { version = "0.1.21", features = ["tokio"] }
 log = "0.4"
+nightglass-drm = { path = "../drm" }
 percent-encoding = "2.3.2"
 quick-xml = "0.42.0"
 ring = "0.17.14"
@@ -35,5 +36,6 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls", 
 reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "gzip", "http2", "charset"] }
 
 [dev-dependencies]
+nightglass-drm = { path = "../drm", features = ["testing"] }
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6.5"
