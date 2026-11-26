@@ -26,6 +26,8 @@ pub(super) struct Rep {
     pub init: Option<Source>,
     /// A single file indexed by its `sidx`: byte range of the index, and of the init segment.
     pub single: Option<(ByteRange, Option<ByteRange>)>,
+    /// Its `BaseURL` alone addresses it: one resource, such as subtitles.
+    pub whole: bool,
 }
 
 pub(super) struct Manifest {
@@ -202,7 +204,8 @@ fn walk(root: &mut Element, url: &Url, strip: bool, f: &mut dyn FnMut(&Rep, &mut
                     }
                     own
                 });
-                let rep = Rep { track: format!("{period_id}/{ai}/{id}"), base, kid: kid.or(set_kid), init, single };
+                let whole = !has_template && list.is_none() && single.is_none();
+                let rep = Rep { track: format!("{period_id}/{ai}/{id}"), base, kid: kid.or(set_kid), init, single, whole };
                 if strip {
                     element.remove("ContentProtection");
                     element.remove("BaseURL");
@@ -320,6 +323,9 @@ mod tests {
                 ("p0/1/a", "https://other.test/audio.mp4", None, source("https://other.test/audio.mp4", Some((0, 799))), Some(((800, 899), Some((0, 799))))),
             ]
         );
+        assert!(manifest.reps.iter().all(|r| !r.whole));
+        let subtitles = Manifest::parse(r#"<MPD><Period><AdaptationSet mimeType="text/vtt"><Representation id="s"><BaseURL>en.vtt</BaseURL></Representation></AdaptationSet></Period></MPD>"#, &url()).unwrap();
+        assert!(subtitles.reps[0].whole && subtitles.reps[0].base.as_str() == "https://origin.test/stream/en.vtt");
         assert!(Manifest::parse("<html/>", &url()).is_none());
     }
 

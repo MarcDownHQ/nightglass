@@ -481,6 +481,10 @@ async fn manifest(http: &Http, session: &Session, protected: &Protected, url: &U
                 let media = index.references.iter().map(|(r, _)| session.local_resource(port, token, &segment((r.start, r.end - 1)), "m4s")).collect();
                 Addressing::List { index, init, media }
             }
+            _ if rep.whole => {
+                let extension = extension(&rep.base);
+                Addressing::Base(session.local_resource(port, token, &Resource::Segment { url: rep.base.clone(), range: None, track: rep.track.clone() }, &extension))
+            }
             _ => Addressing::Base(session.local_resource(port, token, &Resource::Base { url: rep.base.clone(), track: rep.track.clone() }, "")),
         },
     );
