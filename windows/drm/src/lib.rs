@@ -5,7 +5,11 @@
 
 #[cfg(feature = "client")]
 pub mod client;
+pub mod mp4;
 pub mod protocol;
+pub mod pssh;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 /// Why protected media can't be played.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
