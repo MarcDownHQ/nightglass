@@ -1,0 +1,358 @@
+//! The app's side of `protocol`: starts a helper, sends it requests, and gets licences through the caller.
+
+use std::collections::{HashMap, VecDeque};
+use std::ffi::OsString;
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, Weak};
+use std::time::Duration;
+
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::{Notify, oneshot};
+
+use crate::protocol::{self, Envelope, Failure, FailureKind, Key, Message, MessageKind, Reply, Request, Sample};
+use crate::{DrmError, Result, hex};
+
+/// How long the helper may take to load the CDM and say it is ready.
+pub const START: Duration = Duration::from_secs(30);
+/// How long a CDM call or a decryption may take before the helper is taken for hung and stopped.
+pub const CALL: Duration = Duration::from_secs(60);
+/// How long a session may wait for its next message, a licence answer included.
+pub const MESSAGE: Duration = Duration::from_secs(30);
+
+/// The licence round trip, done by whoever knows the service: a challenge in, the server's answer out.
+pub type Exchange = Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send>> + Send + Sync>;
+
+/// A program that speaks `protocol` on its stdin and stdout.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Backend {
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+}
+
+impl Backend {
+    /// Google's CDM built for this OS, hosted by `nightglass-cdm`.
+    pub fn native(helper: impl Into<PathBuf>, cdm: impl Into<PathBuf>) -> Self {
+        Backend { program: helper.into(), args: vec![cdm.into().into_os_string()] }
+    }
+}
+
+/// A running helper. Cheap to clone; the process stops with the last clone.
+#[derive(Clone)]
+pub struct Helper(Arc<Inner>);
+
+struct Inner {
+    stdin: tokio::sync::Mutex<ChildStdin>,
+    child: Mutex<Child>,
+    shared: Arc<Shared>,
+    cdm_version: String,
+}
+
+/// A reply and its payload.
+type Answer = (Reply, Vec<u8>);
+
+#[derive(Default)]
+struct Shared {
+    next: AtomicU64,
+    pending: Mutex<HashMap<u64, oneshot::Sender<Result<Answer>>>>,
+    sessions: Mutex<HashMap<String, Session>>,
+    changed: Notify,
+    stopped: Mutex<Option<String>>,
+    last_words: Mutex<VecDeque<String>>,
+}
+
+#[derive(Default)]
+struct Session {
+    messages: VecDeque<(MessageKind, Vec<u8>)>,
+    keys: Vec<Key>,
+}
+
+impl Helper {
+    pub async fn start(backend: &Backend) -> Result<Helper> {
+        let mut child = Command::new(&backend.program)
+            .args(&backend.args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| DrmError::Helper(format!("{}: {e}", backend.program.display())))?;
+        let shared = Arc::new(Shared::default());
+        let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take()) else {
+            return Err(DrmError::Helper("no pipes".into()));
+        };
+        tokio::spawn(keep_last_words(Arc::downgrade(&shared), stderr));
+        let mut stdout = BufReader::new(stdout);
+        let ready = tokio::time::timeout(START, read_frame(&mut stdout)).await;
+        let cdm_version = match ready {
+            Ok(Ok(Some((Message::Ready { protocol: protocol::PROTOCOL, cdm_version }, _)))) => cdm_version,
+            Ok(Ok(Some((Message::Ready { protocol, .. }, _)))) => return Err(DrmError::Helper(format!("speaks protocol {protocol}, not {}", protocol::PROTOCOL))),
+            Ok(Ok(_)) | Ok(Err(_)) => {
+                let status = child.wait().await.ok();
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                return Err(DrmError::Helper(shared.last_words().or(status.map(|s| s.to_string())).unwrap_or_else(|| "did not start".into())));
+            }
+            Err(_) => return Err(DrmError::Helper(format!("not ready after {} s", START.as_secs()))),
+        };
+        tokio::spawn(read_messages(shared.clone(), stdout));
+        Ok(Helper(Arc::new(Inner { stdin: tokio::sync::Mutex::new(stdin), child: Mutex::new(child), shared, cdm_version })))
+    }
+
+    pub fn cdm_version(&self) -> &str {
+        &self.0.cdm_version
+    }
+
+    pub async fn initialize(&self) -> Result<()> {
+        self.call(Request::Initialize { distinctive_identifier: false, persistent_state: false }, Vec::new()).await.map(drop)
+    }
+
+    pub async fn set_server_certificate(&self, certificate: Vec<u8>) -> Result<()> {
+        self.call(Request::SetServerCertificate, certificate).await.map(drop)
+    }
+
+    /// A session for `pssh` (one or more whole boxes), whose first message waits in `next_message`.
+    pub async fn create_session(&self, pssh: Vec<u8>) -> Result<String> {
+        match self.call(Request::CreateSession, pssh).await? {
+            (Reply::Session { session }, _) => Ok(session),
+            (other, _) => Err(DrmError::Helper(format!("answered {other:?} to a new session"))),
+        }
+    }
+
+    pub async fn next_message(&self, session: &str) -> Result<(MessageKind, Vec<u8>)> {
+        self.0.shared.next_message(session, MESSAGE).await
+    }
+
+    pub async fn update_session(&self, session: &str, response: Vec<u8>) -> Result<()> {
+        self.call(Request::UpdateSession { session: session.into() }, response).await.map(drop)
+    }
+
+    pub async fn close_session(&self, session: &str) -> Result<()> {
+        self.call(Request::CloseSession { session: session.into() }, Vec::new()).await.map(drop)
+    }
+
+    /// Every key of every session, as the CDM last reported them.
+    pub fn keys(&self) -> Vec<Key> {
+        lock(&self.0.shared.sessions).values().flat_map(|s| s.keys.iter().cloned()).collect()
+    }
+
+    /// `data` holds `samples` back to back; they come back clear, at the same sizes.
+    pub async fn decrypt(&self, samples: Vec<Sample>, data: Vec<u8>) -> Result<Vec<u8>> {
+        let size = data.len();
+        match self.call(Request::Decrypt { samples }, data).await? {
+            (Reply::Decrypted, clear) if clear.len() == size => Ok(clear),
+            (Reply::Decrypted, clear) => Err(DrmError::Helper(format!("gave back {} bytes for {size}", clear.len()))),
+            (other, _) => Err(DrmError::Helper(format!("answered {other:?} to a decryption"))),
+        }
+    }
+
+    /// A licence for `pssh` through `exchange`: the keys it brought, once one at least is usable. Renewals the CDM
+    /// asks for later go through `exchange` as well, for as long as the helper runs.
+    pub async fn license(&self, pssh: Vec<u8>, exchange: Exchange) -> Result<Vec<Key>> {
+        let session = self.create_session(pssh).await?;
+        loop {
+            let (_, challenge) = self.next_message(&session).await?;
+            let response = exchange(challenge).await?;
+            self.update_session(&session, response).await?;
+            let keys = lock(&self.0.shared.sessions).get(&session).map(|s| s.keys.clone()).unwrap_or_default();
+            if keys.iter().any(Key::usable) {
+                tokio::spawn(renew(Arc::downgrade(&self.0), self.0.shared.clone(), session, exchange));
+                return Ok(keys);
+            }
+            let more = lock(&self.0.shared.sessions).get(&session).is_some_and(|s| !s.messages.is_empty());
+            if !more {
+                let statuses: Vec<String> = keys.iter().map(|k| format!("{}: {}", hex(&k.kid), k.status_name())).collect();
+                return Err(DrmError::NoUsableKey(if statuses.is_empty() { "none".into() } else { statuses.join(", ") }));
+            }
+        }
+    }
+
+    /// Whether the CDM decrypts with `kid` itself rather than only through its decoder: a made-up sample, which
+    /// CTR decrypts to noise without complaint when the licence allows it.
+    pub async fn probe(&self, kid: &[u8]) -> Result<()> {
+        let sample = Sample { size: 32, scheme: protocol::Scheme::Cenc, kid: kid.to_vec(), iv: vec![0; 16], pattern: None, subsamples: vec![(16, 16)] };
+        self.decrypt(vec![sample], vec![0; 32]).await.map(drop)
+    }
+
+    async fn call(&self, request: Request, payload: Vec<u8>) -> Result<Answer> {
+        let shared = &self.0.shared;
+        let id = shared.next.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = oneshot::channel();
+        lock(&shared.pending).insert(id, sender);
+        if let Some(reason) = lock(&shared.stopped).clone() {
+            lock(&shared.pending).remove(&id);
+            return Err(DrmError::Helper(reason));
+        }
+        let header = serde_json::to_vec(&Envelope { id, request }).map_err(|e| DrmError::Helper(e.to_string()))?;
+        let lengths = protocol::frame_lengths(header.len(), payload.len()).map_err(|e| DrmError::Malformed(e.to_string()))?;
+        let written = async {
+            let mut stdin = self.0.stdin.lock().await;
+            stdin.write_all(&lengths).await?;
+            stdin.write_all(&header).await?;
+            stdin.write_all(&payload).await?;
+            stdin.flush().await
+        };
+        if let Err(e) = written.await {
+            lock(&shared.pending).remove(&id);
+            return Err(DrmError::Helper(shared.last_words().unwrap_or_else(|| e.to_string())));
+        }
+        match tokio::time::timeout(CALL, receiver).await {
+            Ok(Ok(answer)) => answer,
+            Ok(Err(_)) => Err(DrmError::Helper(lock(&shared.stopped).clone().unwrap_or_default())),
+            Err(_) => {
+                lock(&shared.pending).remove(&id);
+                let _ = lock(&self.0.child).start_kill();
+                Err(DrmError::Helper(format!("no answer after {} s", CALL.as_secs())))
+            }
+        }
+    }
+}
+
+impl Shared {
+    async fn next_message(&self, session: &str, wait: Duration) -> Result<(MessageKind, Vec<u8>)> {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if let Some(message) = lock(&self.sessions).get_mut(session).and_then(|s| s.messages.pop_front()) {
+                return Ok(message);
+            }
+            if let Some(reason) = lock(&self.stopped).clone() {
+                return Err(DrmError::Helper(reason));
+            }
+            if tokio::time::timeout_at(deadline, changed).await.is_err() {
+                return Err(DrmError::Cdm(format!("session {session} asked nothing within {} s", wait.as_secs())));
+            }
+        }
+    }
+
+    fn last_words(&self) -> Option<String> {
+        lock(&self.last_words).back().cloned()
+    }
+
+    fn key_usable(&self, kid: &[u8]) -> bool {
+        lock(&self.sessions).values().flat_map(|s| &s.keys).any(|k| k.kid == kid && k.usable())
+    }
+
+    fn failure(&self, failure: Failure) -> DrmError {
+        let kid = failure.kid.as_deref().map(hex).unwrap_or_default();
+        match failure.kind {
+            FailureKind::Rejected => match failure.system_code {
+                Some(code) if code != 0 => DrmError::Rejected(format!("{} (code {code})", failure.message)),
+                _ => DrmError::Rejected(failure.message),
+            },
+            FailureKind::Initialization => DrmError::Cdm(failure.message),
+            FailureKind::NoKey => DrmError::NoKey { kid },
+            FailureKind::DecryptError if failure.kid.as_deref().is_some_and(|k| self.key_usable(k)) => DrmError::SecureDecodeRequired { kid },
+            FailureKind::DecryptError => DrmError::Cdm(format!("{} ({kid})", failure.message)),
+            FailureKind::Malformed => DrmError::Malformed(failure.message),
+        }
+    }
+
+    fn stop(&self, reason: String) {
+        let reason = self.last_words().map_or(reason.clone(), |words| format!("{reason}: {words}"));
+        *lock(&self.stopped) = Some(reason.clone());
+        for (_, sender) in lock(&self.pending).drain() {
+            let _ = sender.send(Err(DrmError::Helper(reason.clone())));
+        }
+        self.changed.notify_waiters();
+    }
+}
+
+async fn read_frame(input: &mut (impl AsyncRead + Unpin)) -> std::io::Result<Option<(Message, Vec<u8>)>> {
+    let mut lengths = [0; 8];
+    match input.read_exact(&mut lengths).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    let (header, payload) = protocol::read_lengths(lengths)?;
+    let mut header_bytes = vec![0; header];
+    input.read_exact(&mut header_bytes).await?;
+    let mut payload_bytes = vec![0; payload];
+    input.read_exact(&mut payload_bytes).await?;
+    let message = serde_json::from_slice(&header_bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    Ok(Some((message, payload_bytes)))
+}
+
+async fn read_messages(shared: Arc<Shared>, mut stdout: impl AsyncRead + Unpin) {
+    loop {
+        let (message, payload) = match read_frame(&mut stdout).await {
+            Ok(Some(frame)) => frame,
+            Ok(None) => return shared.stop("the helper quit".into()),
+            Err(e) => return shared.stop(e.to_string()),
+        };
+        match message {
+            Message::Reply { id, reply } => {
+                if let Some(sender) = lock(&shared.pending).remove(&id) {
+                    let _ = sender.send(Ok((reply, payload)));
+                }
+            }
+            Message::Failed { id, failure } => {
+                let error = shared.failure(failure);
+                if let Some(sender) = lock(&shared.pending).remove(&id) {
+                    let _ = sender.send(Err(error));
+                }
+            }
+            Message::SessionMessage { session, kind } => {
+                lock(&shared.sessions).entry(session).or_default().messages.push_back((kind, payload));
+                shared.changed.notify_waiters();
+            }
+            Message::Keys { session, keys } => {
+                lock(&shared.sessions).entry(session).or_default().keys = keys;
+                shared.changed.notify_waiters();
+            }
+            Message::Closed { session } => {
+                lock(&shared.sessions).remove(&session);
+                shared.changed.notify_waiters();
+            }
+            Message::Expiration { .. } | Message::Ready { .. } => {}
+        }
+    }
+}
+
+async fn keep_last_words(shared: Weak<Shared>, stderr: impl AsyncRead + Unpin) {
+    let mut lines = BufReader::new(stderr).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        log::debug!("nightglass-cdm: {line}");
+        let Some(shared) = shared.upgrade() else { return };
+        let mut words = lock(&shared.last_words);
+        if words.len() == 8 {
+            words.pop_front();
+        }
+        words.push_back(line);
+    }
+}
+
+/// Renewals of one session, for as long as the helper runs.
+async fn renew(helper: Weak<Inner>, shared: Arc<Shared>, session: String, exchange: Exchange) {
+    loop {
+        let Ok((kind, challenge)) = shared.next_message(&session, Duration::from_secs(24 * 3600)).await else {
+            if lock(&shared.stopped).is_some() || !lock(&shared.sessions).contains_key(&session) {
+                return;
+            }
+            continue;
+        };
+        if kind == MessageKind::LicenseRelease {
+            continue;
+        }
+        let Some(helper) = helper.upgrade().map(Helper) else { return };
+        let answer = exchange(challenge).await;
+        match answer {
+            Ok(response) => {
+                if let Err(e) = helper.update_session(&session, response).await {
+                    log::warn!("widevine: renewal of {session}: {e}");
+                }
+            }
+            Err(e) => log::warn!("widevine: renewal of {session}: {e}"),
+        }
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}

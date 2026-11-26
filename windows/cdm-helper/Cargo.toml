@@ -8,3 +8,8 @@ license = "MIT"
 
 [dependencies]
 libloading = "0.9.0"
+nightglass-drm = { path = "../drm", default-features = false }
+
+[dev-dependencies]
+nightglass-drm = { path = "../drm" }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

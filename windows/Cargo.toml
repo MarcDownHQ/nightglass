@@ -1,4 +1,4 @@
 [workspace]
-members = ["cdm-helper", "core", "plugin-host", "src-tauri"]
+members = ["cdm-helper", "core", "drm", "plugin-host", "src-tauri"]
 exclude = ["plugin-example"]
 resolver = "3"
