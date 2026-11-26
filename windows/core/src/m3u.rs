@@ -85,6 +85,7 @@ impl Parser {
                 stream,
                 headers: std::mem::take(&mut self.headers),
                 catchup_window: None,
+                protected: false,
             });
             self.info = None;
         }

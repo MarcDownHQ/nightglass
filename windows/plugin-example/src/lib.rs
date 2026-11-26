@@ -160,6 +160,7 @@ impl Guest for JsonList {
                 stream: e.url,
                 headers: Vec::new(),
                 catchup_window: None,
+                protected: false,
             });
         }
         let movies = list
@@ -167,7 +168,7 @@ impl Guest for JsonList {
             .into_iter()
             .map(|m| {
                 let stream = serde_json::to_string(&Reel { url: m.url.clone(), audio: m.audio, chapters: m.chapters }).expect("strings serialize");
-                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None }
+                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None, protected: false }
             })
             .collect();
         let series = list.series.into_iter().map(|s| Series { id: s.name.clone(), name: s.name, group: None, poster: None, rating: None, plot: None }).collect();
@@ -175,18 +176,18 @@ impl Guest for JsonList {
     }
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new(), drm: None })
     }
 
     fn movie_url(config: Config, movie: Movie) -> Result<Playback, Error> {
         let reel: Reel = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
         let tracks = reel.audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
         let chapters = reel.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
-        Ok(Playback { url: reel.url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters })
+        Ok(Playback { url: reel.url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters, drm: None })
     }
 
     fn episode_url(config: Config, _series: Series, episode: Episode) -> Result<Playback, Error> {
-        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new() })
+        Ok(Playback { url: episode.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new(), drm: None })
     }
 
     fn catchup_url(_config: Config, _channel: Channel, _start: i64, _end: i64) -> Result<Playback, Error> {
@@ -197,12 +198,16 @@ impl Guest for JsonList {
         Ok(media)
     }
 
+    fn license(_config: Config, _request: LicenseRequest) -> Result<Vec<u8>, Error> {
+        Err(Error::BadResponse("no protected streams in a JSON list".into()))
+    }
+
     fn episodes(config: Config, series: Series) -> Result<Vec<Episode>, Error> {
         let show = list(&config)?.series.into_iter().find(|s| s.name == series.id);
         let parts = show.map(|s| s.episodes).unwrap_or_default();
         Ok(parts
             .into_iter()
-            .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired, duration: None, thumbnail: None, available_until: None })
+            .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired, duration: None, thumbnail: None, available_until: None, protected: false })
             .collect())
     }
 }

@@ -1,4 +1,4 @@
-package nightglass:provider@0.4.0;
+package nightglass:provider@0.5.0;
 
 interface types {
     /// A source's settings, keyed by `field.key`. Fields left empty are absent.
@@ -60,6 +60,9 @@ interface types {
         headers: list<tuple<string, string>>,
         /// Seconds of past programmes the server can replay.
         catchup-window: option<u32>,
+        /// Encrypted with a DRM: the app greys it out until the user allows protected content, and its playback carries a
+        /// `drm`.
+        protected: bool,
     }
 
     record movie {
@@ -74,6 +77,9 @@ interface types {
         duration: option<u32>,
         /// Unix seconds, for a replay that expires.
         available-until: option<s64>,
+        /// Encrypted with a DRM: the app greys it out until the user allows protected content, and its playback carries a
+        /// `drm`.
+        protected: bool,
     }
 
     record series {
@@ -101,6 +107,9 @@ interface types {
         thumbnail: option<string>,
         /// Unix seconds, for a replay that expires.
         available-until: option<s64>,
+        /// Encrypted with a DRM: the app greys it out until the user allows protected content, and its playback carries a
+        /// `drm`.
+        protected: bool,
     }
 
     /// A guide entry, matched to channels by `epg-id`. Times are Unix seconds.
@@ -158,6 +167,52 @@ interface types {
         title: string,
     }
 
+    /// The DRM systems the app can play.
+    enum key-system {
+        widevine,
+    }
+
+    /// What `playback.url` points to.
+    enum manifest {
+        dash,
+        hls,
+    }
+
+    /// An encrypted stream. The app relays it, gets its keys through the `license` export and hands the player a clear
+    /// stream; it plays only once the user has allowed protected content.
+    record drm {
+        key-system: key-system,
+        manifest: manifest,
+        /// The service certificate, given to the CDM before any license request. Without it, the first `license` call
+        /// may ask for it (`license-kind.certificate`).
+        certificate: option<list<u8>>,
+        /// A whole `pssh` box, for streams whose manifest and init segments carry none.
+        pssh: option<list<u8>>,
+        /// Handed back to `license` as is: a license address, a token, whatever the plugin needs. The app doesn't read it.
+        context: string,
+    }
+
+    /// What a CDM message asks the license server for.
+    enum license-kind {
+        /// The keys of a new session.
+        request,
+        renewal,
+        release,
+        /// The service certificate, when `drm.certificate` is none.
+        certificate,
+    }
+
+    /// A message from the CDM, for the plugin to send to its license server the way the service wants it.
+    record license-request {
+        kind: license-kind,
+        /// The CDM's bytes, unchanged.
+        challenge: list<u8>,
+        /// The `url` of the playback this license is for.
+        url: string,
+        /// Its `drm.context`.
+        context: string,
+    }
+
     /// What the player opens.
     record playback {
         url: string,
@@ -168,6 +223,8 @@ interface types {
         tracks: list<track>,
         /// In any order; those without a title are left out.
         chapters: list<chapter>,
+        /// Set when the stream is encrypted. The app then relays it, with `relay`'s options when given.
+        drm: option<drm>,
     }
 
     /// A playlist, segment or key on its way to the player.
@@ -251,7 +308,7 @@ world provider {
     import storage;
     import log;
 
-    use types.{config, provider-info, catalog, channel, movie, series, episode, playback, media, error};
+    use types.{config, provider-info, catalog, channel, movie, series, episode, playback, media, license-request, error};
 
     export describe: func() -> provider-info;
     export load-catalog: func(config: config) -> result<catalog, error>;
@@ -266,4 +323,7 @@ world provider {
     /// Only called while the app relays a playback whose `relay.filter` is set: an answer from `url`, changed before
     /// the player gets it.
     export filter: func(config: config, url: string, media: media) -> result<media, error>;
+    /// Only called while the app plays a playback that has a `drm`: sends `request.challenge` to the service's license
+    /// server, wrapped as the service wants it, and returns the answer unwrapped to the bytes the CDM reads.
+    export license: func(config: config, request: license-request) -> result<list<u8>, error>;
 }

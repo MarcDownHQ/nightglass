@@ -350,7 +350,7 @@ mod tests {
     /// The relay stops with the last of its handles: keep the first one.
     async fn open(server: &MockServer, path: &str, relay: Relay) -> (RelayServer, Url) {
         let relay_server = RelayServer::new(Http::new());
-        let playback = Playback { url: Url::parse(&format!("{}{path}", server.uri())).unwrap(), headers: [("X-Key".into(), "k".into())].into(), relay: Some(relay), tracks: Vec::new(), chapters: Vec::new() };
+        let playback = Playback { url: Url::parse(&format!("{}{path}", server.uri())).unwrap(), headers: [("X-Key".into(), "k".into())].into(), relay: Some(relay), tracks: Vec::new(), chapters: Vec::new(), drm: None };
         let local = relay_server.open(provider(), Config::new(), playback).await.unwrap();
         (relay_server, local)
     }

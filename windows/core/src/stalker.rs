@@ -82,6 +82,7 @@ impl StalkerClient {
                     stream: Url::parse(&format!("stalker:{}", utf8_percent_encode(&cmd, CMD))).ok()?,
                     headers: HashMap::new(),
                     catchup_window: None,
+                    protected: false,
                     id: format!("stk-{id}"),
                 })
             })

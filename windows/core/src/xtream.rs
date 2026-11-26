@@ -116,6 +116,7 @@ impl XtreamClient {
                     headers: HashMap::new(),
                     // `tv_archive_duration` is in days; some panels leave it empty with replay on.
                     catchup_window: (int(s.get("tv_archive")) == Some(1)).then(|| int(s.get("tv_archive_duration")).unwrap_or(1).max(1).saturating_mul(86_400)),
+                    protected: false,
                     id: format!("xt-live-{id}"),
                 })
             })
@@ -134,6 +135,7 @@ impl XtreamClient {
                     plot: str(s.get("plot")),
                     duration: None,
                     available_until: None,
+                    protected: false,
                     id: format!("xt-vod-{id}"),
                 })
             })
@@ -202,6 +204,7 @@ impl XtreamClient {
                     duration: None,
                     thumbnail: None,
                     available_until: None,
+                    protected: false,
                     id,
                 })
             })

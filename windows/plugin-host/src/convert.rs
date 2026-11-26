@@ -1,7 +1,7 @@
 //! Between the WIT records and the core models. Entries a plugin sends with an unreadable stream
 //! address are dropped rather than failing the whole catalog.
 
-use nightglass_core::{Account, Browser, Catalog, Channel, Chapter, Config, Episode, Field, FieldKind, IptvError, Media, Movie, Playback, Preset, Programme, Prompt, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
+use nightglass_core::{Account, Browser, Catalog, Channel, Chapter, Config, Drm, Episode, Field, FieldKind, IptvError, KeySystem, LicenseKind, LicenseRequest, Manifest, Media, Movie, Playback, Preset, Programme, Prompt, ProviderInfo, Relay, Result, STREAM_SCHEMES, Series, Track};
 use url::Url;
 
 use crate::wit;
@@ -102,16 +102,46 @@ pub fn browser(b: wit::Browser) -> Browser {
 
 pub fn playback(p: wit::Playback) -> Result<Playback> {
     let relay = p.relay.map(|r| Relay { browser: r.browser.map(browser), filter: r.filter });
+    let relayed = relay.is_some() || p.drm.is_some();
     let url = |raw: &str| {
         let url = stream(raw)?;
-        if relay.is_some() && !matches!(url.scheme(), "http" | "https") {
+        if relayed && !matches!(url.scheme(), "http" | "https") {
             return Err(IptvError::BadResponse(format!("only http(s) streams can be relayed: {url}")));
         }
         Ok(url)
     };
     let tracks = p.tracks.iter().map(|t| Ok(Track { url: url(&t.url)?, language: t.language.clone(), title: t.title.clone() })).collect::<Result<_>>()?;
     let chapters = p.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
-    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks, chapters })
+    Ok(Playback { url: url(&p.url)?, headers: p.headers.into_iter().collect(), relay, tracks, chapters, drm: p.drm.map(drm) })
+}
+
+fn drm(d: wit::Drm) -> Drm {
+    Drm {
+        key_system: match d.key_system {
+            wit::KeySystem::Widevine => KeySystem::Widevine,
+        },
+        manifest: match d.manifest {
+            wit::Manifest::Dash => Manifest::Dash,
+            wit::Manifest::Hls => Manifest::Hls,
+        },
+        certificate: d.certificate.filter(|c| !c.is_empty()),
+        pssh: d.pssh.filter(|p| !p.is_empty()),
+        context: d.context,
+    }
+}
+
+pub fn to_wit_license_request(r: &LicenseRequest) -> wit::LicenseRequest {
+    wit::LicenseRequest {
+        kind: match r.kind {
+            LicenseKind::Request => wit::LicenseKind::Request,
+            LicenseKind::Renewal => wit::LicenseKind::Renewal,
+            LicenseKind::Release => wit::LicenseKind::Release,
+            LicenseKind::Certificate => wit::LicenseKind::Certificate,
+        },
+        challenge: r.challenge.clone(),
+        url: r.url.to_string(),
+        context: r.context.clone(),
+    }
 }
 
 pub fn to_wit_media(m: Media) -> wit::Media {
@@ -133,11 +163,12 @@ fn channel(c: wit::Channel) -> Option<Channel> {
         epg_id: c.epg_id,
         headers: c.headers.into_iter().collect(),
         catchup_window: c.catchup_window.map(i64::from),
+        protected: c.protected,
     })
 }
 
 fn movie(m: wit::Movie, resolves: bool) -> Option<Movie> {
-    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot, duration: m.duration, available_until: m.available_until })
+    Some(Movie { stream: vod_stream(m.stream, resolves)?, id: m.id, name: m.name, group: m.group, poster: optional_url(m.poster), rating: m.rating, plot: m.plot, duration: m.duration, available_until: m.available_until, protected: m.protected })
 }
 
 fn series(s: wit::Series) -> Series {
@@ -145,7 +176,7 @@ fn series(s: wit::Series) -> Series {
 }
 
 pub fn episode(e: wit::Episode, resolves: bool) -> Option<Episode> {
-    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired, duration: e.duration, thumbnail: optional_url(e.thumbnail), available_until: e.available_until })
+    Some(Episode { stream: vod_stream(e.stream, resolves)?, id: e.id, title: e.title, season: e.season, number: e.number, plot: e.plot, aired: e.aired, duration: e.duration, thumbnail: optional_url(e.thumbnail), available_until: e.available_until, protected: e.protected })
 }
 
 pub fn to_wit_channel(c: &Channel) -> wit::Channel {
@@ -159,6 +190,7 @@ pub fn to_wit_channel(c: &Channel) -> wit::Channel {
         stream: c.stream.to_string(),
         headers: c.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
         catchup_window: c.catchup_window.map(|seconds| u32::try_from(seconds.max(0)).unwrap_or(u32::MAX)),
+        protected: c.protected,
     }
 }
 
@@ -173,6 +205,7 @@ pub fn to_wit_movie(m: &Movie) -> wit::Movie {
         plot: m.plot.clone(),
         duration: m.duration,
         available_until: m.available_until,
+        protected: m.protected,
     }
 }
 
@@ -188,6 +221,7 @@ pub fn to_wit_episode(e: &Episode) -> wit::Episode {
         duration: e.duration,
         thumbnail: e.thumbnail.as_ref().map(Url::to_string),
         available_until: e.available_until,
+        protected: e.protected,
     }
 }
 
@@ -256,11 +290,11 @@ mod tests {
 
     fn with_track(url: &str, relay: Option<wit::Relay>) -> wit::Playback {
         let track = wit::Track { url: url.into(), language: Some("fr".into()), title: Some("Français".into()) };
-        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track], chapters: Vec::new() }
+        wit::Playback { url: "https://s.test/video.mp4".into(), headers: Vec::new(), relay, tracks: vec![track], chapters: Vec::new(), drm: None }
     }
 
     fn wit_movie(stream: &str) -> wit::Movie {
-        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None, duration: None, available_until: None }
+        wit::Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: stream.into(), rating: None, plot: None, duration: None, available_until: None, protected: false }
     }
 
     #[test]
@@ -269,7 +303,7 @@ mod tests {
         assert!(movie(wit_movie("fr-tv:4711"), false).is_none());
         assert!(movie(wit_movie("file:///etc/passwd"), false).is_none());
         assert_eq!(movie(wit_movie("http://s.test/m.mkv"), false).unwrap().stream, "http://s.test/m.mkv");
-        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000), duration: None, thumbnail: None, available_until: None };
+        let dated = wit::Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt-21-11".into(), plot: None, aired: Some(1_795_300_000), duration: None, thumbnail: None, available_until: None, protected: false };
         let e = episode(dated, true).unwrap();
         assert_eq!((e.season, e.number, e.aired, e.stream.as_str()), (None, None, Some(1_795_300_000), "jt-21-11"));
         assert_eq!(to_wit_episode(&e).stream, "jt-21-11");
@@ -294,6 +328,7 @@ mod tests {
             duration: Some(1800),
             thumbnail: Some(thumbnail.into()),
             available_until: Some(1_796_000_000),
+            protected: false,
         };
         let e = episode(still("https://img.test/jt.jpg"), true).unwrap();
         assert_eq!((e.duration, e.thumbnail.as_ref().map(Url::as_str), e.available_until), (Some(1800), Some("https://img.test/jt.jpg"), Some(1_796_000_000)));
@@ -313,6 +348,7 @@ mod tests {
             stream: "http://s.test/c.m3u8".into(),
             headers: Vec::new(),
             catchup_window: Some(4 * 3600),
+            protected: false,
         };
         let mut c = channel(wit_channel).unwrap();
         assert_eq!(c.catchup_window, Some(4 * 3600));
