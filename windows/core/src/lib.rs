@@ -8,6 +8,7 @@ mod models;
 mod provider;
 mod relay;
 mod stalker;
+pub mod widevine;
 pub mod xmltv;
 mod xtream;
 
