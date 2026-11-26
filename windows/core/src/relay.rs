@@ -23,6 +23,7 @@ use uuid::Uuid;
 use crate::{Config, Http, IptvError, Media, Playback, Provider, Relay, Request, Result, Track};
 
 mod dash;
+mod hls;
 mod protected;
 
 pub use protected::widevine_helper;

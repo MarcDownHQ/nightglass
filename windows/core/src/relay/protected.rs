@@ -21,6 +21,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::dash::{Addressing, Manifest, Rep, Source};
+use super::hls::{self, Named};
 use super::{Body, RelayServer, Session, Urls, lock, status};
 use crate::{BoxFuture, Config, Decryptor, Http, IptvError, LicenseKind, LicenseRequest, Media, Playback, Provider, Result, Track, widevine};
 
@@ -97,6 +98,22 @@ impl RelayServer {
                 }
                 protection.license_all(&pssh).await?;
                 (Resource::Manifest(url), "mpd")
+            }
+            None if hls::is_playlist(&text) => {
+                let mut pssh: Vec<Pssh> = given.cloned().into_iter().collect();
+                pssh.extend(hls::widevine_pssh(&text));
+                let mut media = (text.to_string(), fetched.url.clone());
+                if let Some(variant) = hls::first_variant(&text, &fetched.url) {
+                    let fetched = session.fetch(http, &variant, None).await?;
+                    media = (String::from_utf8_lossy(&fetched.body).into_owned(), fetched.url);
+                    pssh.extend(hls::widevine_pssh(&media.0));
+                }
+                hls::rewrite(&media.0, &media.1, &mut |_| media.1.clone()).map_err(drm_error)?;
+                if pssh.is_empty() {
+                    pssh = protection.pssh_of_inits(&session, http, hls::maps(&media.0, &media.1).into_iter()).await?;
+                }
+                protection.license_all(&pssh).await?;
+                (Resource::Manifest(url), "m3u8")
             }
             None => (Resource::Plain(url), ""),
         };
@@ -414,11 +431,42 @@ pub(super) async fn answer(http: &Http, session: &Session, protected: &Protected
     }
 }
 
+/// The track of an HLS init segment.
+fn track_key((url, range): &Source) -> String {
+    match range {
+        Some((start, end)) => format!("{url}#{start}-{end}"),
+        None => url.to_string(),
+    }
+}
+
+/// The extension players guess formats from, when it is plain.
+fn extension(url: &Url) -> String {
+    let name = url.path_segments().and_then(|mut s| s.next_back()).unwrap_or_default();
+    name.rsplit_once('.').map(|(_, ext)| ext).filter(|ext| (1..=5).contains(&ext.len()) && ext.chars().all(|c| c.is_ascii_alphanumeric())).unwrap_or_default().to_string()
+}
+
 async fn manifest(http: &Http, session: &Session, protected: &Protected, url: &Url, port: u16, token: &str) -> Result<Response<Body>> {
     let fetched = session.fetch(http, url, None).await?;
     let text = String::from_utf8_lossy(&fetched.body);
     let protection = &protected.protection;
-    let Some(manifest) = Manifest::parse(&text, &fetched.url) else { return Err(IptvError::BadResponse(format!("{url}: not a DASH manifest"))) };
+    if hls::is_playlist(&text) {
+        let body = hls::rewrite(&text, &fetched.url, &mut |named| match named {
+            Named::Playlist(url) => session.local_resource(port, token, &Resource::Manifest(url), "m3u8"),
+            Named::Plain(url) => {
+                let extension = extension(&url);
+                session.local_resource(port, token, &Resource::Plain(url), &extension)
+            }
+            Named::Segment { url, range, track } => {
+                let key = track_key(&track);
+                lock(&protection.sources).insert(key.clone(), track);
+                let extension = extension(&url);
+                session.local_resource(port, token, &Resource::Segment { url, range, track: key }, &extension)
+            }
+        })
+        .map_err(drm_error)?;
+        return Ok(bytes_response(StatusCode::OK, body.into_bytes(), Some("application/vnd.apple.mpegurl"), None));
+    }
+    let Some(manifest) = Manifest::parse(&text, &fetched.url) else { return Err(IptvError::BadResponse(format!("{url}: neither DASH nor HLS"))) };
     protection.remember(&manifest.reps);
     let mut indexes = HashMap::new();
     for rep in manifest.reps.iter().filter(|r| r.single.is_some()) {
@@ -688,5 +736,45 @@ mod tests {
         assert!(mpd.contains(r#"<Representation id="v">"#), "no default_KID: nothing to leave out");
         let unprotected = relay.open_protected(licensed(Ok(LICENSE)), Config::new(), Playback::from(opened.url.clone()), Arc::new(ClearKeys::default())).await;
         assert!(matches!(unprotected, Err(IptvError::Drm(_))));
+    }
+
+    #[tokio::test]
+    async fn an_hls_stream_plays_clear_through_the_relay() {
+        let server = MockServer::start().await;
+        let cbcs = TrackSpec { id: 1, audio: false, scheme: *b"cbcs", crypto: crypto(KID, 0, Some(vec![9; 16]), (1, 9)) };
+        let plain: Vec<SampleSpec> = (0..2).map(|i| SampleSpec { data: vec![i + 1; 200], iv: vec![], subsamples: vec![(5, 160), (35, 0)] }).collect();
+        let init = init_segment(std::slice::from_ref(&cbcs), &[]);
+        let segment = media_segment(&cbcs, &encrypt(&cbcs, &KEY, &plain), Aux::Senc, &[]);
+        let key = r#"METHOD=SAMPLE-AES,URI="data:text/plain;base64,AAAAMnBzc2gAAAAA7e+LqXnWSs6jyCfc1R0h7QAAABISEAUFBQUFBQUFBQUFBQUFBQU=",KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed""#;
+        let master = format!("#EXTM3U\n#EXT-X-SESSION-KEY:{key}\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv/media.m3u8\n");
+        let media = format!("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-KEY:{key}\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2,\n1.m4s\n#EXT-X-ENDLIST\n");
+        Mock::given(path("/h/master.m3u8")).respond_with(ResponseTemplate::new(200).set_body_raw(master, "application/vnd.apple.mpegurl")).mount(&server).await;
+        Mock::given(path("/h/v/media.m3u8")).respond_with(ResponseTemplate::new(200).set_body_raw(media, "application/vnd.apple.mpegurl")).mount(&server).await;
+        Mock::given(path("/h/v/init.mp4")).respond_with(ResponseTemplate::new(200).set_body_raw(init.clone(), "video/mp4")).mount(&server).await;
+        Mock::given(path("/h/v/1.m4s")).respond_with(ResponseTemplate::new(200).set_body_raw(segment, "video/mp4")).mount(&server).await;
+
+        let relay = RelayServer::new(Http::new());
+        let opened = relay.open_protected(licensed(Ok(LICENSE)), Config::new(), playback(&server, "/h/master.m3u8"), Arc::new(ClearKeys::default())).await.unwrap();
+        assert!(opened.url.path().ends_with(".m3u8"));
+        let master = String::from_utf8(get(opened.url.as_str(), None).await.2).unwrap();
+        assert!(!master.contains("KEY"), "{master}");
+        let variant = master.lines().find(|l| l.starts_with("http")).unwrap().to_string();
+        let media = String::from_utf8(get(&variant, None).await.2).unwrap();
+        assert!(!media.contains("EXT-X-KEY"), "{media}");
+        let init_url = between(&media, "#EXT-X-MAP:URI=\"", "\"").to_string();
+        let segment_url = media.lines().find(|l| l.starts_with("http")).unwrap().to_string();
+        assert!(!find(&get(&init_url, None).await.2, b"encv"));
+        let clear = get(&segment_url, None).await.2;
+        assert_eq!(mdat(&clear), mdat(&media_segment(&cbcs, &plain, Aux::Senc, &[])));
+    }
+
+    #[tokio::test]
+    async fn sample_aes_transport_streams_are_refused_before_playing() {
+        let server = MockServer::start().await;
+        let media = "#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"com.apple.streamingkeydelivery\"\n#EXTINF:2,\n1.ts\n";
+        Mock::given(path("/ts.m3u8")).respond_with(ResponseTemplate::new(200).set_body_string(media)).mount(&server).await;
+        let relay = RelayServer::new(Http::new());
+        let refused = relay.open_protected(licensed(Ok(LICENSE)), Config::new(), playback(&server, "/ts.m3u8"), Arc::new(ClearKeys::default())).await;
+        assert_eq!(refused.unwrap_err(), IptvError::Drm(DrmError::Unsupported("HLS in MPEG-TS with SAMPLE-AES".into()).to_string()));
     }
 }
