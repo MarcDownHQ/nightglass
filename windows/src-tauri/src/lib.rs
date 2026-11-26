@@ -6,17 +6,19 @@ mod host_macos;
 mod mpv;
 mod sources;
 mod tiles;
+mod widevine;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mpv::Mpv;
-use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, IptvError, Movie, Playback, Programme, Prompt, Provider, ProviderInfo, Providers, RelayServer, Series, Source, chapters_in_order, xmltv};
+use nightglass_core::{Catalog, Channel, Chapter, Episode, Http, IptvError, Movie, Playback, Programme, Prompt, Provider, ProviderInfo, Providers, RelayServer, Series, Source, Unavailable, chapters_in_order, xmltv};
 use nightglass_plugin_host::PluginStatus;
 use tauri::async_runtime::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use url::Url;
+use widevine::Widevine;
 
 /// A window's native handle, the parent of video windows: its HWND, its content NSView on macOS, or its video
 /// layer on Linux.
@@ -170,12 +172,14 @@ fn sources_save(app: AppHandle, sources: Vec<Source>) -> Result<(), String> {
     sources::save(&sources::file(&app)?, &sources)
 }
 
-/// A command's error as the page gets it: a message, or `{ prompt }` when a plugin waits for the user.
+/// A command's error as the page gets it: a message, `{ prompt }` when a plugin waits for the user, or
+/// `{ protected: "off" }` when an encrypted stream waits for protected content to be allowed.
 #[derive(serde::Serialize)]
 #[serde(untagged)]
 enum Failure {
     Message(String),
     ActionRequired { prompt: Box<Prompt> },
+    ProtectedOff { protected: &'static str },
 }
 
 impl From<String> for Failure {
@@ -241,10 +245,10 @@ type Guide = HashMap<String, Vec<Programme>>;
 
 /// For providers whose links are short-lived (Stalker), asked at play time; the others return the stream as is.
 #[tauri::command]
-async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel) -> Result<PlayerInput, Failure> {
+async fn stream_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, widevine: State<'_, Widevine>, source: Source, channel: Channel) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.stream_url(&source.config, &channel).await?;
-    Ok(playable(&relay, provider, source, &channel.headers, playback).await?)
+    playable(&relay, &widevine, provider, source, &channel.headers, playback).await
 }
 
 /// What mpv opens: one address, the playback's tracks joined into it. `link` is the stream's own address, to copy.
@@ -257,8 +261,9 @@ struct PlayerInput {
     chapters: Vec<Chapter>,
 }
 
-/// The item's own headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1.
-async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Source, headers: &HashMap<String, String>, mut playback: Playback) -> Result<PlayerInput, String> {
+/// The item's own headers under those the provider gave; a playback the app fetches itself moves to 127.0.0.1, an
+/// encrypted one through the CDM once protected content is on.
+async fn playable(relay: &RelayServer, widevine: &Widevine, provider: Arc<dyn Provider>, source: Source, headers: &HashMap<String, String>, mut playback: Playback) -> Result<PlayerInput, Failure> {
     for (name, value) in headers {
         if !playback.headers.keys().any(|k| k.eq_ignore_ascii_case(name)) {
             playback.headers.insert(name.clone(), value.clone());
@@ -266,24 +271,27 @@ async fn playable(relay: &RelayServer, provider: Arc<dyn Provider>, source: Sour
     }
     let link = playback.url.to_string();
     let chapters = chapters_in_order(std::mem::take(&mut playback.chapters));
-    if playback.relay.is_some() {
+    if playback.drm.is_some() {
+        let cdm = widevine.cdm().ok_or(Failure::ProtectedOff { protected: "off" })?;
+        playback = widevine.open(&cdm, provider, source.config, playback).await?;
+    } else if playback.relay.is_some() {
         playback = relay.relay(provider, source.config, playback).await.map_err(|e| e.to_string())?;
     }
     Ok(PlayerInput { url: playback.player_url(), headers: playback.headers, link, chapters })
 }
 
 #[tauri::command]
-async fn movie_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, movie: Movie) -> Result<PlayerInput, Failure> {
+async fn movie_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, widevine: State<'_, Widevine>, source: Source, movie: Movie) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.movie_url(&source.config, &movie).await?;
-    Ok(playable(&relay, provider, source, &HashMap::new(), playback).await?)
+    playable(&relay, &widevine, provider, source, &HashMap::new(), playback).await
 }
 
 #[tauri::command]
-async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, series: Series, episode: Episode) -> Result<PlayerInput, Failure> {
+async fn episode_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, widevine: State<'_, Widevine>, source: Source, series: Series, episode: Episode) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.episode_url(&source.config, &series, &episode).await?;
-    Ok(playable(&relay, provider, source, &HashMap::new(), playback).await?)
+    playable(&relay, &widevine, provider, source, &HashMap::new(), playback).await
 }
 
 /// A series' episodes, asked for when its page opens.
@@ -337,10 +345,10 @@ async fn guide_channels(app: AppHandle, id: String) -> Result<Vec<(String, Strin
 
 /// A past programme, from the servers that keep them.
 #[tauri::command]
-async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, Failure> {
+async fn catchup_url(registry: State<'_, Registry>, relay: State<'_, RelayServer>, widevine: State<'_, Widevine>, source: Source, channel: Channel, start: i64, end: i64) -> Result<PlayerInput, Failure> {
     let provider = registry.get(&source.provider).await?;
     let playback = provider.catchup_url(&source.config, &channel, start, end).await?;
-    Ok(playable(&relay, provider, source, &channel.headers, playback).await?)
+    playable(&relay, &widevine, provider, source, &channel.headers, playback).await
 }
 
 /// A link a plugin gave, in the system browser: http(s) only.
@@ -441,6 +449,7 @@ pub fn run() {
             let app_data = app.path().app_data_dir()?;
             app.manage(load_plugins(app_data.join("plugins"), app_data.join("plugin-data"), &http));
             app.manage(RelayServer::new(http.clone()));
+            app.manage(Widevine::new(app_data.join("widevine"), Arc::new(Unavailable)));
             app.manage(http);
             let handle = app.handle().clone();
             std::thread::spawn(move || handle.state::<Mpv>().pump(&handle, "mpv", None));
@@ -496,7 +505,10 @@ pub fn run() {
             tiles::tiles_mode,
             parse_location,
             open_link,
-            automation
+            automation,
+            widevine::widevine_status,
+            widevine::widevine_install,
+            widevine::widevine_remove
         ])
         .run(tauri::generate_context!())
         .expect("error while running Nightglass");
