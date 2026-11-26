@@ -21,8 +21,9 @@ pub trait Cdm: Send + Sync {
     /// A licence for `pssh` through `exchange`: the keys it brought.
     fn license(&self, pssh: Pssh, exchange: Exchange) -> BoxFuture<'_, Result<Vec<Key>>>;
 
-    /// Whether `kid` can be decrypted outside the CDM's own decoder.
-    fn probe<'a>(&'a self, kid: &'a [u8]) -> BoxFuture<'a, Result<()>>;
+    /// Whether `kid` can be decrypted outside the CDM's own decoder, for a video sample (several subsamples) or for
+    /// any other.
+    fn probe<'a>(&'a self, kid: &'a [u8], video: bool) -> BoxFuture<'a, Result<()>>;
 
     /// Every key the licences so far named, with its status.
     fn keys(&self) -> Vec<Key>;
@@ -111,7 +112,7 @@ impl Cdm for ClearKeys {
         })
     }
 
-    fn probe<'a>(&'a self, kid: &'a [u8]) -> BoxFuture<'a, Result<()>> {
+    fn probe<'a>(&'a self, kid: &'a [u8], _video: bool) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { self.key(kid).map(drop) })
     }
 
@@ -368,10 +369,10 @@ mod tests {
             })
         });
         let cdm = ClearKeys::default();
-        assert!(cdm.probe(&[7; 16]).await.is_err());
+        assert!(cdm.probe(&[7; 16], true).await.is_err());
         let keys = cdm.license(pssh, exchange).await.unwrap();
         assert_eq!(keys, vec![Key { kid: vec![7; 16], status: Key::USABLE, system_code: 0 }]);
-        cdm.probe(&[7; 16]).await.unwrap();
+        cdm.probe(&[7; 16], true).await.unwrap();
         assert_eq!(cdm.key(&[7; 16]).unwrap(), [9; 16]);
     }
 }

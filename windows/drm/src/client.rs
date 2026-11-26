@@ -156,10 +156,13 @@ impl Helper {
     /// `data` holds `samples` back to back; they come back clear, at the same sizes.
     pub async fn decrypt(&self, samples: Vec<Sample>, data: Vec<u8>) -> Result<Vec<u8>> {
         let size = data.len();
-        match self.call(Request::Decrypt { samples }, data).await? {
-            (Reply::Decrypted, clear) if clear.len() == size => Ok(clear),
-            (Reply::Decrypted, clear) => Err(DrmError::Helper(format!("gave back {} bytes for {size}", clear.len()))),
-            (other, _) => Err(DrmError::Helper(format!("answered {other:?} to a decryption"))),
+        let video: Vec<Vec<u8>> = samples.iter().filter(|s| s.subsamples.len() > 1).map(|s| s.kid.clone()).collect();
+        match self.call(Request::Decrypt { samples }, data).await {
+            Ok((Reply::Decrypted, clear)) if clear.len() == size => Ok(clear),
+            Ok((Reply::Decrypted, clear)) => Err(DrmError::Helper(format!("gave back {} bytes for {size}", clear.len()))),
+            Ok((other, _)) => Err(DrmError::Helper(format!("answered {other:?} to a decryption"))),
+            Err(DrmError::NoKey { kid }) if video.iter().any(|v| hex(v) == kid && self.0.shared.key_usable(v)) => Err(DrmError::DecoderOnly { kid }),
+            Err(e) => Err(e),
         }
     }
 
@@ -184,10 +187,14 @@ impl Helper {
     }
 
     /// Whether the CDM decrypts with `kid` itself rather than only through its decoder: a made-up sample, which
-    /// CTR decrypts to noise without complaint when the licence allows it.
-    pub async fn probe(&self, kid: &[u8]) -> Result<()> {
-        let sample = Sample { size: 32, scheme: protocol::Scheme::Cenc, kid: kid.to_vec(), iv: vec![0; 16], pattern: None, subsamples: vec![(16, 16)] };
-        self.decrypt(vec![sample], vec![0; 32]).await.map(drop)
+    /// CTR decrypts to noise without complaint when the licence allows it. Google's desktop CDM answers `kNoKey`,
+    /// for a key it holds as usable, to any sample of several subsamples, the shape of a video frame: video then
+    /// only goes through its decoder.
+    pub async fn probe(&self, kid: &[u8], video: bool) -> Result<()> {
+        let subsamples = if video { vec![(16, 16), (16, 16)] } else { vec![(16, 16)] };
+        let size = subsamples.iter().map(|(c, p)| c + p).sum::<u32>();
+        let sample = Sample { size, scheme: protocol::Scheme::Cenc, kid: kid.to_vec(), iv: vec![0; 16], pattern: None, subsamples };
+        self.decrypt(vec![sample], vec![0; size as usize]).await.map(drop)
     }
 
     async fn call(&self, request: Request, payload: Vec<u8>) -> Result<Answer> {
@@ -271,8 +278,8 @@ impl Cdm for Helper {
         Box::pin(Helper::license(self, pssh.bytes, exchange))
     }
 
-    fn probe<'a>(&'a self, kid: &'a [u8]) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Helper::probe(self, kid))
+    fn probe<'a>(&'a self, kid: &'a [u8], video: bool) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Helper::probe(self, kid, video))
     }
 
     fn keys(&self) -> Vec<Key> {

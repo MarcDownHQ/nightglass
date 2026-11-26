@@ -35,7 +35,7 @@ async fn google_cdm_issues_a_licence_request() {
     assert!(challenge.len() > 64, "a signed licence request, {} bytes", challenge.len());
     assert_eq!(challenge[0], 0x08, "SignedMessage.type comes first");
     assert!(helper.keys().iter().all(|k| !k.usable()));
-    let refused = helper.probe(&kid).await.unwrap_err();
+    let refused = helper.probe(&kid, false).await.unwrap_err();
     assert!(matches!(refused, nightglass_drm::DrmError::NoKey { .. }), "{refused}");
     let garbage = helper.update_session(&session, vec![0x08, 0x02, 0x12, 0x00]).await;
     assert!(matches!(garbage, Err(nightglass_drm::DrmError::Rejected(_))), "{garbage:?}");

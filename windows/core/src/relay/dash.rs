@@ -28,6 +28,7 @@ pub(super) struct Rep {
     pub single: Option<(ByteRange, Option<ByteRange>)>,
     /// Its `BaseURL` alone addresses it: one resource, such as subtitles.
     pub whole: bool,
+    pub video: bool,
 }
 
 pub(super) struct Manifest {
@@ -151,6 +152,7 @@ fn walk(root: &mut Element, url: &Url, strip: bool, f: &mut dyn FnMut(&Rep, &mut
         for (ai, set) in period.elements_mut().filter(|e| e.name() == "AdaptationSet").enumerate() {
             let base2 = base_of(set, &base1);
             let (set_kid, set_pssh) = protection(set);
+            let set_video = ["contentType", "mimeType"].iter().any(|a| set.attr(a).is_some_and(|v| v.starts_with("video")));
             pssh.extend(set_pssh);
             let (set_template, set_list, set_base) = (set.child("SegmentTemplate").cloned(), set.child("SegmentList").cloned(), set.child("SegmentBase").cloned());
             let mut set_single = false;
@@ -205,7 +207,8 @@ fn walk(root: &mut Element, url: &Url, strip: bool, f: &mut dyn FnMut(&Rep, &mut
                     own
                 });
                 let whole = !has_template && list.is_none() && single.is_none();
-                let rep = Rep { track: format!("{period_id}/{ai}/{id}"), base, kid: kid.or(set_kid), init, single, whole };
+                let video = set_video || element.attr("mimeType").is_some_and(|m| m.starts_with("video"));
+                let rep = Rep { track: format!("{period_id}/{ai}/{id}"), base, kid: kid.or(set_kid), init, single, whole, video };
                 if strip {
                     element.remove("ContentProtection");
                     element.remove("BaseURL");
@@ -324,6 +327,7 @@ mod tests {
             ]
         );
         assert!(manifest.reps.iter().all(|r| !r.whole));
+        assert_eq!(manifest.reps.iter().map(|r| r.video).collect::<Vec<_>>(), [true, true, false]);
         let subtitles = Manifest::parse(r#"<MPD><Period><AdaptationSet mimeType="text/vtt"><Representation id="s"><BaseURL>en.vtt</BaseURL></Representation></AdaptationSet></Period></MPD>"#, &url()).unwrap();
         assert!(subtitles.reps[0].whole && subtitles.reps[0].base.as_str() == "https://origin.test/stream/en.vtt");
         assert!(Manifest::parse("<html/>", &url()).is_none());

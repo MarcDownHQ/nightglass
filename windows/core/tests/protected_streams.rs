@@ -42,7 +42,7 @@ impl Cdm for Unlocked {
         })
     }
 
-    fn probe<'a>(&'a self, _kid: &'a [u8]) -> nightglass_drm::BoxFuture<'a, DrmResult<()>> {
+    fn probe<'a>(&'a self, _kid: &'a [u8], _video: bool) -> nightglass_drm::BoxFuture<'a, DrmResult<()>> {
         Box::pin(async { Ok(()) })
     }
 

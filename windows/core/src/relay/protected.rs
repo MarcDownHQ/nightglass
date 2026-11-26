@@ -106,6 +106,7 @@ impl RelayServer {
                     pssh = protection.pssh_of_inits(&session, http, manifest.reps.iter().filter_map(|r| r.init.clone())).await?;
                 }
                 protection.license_all(&pssh).await?;
+                protection.probe_video(&manifest.reps).await?;
                 (Resource::Manifest(url), "mpd")
             }
             None if hls::is_playlist(&text) => {
@@ -194,7 +195,9 @@ pub(super) struct Protection {
     refused: Arc<Mutex<Option<IptvError>>>,
     licensed: tokio::sync::Mutex<HashSet<Vec<u8>>>,
     probed: Mutex<HashSet<Vec<u8>>>,
-    decode_only: Mutex<HashSet<Vec<u8>>>,
+    /// Keys the CDM only decrypts in its own decoder, with the error that says so: for every sample, or for video.
+    decode_only: Mutex<HashMap<Vec<u8>, DrmError>>,
+    video_refused: Mutex<HashMap<Vec<u8>, DrmError>>,
     sources: Mutex<HashMap<String, Source>>,
     inits: Mutex<HashMap<String, Arc<Init>>>,
     indexes: Mutex<HashMap<String, Index>>,
@@ -209,6 +212,7 @@ impl Protection {
             licensed: Default::default(),
             probed: Default::default(),
             decode_only: Default::default(),
+            video_refused: Default::default(),
             sources: Default::default(),
             inits: Default::default(),
             indexes: Default::default(),
@@ -267,19 +271,43 @@ impl Protection {
     async fn probe(&self) {
         let fresh: Vec<Vec<u8>> = self.cdm.keys().into_iter().filter(Key::usable).map(|k| k.kid).filter(|k| lock(&self.probed).insert(k.clone())).collect();
         for kid in fresh {
-            if let Err(DrmError::SecureDecodeRequired { .. }) = self.cdm.probe(&kid).await {
-                lock(&self.decode_only).insert(kid);
+            if let Err(e @ (DrmError::SecureDecodeRequired { .. } | DrmError::DecoderOnly { .. })) = self.cdm.probe(&kid, false).await {
+                lock(&self.decode_only).insert(kid, e);
             }
         }
     }
 
+    /// The keys of the video representations tried with a video-shaped sample, and an error when none of them can
+    /// play here.
+    async fn probe_video(&self, reps: &[Rep]) -> Result<()> {
+        let mut kids: Vec<[u8; 16]> = reps.iter().filter(|r| r.video).filter_map(|r| r.kid).collect();
+        kids.dedup();
+        for kid in &kids {
+            if !self.playable(kid) || lock(&self.video_refused).contains_key(&kid[..]) {
+                continue;
+            }
+            if let Err(e @ (DrmError::SecureDecodeRequired { .. } | DrmError::DecoderOnly { .. })) = self.cdm.probe(kid, true).await {
+                lock(&self.video_refused).insert(kid.to_vec(), e);
+            }
+        }
+        let video: Vec<&Rep> = reps.iter().filter(|r| r.video && r.kid.is_some()).collect();
+        if video.is_empty() || video.iter().any(|r| self.keep(r)) {
+            return Ok(());
+        }
+        let refused = video.iter().find_map(|r| r.kid.and_then(|k| lock(&self.video_refused).get(&k[..]).or(lock(&self.decode_only).get(&k[..])).cloned()));
+        match refused {
+            Some(e) => Err(drm_error(e)),
+            None => self.check(),
+        }
+    }
+
     fn playable(&self, kid: &[u8]) -> bool {
-        self.cdm.keys().iter().any(|k| k.kid == kid && k.usable()) && !lock(&self.decode_only).contains(kid)
+        self.cdm.keys().iter().any(|k| k.kid == kid && k.usable()) && !lock(&self.decode_only).contains_key(kid)
     }
 
     /// Whether a representation can play: its key, when the manifest names it, is one decrypted here.
-    fn keep(&self, kid: Option<&[u8; 16]>) -> bool {
-        kid.is_none_or(|k| self.playable(k))
+    fn keep(&self, rep: &Rep) -> bool {
+        rep.kid.is_none_or(|k| self.playable(&k) && !(rep.video && lock(&self.video_refused).contains_key(&k[..])))
     }
 
     /// An error unless some key can be decrypted here.
@@ -288,8 +316,8 @@ impl Protection {
         if keys.iter().any(|k| self.playable(&k.kid)) {
             return Ok(());
         }
-        if let Some(kid) = lock(&self.decode_only).iter().next() {
-            return Err(drm_error(DrmError::SecureDecodeRequired { kid: hex(kid) }));
+        if let Some(e) = lock(&self.decode_only).values().next() {
+            return Err(drm_error(e.clone()));
         }
         let statuses: Vec<String> = keys.iter().map(|k| format!("{}: {}", hex(&k.kid), k.status_name())).collect();
         Err(drm_error(DrmError::NoUsableKey(if statuses.is_empty() { "none".into() } else { statuses.join(", ") })))
@@ -350,8 +378,8 @@ impl Protection {
                 self.license(pssh).await?;
             }
         }
-        if let Some(kid) = kids.iter().find(|k| lock(&self.decode_only).contains(*k)) {
-            return Err(drm_error(DrmError::SecureDecodeRequired { kid: hex(kid) }));
+        if let Some(e) = kids.iter().find_map(|k| lock(&self.decode_only).get(k).cloned()) {
+            return Err(drm_error(e));
         }
         cenc::clear_segment(body, &segment, &*self.cdm).await.map_err(|e| self.error(e))
     }
@@ -482,7 +510,7 @@ async fn manifest(http: &Http, session: &Session, protected: &Protected, url: &U
         indexes.insert(rep.track.clone(), protection.index(session, http, rep).await?);
     }
     let body = manifest.rewrite(
-        |rep| protection.keep(rep.kid.as_ref()),
+        |rep| protection.keep(rep),
         |rep| match (indexes.remove(&rep.track), rep.single) {
             (Some(index), Some(((index_start, _), init))) => {
                 let segment = |range| Resource::Segment { url: rep.base.clone(), range: Some(range), track: rep.track.clone() };
@@ -800,5 +828,48 @@ mod tests {
         std::fs::write(dir.join(format!("nightglass-widevine{suffix}")), b"").unwrap();
         assert_eq!(helper_in(Some(&dir)), dir.join(format!("nightglass-widevine{suffix}")), "as the bundle ships it");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Clear Key, but refusing video-shaped samples for some keys, as Google's desktop CDM does.
+    struct DecoderOnly(ClearKeys, Vec<[u8; 16]>);
+
+    impl Cdm for DecoderOnly {
+        fn decrypt(&self, samples: Vec<nightglass_drm::protocol::Sample>, data: Vec<u8>) -> BoxFuture<'_, std::result::Result<Vec<u8>, DrmError>> {
+            self.0.decrypt(samples, data)
+        }
+        fn license(&self, pssh: Pssh, exchange: Exchange) -> BoxFuture<'_, std::result::Result<Vec<Key>, DrmError>> {
+            self.0.license(pssh, exchange)
+        }
+        fn probe<'a>(&'a self, kid: &'a [u8], video: bool) -> BoxFuture<'a, std::result::Result<(), DrmError>> {
+            Box::pin(async move {
+                match self.1.iter().any(|k| k == kid) && video {
+                    true => Err(DrmError::DecoderOnly { kid: hex(kid) }),
+                    false => self.0.probe(kid, video).await,
+                }
+            })
+        }
+        fn keys(&self) -> Vec<Key> {
+            self.0.keys()
+        }
+    }
+
+    #[tokio::test]
+    async fn video_widevine_only_decodes_itself_is_refused_before_playing() {
+        let server = MockServer::start().await;
+        let pssh = "AAAAMnBzc2gAAAAA7e+LqXnWSs6jyCfc1R0h7QAAABISEAUFBQUFBQUFBQUFBQUFBQU=";
+        let set = |kind: &str, kid: &str, id: &str| format!(r#"<AdaptationSet contentType="{kind}"><ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" default_KID="{kid}"/><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"><pssh>{pssh}</pssh></ContentProtection><SegmentTemplate media="$Number$.m4s" initialization="i.mp4" duration="2"/><Representation id="{id}"/></AdaptationSet>"#);
+        let five = "05050505-0505-0505-0505-050505050505";
+        let six = "06060606-0606-0606-0606-060606060606";
+        let one_key = format!("<MPD><Period>{}{}</Period></MPD>", set("video", five, "v"), set("audio", five, "a"));
+        let two_keys = format!("<MPD><Period>{}{}{}</Period></MPD>", set("video", five, "hd"), set("video", six, "sd"), set("audio", five, "a"));
+        Mock::given(path("/one.mpd")).respond_with(ResponseTemplate::new(200).set_body_string(one_key)).mount(&server).await;
+        Mock::given(path("/two.mpd")).respond_with(ResponseTemplate::new(200).set_body_string(two_keys)).mount(&server).await;
+        let both = r#"{"keys":[{"kty":"oct","kid":"BQUFBQUFBQUFBQUFBQUFBQ","k":"QkJCQkJCQkJCQkJCQkJCQg"},{"kty":"oct","kid":"BgYGBgYGBgYGBgYGBgYGBg","k":"QkJCQkJCQkJCQkJCQkJCQg"}]}"#;
+        let relay = RelayServer::new(Http::new());
+        let refused = relay.open_protected(licensed(Ok(LICENSE)), Config::new(), playback(&server, "/one.mpd"), Arc::new(DecoderOnly(ClearKeys::default(), vec![KID]))).await;
+        assert_eq!(refused.unwrap_err(), IptvError::Drm(DrmError::DecoderOnly { kid: hex(&KID) }.to_string()));
+        let opened = relay.open_protected(licensed(Ok(both)), Config::new(), playback(&server, "/two.mpd"), Arc::new(DecoderOnly(ClearKeys::default(), vec![KID]))).await.unwrap();
+        let mpd = String::from_utf8(get(opened.url.as_str(), None).await.2).unwrap();
+        assert!(!mpd.contains(r#"id="hd""#) && mpd.contains(r#"id="sd""#) && mpd.contains(r#"id="a""#), "the video its key can't decrypt goes, the audio with the same key stays: {mpd}");
     }
 }

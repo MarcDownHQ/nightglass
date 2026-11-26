@@ -17,6 +17,8 @@ pub mod testing;
 pub enum DrmError {
     #[error("This service requires hardware-secured decoding, which Nightglass can't offer.")]
     SecureDecodeRequired { kid: String },
+    #[error("Widevine only decrypts this video inside its own decoder, which Nightglass can't use.")]
+    DecoderOnly { kid: String },
     #[error("The licence holds no key Nightglass may use ({0}).")]
     NoUsableKey(String),
     #[error("No key for {kid}.")]
