@@ -70,12 +70,7 @@ struct Session {
 
 impl Helper {
     pub async fn start(backend: &Backend) -> Result<Helper> {
-        let mut child = Command::new(&backend.program)
-            .args(&backend.args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
+        let mut child = command(backend)
             .spawn()
             .map_err(|e| DrmError::Helper(format!("{}: {e}", backend.program.display())))?;
         let shared = Arc::new(Shared::default());
@@ -206,6 +201,42 @@ impl Helper {
             }
         }
     }
+}
+
+/// `backend` with pipes for its stdin, stdout and stderr, and nothing else the app has open: the GPU, the
+/// sockets and the files of the app's libraries stay out of the helper.
+fn command(backend: &Backend) -> Command {
+    let mut command = Command::new(&backend.program);
+    command.args(&backend.args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    #[cfg(unix)]
+    unsafe {
+        command.pre_exec(inherit_nothing);
+    }
+    command
+}
+
+/// Runs between fork and exec, where only async-signal-safe calls are allowed. Marking the descriptors
+/// close-on-exec rather than closing them keeps the one the spawn reports exec failures through.
+#[cfg(unix)]
+fn inherit_nothing() -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        const CLOSE_RANGE_CLOEXEC: libc::c_uint = 1 << 2;
+        if unsafe { libc::syscall(libc::SYS_close_range, 3 as libc::c_uint, libc::c_uint::MAX, CLOSE_RANGE_CLOEXEC) } == 0 {
+            return Ok(());
+        }
+    }
+    let max = match unsafe { libc::sysconf(libc::_SC_OPEN_MAX) } {
+        n if n > 0 => n.min(1 << 16) as libc::c_int,
+        _ => 1 << 16,
+    };
+    for fd in 3..max {
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        if flags >= 0 && flags & libc::FD_CLOEXEC == 0 {
+            unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) };
+        }
+    }
+    Ok(())
 }
 
 impl Cdm for Helper {
@@ -370,4 +401,23 @@ async fn renew(helper: Weak<Inner>, shared: Arc<Shared>, session: String, exchan
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn the_helper_inherits_only_its_pipes() {
+        let file = std::fs::File::open("/proc/self/exe").unwrap();
+        let leaked = unsafe { libc::dup2(std::os::fd::AsRawFd::as_raw_fd(&file), 300) };
+        assert_eq!(leaked, 300, "a descriptor open without close-on-exec, as a library might leave one");
+        let script = "ls /proc/$$/fd | tr '\\n' ' '; test -e /proc/$$/fd/300 && echo leaked || echo clean";
+        let probe = Backend { program: "sh".into(), args: vec!["-c".into(), script.into()] };
+        let out = command(&probe).output().await.unwrap();
+        unsafe { libc::close(300) };
+        let out = String::from_utf8_lossy(&out.stdout);
+        assert!(out.ends_with("clean\n"), "{out}");
+    }
 }
