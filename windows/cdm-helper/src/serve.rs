@@ -65,6 +65,7 @@ pub fn run(module: Module) -> ExitCode {
                 Err(failure) => events.send(&Message::Failed { id, failure }, &[]),
             },
         }
+        events.run_due(&instance);
     }
 }
 
@@ -79,6 +80,9 @@ struct State {
     promises: HashMap<u32, u64>,
     initialize: Option<u64>,
     deferred: Vec<Deferred>,
+    /// Answers to promises, sent once the CDM call that settled them has returned: the CDM may report a session's
+    /// keys after resolving its update, and the protocol puts events before the answer they belong to.
+    answers: Vec<Message>,
 }
 
 impl Events {
@@ -90,9 +94,14 @@ impl Events {
     }
 
     fn reply(&self, promise: u32, reply: Reply) {
-        if let Some(id) = lock(&self.state).promises.remove(&promise) {
-            self.send(&Message::Reply { id, reply }, &[]);
+        let mut state = lock(&self.state);
+        if let Some(id) = state.promises.remove(&promise) {
+            state.answers.push(Message::Reply { id, reply });
         }
+    }
+
+    fn answer_later(&self, message: Message) {
+        lock(&self.state).answers.push(message);
     }
 
     fn next_timer(&self) -> Option<Instant> {
@@ -110,6 +119,10 @@ impl Events {
                 (due, std::mem::take(&mut state.deferred))
             };
             if due.is_empty() && deferred.is_empty() {
+                let answers = std::mem::take(&mut lock(&self.state).answers);
+                for answer in &answers {
+                    self.send(answer, &[]);
+                }
                 return;
             }
             for call in deferred {
@@ -133,10 +146,10 @@ impl Callbacks for Relay {
     fn initialized(&self, success: bool) {
         let Some(id) = lock(&self.0.state).initialize.take() else { return };
         if success {
-            self.0.send(&Message::Reply { id, reply: Reply::Initialized }, &[]);
+            self.0.answer_later(Message::Reply { id, reply: Reply::Initialized });
         } else {
             let failure = Failure { kind: FailureKind::Initialization, message: "the CDM did not initialise".into(), system_code: None, sample: None, kid: None };
-            self.0.send(&Message::Failed { id, failure }, &[]);
+            self.0.answer_later(Message::Failed { id, failure });
         }
     }
 
@@ -159,7 +172,7 @@ impl Callbacks for Relay {
         };
         let message = if message.is_empty() { exception.to_string() } else { format!("{exception}: {message}") };
         let failure = Failure { kind: FailureKind::Rejected, message, system_code: Some(system_code), sample: None, kid: None };
-        self.0.send(&Message::Failed { id, failure }, &[]);
+        self.0.answer_later(Message::Failed { id, failure });
     }
 
     fn message(&self, session: String, kind: u32, message: Vec<u8>) {

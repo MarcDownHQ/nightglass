@@ -23,6 +23,8 @@ pub const START: Duration = Duration::from_secs(30);
 pub const CALL: Duration = Duration::from_secs(60);
 /// How long a session may wait for its next message, a licence answer included.
 pub const MESSAGE: Duration = Duration::from_secs(30);
+/// How long, once a licence is in, the CDM may take to say which keys it brought.
+pub const KEYS: Duration = Duration::from_secs(5);
 
 /// A program that speaks `protocol` on its stdin and stdout.
 #[derive(Clone, Debug, PartialEq)]
@@ -169,12 +171,11 @@ impl Helper {
             let (kind, challenge) = self.next_message(&session).await?;
             let response = exchange(MessageKind::of(kind, &challenge), challenge).await?;
             self.update_session(&session, response).await?;
-            let keys = lock(&self.0.shared.sessions).get(&session).map(|s| s.keys.clone()).unwrap_or_default();
+            let (keys, more) = self.0.shared.settled(&session, KEYS).await;
             if keys.iter().any(Key::usable) {
                 tokio::spawn(renew(Arc::downgrade(&self.0), self.0.shared.clone(), session, exchange));
                 return Ok(keys);
             }
-            let more = lock(&self.0.shared.sessions).get(&session).is_some_and(|s| !s.messages.is_empty());
             if !more {
                 let statuses: Vec<String> = keys.iter().map(|k| format!("{}: {}", hex(&k.kid), k.status_name())).collect();
                 return Err(DrmError::NoUsableKey(if statuses.is_empty() { "none".into() } else { statuses.join(", ") }));
@@ -280,6 +281,20 @@ impl Cdm for Helper {
 }
 
 impl Shared {
+    /// A session's keys and whether it has a message waiting, once it has either or `wait` has passed.
+    async fn settled(&self, session: &str, wait: Duration) -> (Vec<Key>, bool) {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let (keys, more) = lock(&self.sessions).get(session).map(|s| (s.keys.clone(), !s.messages.is_empty())).unwrap_or_default();
+            if !keys.is_empty() || more || lock(&self.stopped).is_some() || tokio::time::timeout_at(deadline, changed).await.is_err() {
+                return (keys, more);
+            }
+        }
+    }
+
     async fn next_message(&self, session: &str, wait: Duration) -> Result<(MessageKind, Vec<u8>)> {
         let deadline = tokio::time::Instant::now() + wait;
         loop {
@@ -428,6 +443,69 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::Envelope;
+
+    async fn send(to: &mut (impl AsyncWrite + Unpin), message: &Message, payload: &[u8]) {
+        let mut frame = Vec::new();
+        protocol::write_frame(&mut frame, message, payload).unwrap();
+        for byte in frame {
+            to.write_all(&[byte]).await.unwrap();
+            to.flush().await.unwrap();
+        }
+        tokio::task::yield_now().await;
+    }
+
+    async fn request(from: &mut (impl AsyncRead + Unpin)) -> Envelope {
+        let mut lengths = [0; 8];
+        from.read_exact(&mut lengths).await.unwrap();
+        let (header, payload) = protocol::read_lengths(lengths).unwrap();
+        let mut bytes = vec![0; header + payload];
+        from.read_exact(&mut bytes).await.unwrap();
+        serde_json::from_slice(&bytes[..header]).unwrap()
+    }
+
+    /// A helper over in-memory pipes whose CDM reports keys only after resolving the update, and sends every
+    /// frame a byte at a time.
+    async fn late_keys(keys_first: bool) -> Result<Vec<Key>> {
+        let (client_out, mut helper_in) = tokio::io::duplex(1 << 16);
+        let (mut helper_out, client_in) = tokio::io::duplex(1 << 16);
+        tokio::spawn(async move {
+            send(&mut helper_out, &Message::Ready { protocol: protocol::PROTOCOL, cdm_version: "test".into() }, &[]).await;
+            loop {
+                let envelope = request(&mut helper_in).await;
+                let id = envelope.id;
+                match envelope.request {
+                    Request::CreateSession => {
+                        send(&mut helper_out, &Message::Reply { id, reply: Reply::Session { session: "s".into() } }, &[]).await;
+                        send(&mut helper_out, &Message::SessionMessage { session: "s".into(), kind: MessageKind::LicenseRequest }, b"challenge").await;
+                    }
+                    Request::UpdateSession { .. } => {
+                        let keys = Message::Keys { session: "s".into(), keys: vec![Key { kid: vec![7; 16], status: Key::USABLE, system_code: 0 }] };
+                        if keys_first {
+                            send(&mut helper_out, &keys, &[]).await;
+                        }
+                        send(&mut helper_out, &Message::Reply { id, reply: Reply::Done }, &[]).await;
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        if !keys_first {
+                            send(&mut helper_out, &keys, &[]).await;
+                        }
+                    }
+                    _ => send(&mut helper_out, &Message::Reply { id, reply: Reply::Done }, &[]).await,
+                }
+            }
+        });
+        let helper = Helper::connect(Box::new(client_out), client_in, Arc::new(Shared::default())).await.map_err(|_| DrmError::Helper("not ready".into()))?;
+        let exchange: Exchange = Arc::new(|_, challenge| Box::pin(async move { Ok(challenge) }));
+        helper.license(vec![1], exchange).await
+    }
+
+    #[tokio::test]
+    async fn keys_count_whether_they_come_before_or_after_the_update_is_done() {
+        for keys_first in [true, false] {
+            let keys = late_keys(keys_first).await.unwrap();
+            assert_eq!(keys, vec![Key { kid: vec![7; 16], status: Key::USABLE, system_code: 0 }], "keys first: {keys_first}");
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[tokio::test]

@@ -4,8 +4,9 @@
 //! of the second: challenges, licences and media travel as bytes, never inside the JSON.
 //!
 //! The helper speaks first, `Ready`. Then each `Envelope` the app sends gets one `Reply` or `Failed` with its `id`;
-//! events about sessions (`SessionMessage`, `Keys`, `Expiration`, `Closed`) come whenever the CDM has them, always
-//! before the reply to the request that caused them.
+//! events about sessions (`SessionMessage`, `Keys`, `Expiration`, `Closed`) come whenever the CDM has them. The
+//! helper answers a request only once the CDM call has returned, so the events that call caused come first; a CDM
+//! may still report a session's keys later, which the client waits for after `UpdateSession`.
 
 use std::io::{self, Read, Write};
 
