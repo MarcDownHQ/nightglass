@@ -50,6 +50,13 @@ jobs:
         run: |
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then npm run tauri build -- --target universal-apple-darwin --config src-tauri/tauri.updater.conf.json
           else npm run tauri build -- --target universal-apple-darwin; fi
+      # The CDM helper ships next to the app, for both architectures, signed with it.
+      - name: Check the CDM helper is packaged
+        run: |
+          app=target/universal-apple-darwin/release/bundle/macos/Nightglass.app
+          lipo -info "$app/Contents/MacOS/nightglass-widevine" | grep -q 'x86_64 arm64\|arm64 x86_64'
+          codesign --verify --strict --verbose=2 "$app/Contents/MacOS/nightglass-widevine"
+          codesign --verify --deep --strict --verbose=2 "$app"
       - uses: actions/upload-artifact@v7
         with:
           name: nightglass-macos
