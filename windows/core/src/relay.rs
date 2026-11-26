@@ -54,12 +54,17 @@ const KEPT: usize = 8192;
 const FORGOTTEN: Duration = Duration::from_secs(600);
 
 /// The upstream addresses a session has handed out, by number, and when each was last named or fetched.
-#[derive(Default)]
-struct Urls {
+struct Urls<K = Url> {
     next: usize,
     sweep_at: usize,
-    by_number: HashMap<usize, (Url, Instant)>,
-    numbers: HashMap<Url, usize>,
+    by_number: HashMap<usize, (K, Instant)>,
+    numbers: HashMap<K, usize>,
+}
+
+impl<K> Default for Urls<K> {
+    fn default() -> Self {
+        Urls { next: 0, sweep_at: 0, by_number: HashMap::new(), numbers: HashMap::new() }
+    }
 }
 
 impl RelayServer {
@@ -148,15 +153,7 @@ impl RelayServer {
 
 impl Session {
     async fn relay_one(&self, http: &Http, upstream: Url, range: Option<String>, port: u16, token: &str) -> Result<Response<Body>> {
-        let mut headers = self.headers.clone();
-        if let Some(range) = range.filter(|_| !self.relay.filter) {
-            headers.push(("Range".into(), range));
-        }
-        let request = Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) };
-        let mut answer = http.open(request.clone()).await?;
-        if matches!(answer.status, 403 | 502 | 503) {
-            answer = http.open(request).await?;
-        }
+        let mut answer = self.open_upstream(http, &upstream, range.filter(|_| !self.relay.filter)).await?;
         let content_type = answer.header("content-type").map(str::to_string);
         if !(200..300).contains(&answer.status) {
             return Ok(passed_on(answer, None));
@@ -188,6 +185,20 @@ impl Session {
             response.headers_mut().insert(CONTENT_TYPE, value);
         }
         Ok(response)
+    }
+
+    /// `upstream` with the stream's headers and handshake, asked once more when refused or busy.
+    async fn open_upstream(&self, http: &Http, upstream: &Url, range: Option<String>) -> Result<crate::Opened> {
+        let mut headers = self.headers.clone();
+        if let Some(range) = range {
+            headers.push(("Range".into(), range));
+        }
+        let request = Request { headers, browser: self.relay.browser, ..Request::get(upstream.clone()) };
+        let answer = http.open(request.clone()).await?;
+        if matches!(answer.status, 403 | 502 | 503) {
+            return http.open(request).await;
+        }
+        Ok(answer)
     }
 
     /// Every address the playlist names, made to come back through the relay.
@@ -247,8 +258,8 @@ impl Session {
     }
 }
 
-impl Urls {
-    fn number(&mut self, url: &Url) -> usize {
+impl<K: Clone + Eq + std::hash::Hash> Urls<K> {
+    fn number(&mut self, url: &K) -> usize {
         if let Some(&n) = self.numbers.get(url) {
             self.get(n);
             return n;
@@ -266,7 +277,7 @@ impl Urls {
         n
     }
 
-    fn get(&mut self, number: usize) -> Option<Url> {
+    fn get(&mut self, number: usize) -> Option<K> {
         let (url, used) = self.by_number.get_mut(&number)?;
         *used = Instant::now();
         Some(url.clone())
