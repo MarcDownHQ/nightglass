@@ -28,10 +28,19 @@ use crate::{BoxFuture, Config, Decryptor, Http, IptvError, LicenseKind, LicenseR
 /// How long a licence server may take to answer, through the plugin.
 const LICENSE_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// `nightglass-cdm`, next to the app's executable.
+/// The CDM helper next to the app's executable.
 pub fn widevine_helper() -> PathBuf {
-    let name = format!("nightglass-cdm{}", std::env::consts::EXE_SUFFIX);
-    std::env::current_exe().ok().and_then(|exe| Some(exe.parent()?.join(&name))).unwrap_or_else(|| PathBuf::from(name))
+    helper_in(std::env::current_exe().ok().as_deref().and_then(Path::parent))
+}
+
+/// `nightglass-widevine` as the app ships it (a Tauri sidecar), or `nightglass-cdm` as Cargo builds it.
+fn helper_in(dir: Option<&Path>) -> PathBuf {
+    let named = |name: &str| {
+        let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+        dir.map_or_else(|| PathBuf::from(&file), |d| d.join(&file))
+    };
+    let shipped = named("nightglass-widevine");
+    if shipped.exists() { shipped } else { named("nightglass-cdm") }
 }
 
 impl Decryptor for RelayServer {
@@ -780,5 +789,16 @@ mod tests {
         let relay = RelayServer::new(Http::new());
         let refused = relay.open_protected(licensed(Ok(LICENSE)), Config::new(), playback(&server, "/ts.m3u8"), Arc::new(ClearKeys::default())).await;
         assert_eq!(refused.unwrap_err(), IptvError::Drm(DrmError::Unsupported("HLS in MPEG-TS with SAMPLE-AES".into()).to_string()));
+    }
+
+    #[test]
+    fn the_helper_is_found_beside_the_app() {
+        let dir = std::env::temp_dir().join(format!("nightglass-helper-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let suffix = std::env::consts::EXE_SUFFIX;
+        assert_eq!(helper_in(Some(&dir)), dir.join(format!("nightglass-cdm{suffix}")), "as Cargo builds it");
+        std::fs::write(dir.join(format!("nightglass-widevine{suffix}")), b"").unwrap();
+        assert_eq!(helper_in(Some(&dir)), dir.join(format!("nightglass-widevine{suffix}")), "as the bundle ships it");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
