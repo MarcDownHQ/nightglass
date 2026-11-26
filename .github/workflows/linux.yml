@@ -54,7 +54,7 @@ jobs:
       # The CDM helper ships next to the app, where it looks for it.
       - name: Check the CDM helper is packaged
         run: |
-          dpkg-deb -c target/release/bundle/deb/*.deb | grep -q ' ./usr/bin/nightglass-widevine$'
+          dpkg-deb -c target/release/bundle/deb/*.deb | grep -qE '[ /]usr/bin/nightglass-widevine$'
       - uses: actions/upload-artifact@v7
         with:
           name: nightglass-linux
