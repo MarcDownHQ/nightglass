@@ -2,15 +2,18 @@
 //! (`Channel`, `Movie`, `Series`, `Programme`): the app never knows where a channel came from.
 
 mod builtin;
+mod decrypt;
 mod http;
 pub mod m3u;
 mod models;
 mod provider;
 mod relay;
 mod stalker;
+pub mod widevine;
 pub mod xmltv;
 mod xtream;
 
+pub use decrypt::{Decryptor, Unavailable};
 pub use http::{BodyReader, Browser, Http, OnDisk, Opened, Request, Response};
 pub use m3u::M3uSource;
 pub use models::*;

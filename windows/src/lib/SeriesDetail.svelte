@@ -10,6 +10,7 @@
   import NeonText from './NeonText.svelte';
   import { player } from './player.svelte';
   import { store } from './store.svelte';
+  import { locked } from './widevine.svelte';
 
   let { item, close }: { item: SeriesItem; close: () => void } = $props();
 
@@ -101,7 +102,7 @@
           {/if}
           {#each list as e (e.id)}
             {@const p = library.progress[episodeKey(item.id, e)]}
-            <div class="episode" class:watched={p?.watched}>
+            <div class="episode" class:watched={p?.watched} class:locked={locked(e)}>
               <button class="main" onclick={() => store.playEpisode(item, e, episodes)} oncontextmenu={(ev) => menu(ev, e)}>
                 <span class="num mono">{e.number ?? ''}</span>
                 <span class="text">
@@ -319,5 +320,8 @@
   .play {
     color: var(--magenta);
     font-size: 14px;
+  }
+  .episode.locked .main {
+    opacity: 0.4;
   }
 </style>

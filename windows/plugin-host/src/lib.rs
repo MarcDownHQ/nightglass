@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, Media, Movie, Playback, Provider, ProviderInfo, Providers, Result, Series};
+use nightglass_core::{BoxFuture, Catalog, Channel, Config, Episode, Http, IptvError, LicenseRequest, Media, Movie, Playback, Provider, ProviderInfo, Providers, Result, Series};
 use serde::Serialize;
 use url::Url;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -33,6 +33,8 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(300);
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(10);
 /// A segment the player is waiting for.
 const FILTER_TIMEOUT: Duration = Duration::from_secs(30);
+/// A license the CDM is waiting for, before the player can start.
+const LICENSE_TIMEOUT: Duration = Duration::from_secs(30);
 const EPOCH: Duration = Duration::from_millis(10);
 
 struct State {
@@ -301,6 +303,13 @@ impl Provider for WasmProvider {
         Box::pin(async move {
             let media = convert::to_wit_media(media);
             self.call_within(FILTER_TIMEOUT, async |store, guest| guest.call_filter(store, &convert::config(config), url.as_str(), &media).await, |m| Ok(convert::media(m))).await
+        })
+    }
+
+    fn license<'a>(&'a self, config: &'a Config, request: &'a LicenseRequest) -> BoxFuture<'a, Result<Vec<u8>>> {
+        Box::pin(async move {
+            let request = convert::to_wit_license_request(request);
+            self.call_within(LICENSE_TIMEOUT, async |store, guest| guest.call_license(store, &convert::config(config), &request).await, Ok).await
         })
     }
 }

@@ -6,6 +6,7 @@
   import { options, type StartScreen } from './options.svelte';
   import { exportSettings, importSettings } from './settings';
   import { updater } from './updater.svelte';
+  import { widevine } from './widevine.svelte';
 
   let version = $state('');
   $effect(() => void getVersion().then((v) => (version = v)));
@@ -43,6 +44,29 @@
           <option value={24}>{t('every day')}</option>
           <option value={0}>{t('only at launch')}</option>
         </select>
+      </label>
+    </section>
+
+    <section>
+      <h3 class="mono">{t('Protected content (Widevine)')}</h3>
+      <label class="choice">
+        <input
+          type="checkbox"
+          checked={widevine.enabled}
+          onchange={(e) => {
+            const on = e.currentTarget.checked;
+            e.currentTarget.checked = widevine.enabled;
+            if (on) {
+              panels.settings = false;
+              widevine.explain();
+            } else void widevine.remove();
+          }}
+        />
+        <span
+          ><b>{t('Play protected channels, movies and episodes')}</b><small
+            >{widevine.version ? t('Google’s Widevine module {version} is installed', { version: widevine.version }) : t('Off: they are greyed out. Turning it on downloads a module from Google.')}</small
+          ></span
+        >
       </label>
     </section>
 

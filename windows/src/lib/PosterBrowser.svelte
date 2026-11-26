@@ -21,6 +21,7 @@ export interface ContinueCard {
   import { toggleCategoryLock } from './parental';
   import Poster from './Poster.svelte';
   import VirtualList from './VirtualList.svelte';
+  import { locked } from './widevine.svelte';
 
   /**
    * Genres in a column, a grid of posters, and with `details` a panel for the poster picked: a click
@@ -37,7 +38,7 @@ export interface ContinueCard {
     continuing = [],
   }: {
     items: T[];
-    info: (item: T) => { name: string; group: string | null; poster: string | null; rating: number | null };
+    info: (item: T) => { name: string; group: string | null; poster: string | null; rating: number | null; protected?: boolean };
     empty: string;
     onpick: (item: T) => void;
     menu?: (e: MouseEvent, item: T) => void;
@@ -156,6 +157,7 @@ export interface ContinueCard {
         watched={s?.watched}
         saved={library.myList.has(item.id)}
         selected={!!details && picked === item}
+        dimmed={locked(i)}
         onclick={() => (details ? (picked = item) : onpick(item))}
         ondblclick={details ? () => onpick(item) : undefined}
         oncontextmenu={menu && ((e) => menu(e, item))}

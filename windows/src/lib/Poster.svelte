@@ -16,6 +16,7 @@
     selected = false,
     progress = 0,
     watched = false,
+    dimmed = false,
   }: {
     title: string;
     url: string | null;
@@ -32,12 +33,14 @@
     /** Share already watched, 0…1. */
     progress?: number;
     watched?: boolean;
+    /** Protected, while protected content is off. */
+    dimmed?: boolean;
   } = $props();
   let failed = $state(false);
   const tone = $derived(TONES[[...title].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TONES.length]);
 </script>
 
-<button class="poster" class:selected {onclick} {ondblclick} {oncontextmenu} {title}>
+<button class="poster" class:selected class:dimmed {onclick} {ondblclick} {oncontextmenu} {title}>
   <span class="art" style:background={url && !failed ? null : tone}>
     {#if url && !failed}
       <img src={url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror={() => (failed = true)} />
@@ -165,5 +168,8 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
+  }
+  .dimmed .art {
+    opacity: 0.35;
   }
 </style>

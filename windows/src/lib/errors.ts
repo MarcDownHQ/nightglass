@@ -37,8 +37,14 @@ export function promptLine(p: Prompt): string {
   return [p.message, p.url, p.code && t('code {code}', { code: p.code })].filter(Boolean).join(' · ');
 }
 
+/** Whether a command failed on an encrypted stream while protected content is off. */
+export function protectedOff(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { protected?: unknown }).protected === 'off';
+}
+
 /** A command's error as text. */
 export function errorText(e: unknown): string {
+  if (protectedOff(e)) return t('This stream is protected: turn on protected content in Settings.');
   const prompt = promptOf(e);
   return prompt ? promptLine(prompt) : String(e);
 }

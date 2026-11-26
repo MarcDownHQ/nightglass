@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { errorText, friendly, promptOf } from './errors';
+import { errorText, friendly, promptOf, protectedOff } from './errors';
 import { i18n } from './i18n.svelte';
 
 describe('friendly', () => {
@@ -49,5 +49,20 @@ describe('prompts', () => {
     expect(errorText({ prompt })).toBe(`Sign in on another device · ${prompt.url} · code WDJB-MJHT`);
     expect(errorText({ prompt: { ...prompt, url: null, code: null } })).toBe('Sign in on another device');
     expect(errorText('The server answered 403.')).toBe('The server answered 403.');
+  });
+});
+
+describe('protected content', () => {
+  beforeAll(() => i18n.set('en'));
+
+  it('tells an encrypted stream waiting for the setting from an error', () => {
+    expect(protectedOff({ protected: 'off' })).toBe(true);
+    expect(protectedOff('Protected playback failed: not implemented yet')).toBe(false);
+    expect(protectedOff({ prompt: { message: 'Sign in' } })).toBe(false);
+    expect(protectedOff(null)).toBe(false);
+  });
+
+  it('says where to turn it on', () => {
+    expect(errorText({ protected: 'off' })).toMatch(/turn on protected content in Settings/);
   });
 });

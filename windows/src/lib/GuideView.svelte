@@ -10,6 +10,7 @@
   import { store } from './store.svelte';
   import { displayName, hm } from './theme';
   import VirtualList from './VirtualList.svelte';
+  import { locked } from './widevine.svelte';
 
   /**
    * EPG grid. A 3-hour window fitted to the width and paged with ←/→, so the only scroll is vertical
@@ -237,7 +238,7 @@
 
 {#snippet guideRow(item: LiveItem)}
   {@const now = store.now}
-  <div class="row" class:marked={marked === item.id}>
+  <div class="row" class:marked={marked === item.id} class:locked={locked(item.channel)}>
     <div class="label" style:width="{LABEL}px" oncontextmenu={(e) => openChannelMenu(e, item)} role="presentation">
       <span class="num mono">{item.channel.number ?? ''}</span>
       <ChannelLogo channel={item.channel} size={40} />
@@ -536,5 +537,8 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  .row.locked .label {
+    opacity: 0.4;
   }
 </style>

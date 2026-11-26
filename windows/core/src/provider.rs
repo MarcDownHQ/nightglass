@@ -9,7 +9,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{Catalog, Channel, Episode, IptvError, Media, Movie, Playback, Result, Series};
+use crate::{Catalog, Channel, Episode, IptvError, LicenseRequest, Media, Movie, Playback, Result, Series};
 
 /// A source's settings, keyed by `Field::key`. Fields left empty are absent.
 pub type Config = BTreeMap<String, String>;
@@ -95,6 +95,11 @@ pub trait Provider: Send + Sync {
     /// player gets it.
     fn filter<'a>(&'a self, _config: &'a Config, _url: &'a Url, media: Media) -> BoxFuture<'a, Result<Media>> {
         Box::pin(async { Ok(media) })
+    }
+
+    /// The answer of the license server to a CDM message, for a playback with a `drm`: the bytes the CDM reads.
+    fn license<'a>(&'a self, _config: &'a Config, _request: &'a LicenseRequest) -> BoxFuture<'a, Result<Vec<u8>>> {
+        Box::pin(async { Err(IptvError::Drm("this source gives no licenses".into())) })
     }
 }
 
@@ -185,15 +190,16 @@ mod tests {
             stream: Url::parse("http://x.test/1.ts").unwrap(),
             headers: Default::default(),
             catchup_window: None,
+            protected: false,
         };
         let p = fake("a");
         let config = Config::new();
         assert_eq!(p.stream_url(&config, &channel).await.unwrap(), channel.stream.clone().into());
         assert!(p.catchup_url(&config, &channel, 0, 1).await.is_err());
-        let movie = Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: "http://x.test/m.mkv".into(), rating: None, plot: None, duration: None, available_until: None };
+        let movie = Movie { id: "m".into(), name: "M".into(), group: None, poster: None, stream: "http://x.test/m.mkv".into(), rating: None, plot: None, duration: None, available_until: None, protected: false };
         assert_eq!(p.movie_url(&config, &movie).await.unwrap().url.as_str(), "http://x.test/m.mkv");
         let series = Series { id: "s".into(), name: "S".into(), group: None, poster: None, rating: None, plot: None };
-        let episode = Episode { id: "e".into(), title: "E".into(), season: None, number: None, stream: "not an address".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: None };
+        let episode = Episode { id: "e".into(), title: "E".into(), season: None, number: None, stream: "not an address".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: None, protected: false };
         assert!(matches!(p.episode_url(&config, &series, &episode).await, Err(IptvError::BadResponse(_))), "a stored stream must be an address");
         let local = Movie { stream: "file:///etc/passwd".into(), ..movie };
         assert!(p.movie_url(&config, &local).await.is_err(), "a stored stream stays on the network");

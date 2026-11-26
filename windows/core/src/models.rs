@@ -23,6 +23,9 @@ pub struct Channel {
     /// Seconds of past programmes the server can replay (Xtream `tv_archive`); none without replay.
     #[serde(default)]
     pub catchup_window: Option<i64>,
+    /// Encrypted with a DRM: playable once protected content is allowed, its playback then carries a `drm`.
+    #[serde(default)]
+    pub protected: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -41,6 +44,9 @@ pub struct Movie {
     /// Unix seconds, for a replay that expires.
     #[serde(default)]
     pub available_until: Option<i64>,
+    /// Encrypted with a DRM: playable once protected content is allowed, its playback then carries a `drm`.
+    #[serde(default)]
+    pub protected: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -75,6 +81,9 @@ pub struct Episode {
     /// Unix seconds, for a replay that expires.
     #[serde(default)]
     pub available_until: Option<i64>,
+    /// Encrypted with a DRM: playable once protected content is allowed, its playback then carries a `drm`.
+    #[serde(default)]
+    pub protected: bool,
 }
 
 /// What a player opens for a channel or a replay.
@@ -92,11 +101,14 @@ pub struct Playback {
     pub tracks: Vec<Track>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chapters: Vec<Chapter>,
+    /// Set when the stream is encrypted: it is then relayed, decrypted on its way to the player.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drm: Option<Drm>,
 }
 
 impl From<Url> for Playback {
     fn from(url: Url) -> Self {
-        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new(), chapters: Vec::new() }
+        Playback { url, headers: HashMap::new(), relay: None, tracks: Vec::new(), chapters: Vec::new(), drm: None }
     }
 }
 
@@ -175,6 +187,58 @@ pub struct Relay {
     /// Every answer goes through `Provider::filter` before the player gets it.
     #[serde(default)]
     pub filter: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeySystem {
+    Widevine,
+}
+
+/// What an encrypted playback's `url` points to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Manifest {
+    Dash,
+    Hls,
+}
+
+/// How a playback is encrypted, and what its keys need.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Drm {
+    pub key_system: KeySystem,
+    pub manifest: Manifest,
+    /// The service certificate, given to the CDM before any license request.
+    #[serde(default)]
+    pub certificate: Option<Vec<u8>>,
+    /// A whole `pssh` box, for streams whose manifest and init segments carry none.
+    #[serde(default)]
+    pub pssh: Option<Vec<u8>>,
+    /// The provider's own, handed back with each license request.
+    #[serde(default)]
+    pub context: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LicenseKind {
+    Request,
+    Renewal,
+    Release,
+    /// The service certificate, when the playback gave none.
+    Certificate,
+}
+
+/// A CDM message for the provider to send to its license server.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LicenseRequest {
+    pub kind: LicenseKind,
+    pub challenge: Vec<u8>,
+    /// The playback's `url`.
+    pub url: Url,
+    /// Its `drm.context`.
+    pub context: String,
 }
 
 /// A playlist, segment or key on its way to the player.
@@ -291,6 +355,8 @@ pub enum IptvError {
     Plugin(String),
     #[error("{}", .0.message)]
     ActionRequired(Box<Prompt>),
+    #[error("Protected playback failed: {0}")]
+    Drm(String),
 }
 
 pub type Result<T> = std::result::Result<T, IptvError>;
@@ -301,7 +367,7 @@ mod tests {
 
     #[test]
     fn episodes_reach_the_page_in_camel_case() {
-        let episode = Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: Some(1) };
+        let episode = Episode { id: "e".into(), title: "JT".into(), season: None, number: None, stream: "jt".into(), plot: None, aired: None, duration: None, thumbnail: None, available_until: Some(1), protected: false };
         let json = serde_json::to_value(&episode).unwrap();
         assert_eq!(json["availableUntil"], 1);
         let old: Episode = serde_json::from_str(r#"{"id":"e","title":"S1E1","season":1,"number":1,"stream":"http://s.test/1.mkv","plot":null}"#).unwrap();

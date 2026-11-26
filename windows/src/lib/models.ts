@@ -11,6 +11,8 @@ export interface Channel {
   headers: Record<string, string>;
   /** Seconds of past programmes the server can replay; null without replay. */
   catchupWindow?: number | null;
+  /** Encrypted: greyed out while protected content is off. */
+  protected?: boolean;
 }
 
 /** What a player opens: `stream_url`, `catchup_url`, `movie_url` and `episode_url` answer with it. */
@@ -50,6 +52,8 @@ export interface Movie {
   duration?: number | null;
   /** Unix seconds, for a replay that expires. */
   availableUntil?: number | null;
+  /** Encrypted: greyed out while protected content is off. */
+  protected?: boolean;
 }
 
 export interface Series {
@@ -77,6 +81,8 @@ export interface Episode {
   thumbnail?: string | null;
   /** Unix seconds, for a replay that expires. */
   availableUntil?: number | null;
+  /** Encrypted: greyed out while protected content is off. */
+  protected?: boolean;
 }
 
 /** Times are Unix seconds. */

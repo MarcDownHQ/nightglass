@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use nightglass_core::{Browser, Chapter, Config, Http, IptvError, Media, Providers, Relay};
+use nightglass_core::{Browser, Chapter, Config, Drm, Http, IptvError, KeySystem, LicenseKind, LicenseRequest, Manifest, Media, Providers, Relay};
 use nightglass_plugin_host::Host;
-use wiremock::matchers::{header, header_regex, path};
+use wiremock::matchers::{body_bytes, header, header_regex, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn example() -> &'static Path {
@@ -129,6 +129,46 @@ async fn chapters_reach_the_playback() {
     let playback = plugin.movie_url(&config, &catalog.movies[0]).await.unwrap();
     assert_eq!(playback.chapters, [Chapter { start: 0.0, title: "Opening".into() }, Chapter { start: 754.5, title: "The heist".into() }]);
     assert!(playback.tracks.is_empty());
+}
+
+#[tokio::test]
+async fn a_protected_channel_gets_its_license_through_the_plugin() {
+    let server = MockServer::start().await;
+    let license = format!("{}/license", server.uri());
+    let body = format!(
+        r#"{{"channels": [
+            {{"name": "Clear", "url": "https://s.test/clear.m3u8"}},
+            {{"name": "Locked", "url": "https://s.test/locked.mpd?token=1", "protected": true, "license": "{license}"}},
+            {{"name": "Keyless", "url": "https://s.test/keyless.m3u8", "protected": true}}
+        ], "movies": [{{"name": "Film", "url": "https://s.test/film.m3u8", "protected": true, "license": "{license}"}}]}}"#
+    );
+    Mock::given(path("/list.json")).respond_with(ResponseTemplate::new(200).set_body_string(body)).mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/license"))
+        .and(header("content-type", "application/octet-stream"))
+        .and(body_bytes(vec![0x08, 0x04]))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![0xca, 0xfe]))
+        .mount(&server)
+        .await;
+    let host = Host::new(&Http::new()).unwrap();
+    let plugin = host.load(example()).await.unwrap();
+    let config = config(&[("url", &format!("{}/list.json", server.uri()))]);
+    let catalog = plugin.catalog(&config).await.unwrap();
+    assert_eq!(catalog.channels.iter().map(|c| c.protected).collect::<Vec<_>>(), [false, true, true]);
+    assert!(catalog.movies[0].protected);
+
+    assert_eq!(plugin.stream_url(&config, &catalog.channels[0]).await.unwrap().drm, None);
+    let playback = plugin.stream_url(&config, &catalog.channels[1]).await.unwrap();
+    let drm = Drm { key_system: KeySystem::Widevine, manifest: Manifest::Dash, certificate: None, pssh: None, context: "https://s.test/locked.mpd?token=1".into() };
+    assert_eq!(playback.drm, Some(drm.clone()));
+    assert_eq!(plugin.movie_url(&config, &catalog.movies[0]).await.unwrap().drm.map(|d| d.manifest), Some(Manifest::Hls));
+
+    let request = LicenseRequest { kind: LicenseKind::Certificate, challenge: vec![0x08, 0x04], url: playback.url.clone(), context: drm.context };
+    assert_eq!(plugin.license(&config, &request).await.unwrap(), [0xca, 0xfe]);
+    let keyless = LicenseRequest { context: "https://s.test/keyless.m3u8".into(), ..request.clone() };
+    assert!(matches!(plugin.license(&config, &keyless).await, Err(IptvError::BadResponse(_))), "no license server for it");
+    let refused = LicenseRequest { challenge: vec![1], ..request };
+    assert_eq!(plugin.license(&config, &refused).await.unwrap_err(), IptvError::Http(404));
 }
 
 #[tokio::test]
