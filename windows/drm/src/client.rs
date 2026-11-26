@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::process::{Child, Command};
 use tokio::sync::{Notify, oneshot};
 
 use crate::protocol::{self, Envelope, Failure, FailureKind, Key, Message, MessageKind, Reply, Request, Sample};
@@ -42,11 +42,19 @@ impl Backend {
 #[derive(Clone)]
 pub struct Helper(Arc<Inner>);
 
+type Writer = Box<dyn AsyncWrite + Send + Unpin>;
+
 struct Inner {
-    stdin: tokio::sync::Mutex<ChildStdin>,
-    child: Mutex<Child>,
+    stdin: tokio::sync::Mutex<Writer>,
+    child: Mutex<Option<Child>>,
     shared: Arc<Shared>,
     cdm_version: String,
+}
+
+/// Why a helper did not start: it said why, or it ended before saying anything.
+enum Started {
+    Not(DrmError),
+    Ended,
 }
 
 /// A reply and its payload.
@@ -78,20 +86,32 @@ impl Helper {
             return Err(DrmError::Helper("no pipes".into()));
         };
         tokio::spawn(keep_last_words(Arc::downgrade(&shared), stderr));
+        match Helper::connect(Box::new(stdin), stdout, shared.clone()).await {
+            Ok(helper) => {
+                *lock(&helper.0.child) = Some(child);
+                Ok(helper)
+            }
+            Err(Started::Not(e)) => Err(e),
+            Err(Started::Ended) => {
+                let status = child.wait().await.ok();
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                Err(DrmError::Helper(shared.last_words().or(status.map(|s| s.to_string())).unwrap_or_else(|| "did not start".into())))
+            }
+        }
+    }
+
+    /// A helper speaking on `stdin` and `stdout`, once it has said it is ready.
+    async fn connect(stdin: Writer, stdout: impl AsyncRead + Send + Unpin + 'static, shared: Arc<Shared>) -> std::result::Result<Helper, Started> {
         let mut stdout = BufReader::new(stdout);
         let ready = tokio::time::timeout(START, read_frame(&mut stdout)).await;
         let cdm_version = match ready {
             Ok(Ok(Some((Message::Ready { protocol: protocol::PROTOCOL, cdm_version }, _)))) => cdm_version,
-            Ok(Ok(Some((Message::Ready { protocol, .. }, _)))) => return Err(DrmError::Helper(format!("speaks protocol {protocol}, not {}", protocol::PROTOCOL))),
-            Ok(Ok(_)) | Ok(Err(_)) => {
-                let status = child.wait().await.ok();
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                return Err(DrmError::Helper(shared.last_words().or(status.map(|s| s.to_string())).unwrap_or_else(|| "did not start".into())));
-            }
-            Err(_) => return Err(DrmError::Helper(format!("not ready after {} s", START.as_secs()))),
+            Ok(Ok(Some((Message::Ready { protocol, .. }, _)))) => return Err(Started::Not(DrmError::Helper(format!("speaks protocol {protocol}, not {}", protocol::PROTOCOL)))),
+            Ok(Ok(_)) | Ok(Err(_)) => return Err(Started::Ended),
+            Err(_) => return Err(Started::Not(DrmError::Helper(format!("not ready after {} s", START.as_secs())))),
         };
         tokio::spawn(read_messages(shared.clone(), stdout));
-        Ok(Helper(Arc::new(Inner { stdin: tokio::sync::Mutex::new(stdin), child: Mutex::new(child), shared, cdm_version })))
+        Ok(Helper(Arc::new(Inner { stdin: tokio::sync::Mutex::new(stdin), child: Mutex::new(None), shared, cdm_version })))
     }
 
     pub fn cdm_version(&self) -> &str {
@@ -196,7 +216,9 @@ impl Helper {
             Ok(Err(_)) => Err(DrmError::Helper(lock(&shared.stopped).clone().unwrap_or_default())),
             Err(_) => {
                 lock(&shared.pending).remove(&id);
-                let _ = lock(&self.0.child).start_kill();
+                if let Some(child) = lock(&self.0.child).as_mut() {
+                    let _ = child.start_kill();
+                }
                 Err(DrmError::Helper(format!("no answer after {} s", CALL.as_secs())))
             }
         }
