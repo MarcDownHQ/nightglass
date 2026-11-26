@@ -1,21 +1,17 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { t } from './i18n.svelte';
-  import type { Prompt, Source } from './models';
+  import type { Prompt } from './models';
   import { player } from './player.svelte';
-  import { store } from './store.svelte';
+  import { retryLater } from './signIn';
 
-  /** A source's plugin waiting for the user: what to do, where, the code to enter. Asked again every `retryIn` seconds while shown. */
-  let { source, prompt }: { source: Source; prompt: Prompt } = $props();
+  /**
+   * A plugin waiting for the user: what to do, where, the code to enter. `retry` asks again, every `retryIn` seconds
+   * while shown, unless the last ask is still `busy`.
+   */
+  let { prompt, busy, retry }: { prompt: Prompt; busy: boolean; retry: () => void } = $props();
 
-  $effect(() => {
-    const seconds = prompt.retryIn;
-    if (!seconds) return;
-    const timer = setTimeout(() => {
-      if (!store.loading.has(source.id)) void store.refresh(source);
-    }, seconds * 1000);
-    return () => clearTimeout(timer);
-  });
+  $effect(() => retryLater(prompt.retryIn, () => !busy && retry()));
 
   async function copy(code: string) {
     try {
@@ -53,10 +49,10 @@
     {/if}
     <button
       class="retry"
-      disabled={store.loading.has(source.id)}
+      disabled={busy}
       onclick={(e) => {
         e.stopPropagation();
-        void store.refresh(source);
+        retry();
       }}>{t('Retry')}</button
     >
   </div>

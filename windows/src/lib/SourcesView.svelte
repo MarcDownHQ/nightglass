@@ -59,7 +59,7 @@
           <div class="text">
             <b>{s.name}</b>
             {#if store.prompts[s.id]}
-              <SignInPrompt source={s} prompt={store.prompts[s.id]} />
+              <SignInPrompt prompt={store.prompts[s.id]} busy={store.loading.has(s.id)} retry={() => void store.refresh(s)} />
             {:else if store.loading.has(s.id)}
               <small class="busy">{t('Loading…')}</small>
             {:else if store.errors[s.id]}
