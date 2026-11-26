@@ -6,6 +6,8 @@
 //! With the `browser` setting, the list and the streams are fetched with that browser's handshake, the streams through
 //! the app. A list served with an `ETag` is kept, and asked again with `If-None-Match`. With `pending` set to `yes`, the
 //! catalog waits for a sign-in that never comes, to show the app's prompt.
+//! A channel or a movie with `"protected": true` is played as a Widevine stream (DASH when its address ends in `.mpd`,
+//! HLS otherwise), whose license requests are posted as is to its `"license"` address.
 
 #![allow(clippy::too_many_arguments, reason = "the lowered signature wit-bindgen generates for the filter export")]
 
@@ -16,7 +18,7 @@ wit_bindgen::generate!({ path: "../wit", world: "provider" });
 use nightglass::provider::http::{Request, send};
 use nightglass::provider::log::{Level, log};
 use nightglass::provider::storage;
-use nightglass::provider::types::{Browser, Chapter, Field, FieldKind, Programme, Prompt, Relay, Track};
+use nightglass::provider::types::{Browser, Chapter, Drm, Field, FieldKind, KeySystem, Manifest, Programme, Prompt, Relay, Track};
 
 struct JsonList;
 
@@ -44,6 +46,9 @@ struct Film {
     audio: Option<String>,
     #[serde(default)]
     chapters: Vec<Mark>,
+    #[serde(default)]
+    protected: bool,
+    license: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,6 +91,9 @@ struct Entry {
     epg_id: Option<String>,
     #[serde(default)]
     programmes: Vec<Slot>,
+    #[serde(default)]
+    protected: bool,
+    license: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -160,7 +168,7 @@ impl Guest for JsonList {
                 stream: e.url,
                 headers: Vec::new(),
                 catchup_window: None,
-                protected: false,
+                protected: e.protected,
             });
         }
         let movies = list
@@ -168,7 +176,7 @@ impl Guest for JsonList {
             .into_iter()
             .map(|m| {
                 let stream = serde_json::to_string(&Reel { url: m.url.clone(), audio: m.audio, chapters: m.chapters }).expect("strings serialize");
-                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None, protected: false }
+                Movie { id: m.url, name: m.name, group: None, poster: None, stream, rating: None, plot: None, duration: None, available_until: None, protected: m.protected }
             })
             .collect();
         let series = list.series.into_iter().map(|s| Series { id: s.name.clone(), name: s.name, group: None, poster: None, rating: None, plot: None }).collect();
@@ -176,14 +184,16 @@ impl Guest for JsonList {
     }
 
     fn stream_url(config: Config, channel: Channel) -> Result<Playback, Error> {
-        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new(), drm: None })
+        let drm = channel.protected.then(|| widevine(&channel.stream));
+        Ok(Playback { url: channel.stream, headers: Vec::new(), relay: relay(&config)?, tracks: Vec::new(), chapters: Vec::new(), drm })
     }
 
     fn movie_url(config: Config, movie: Movie) -> Result<Playback, Error> {
         let reel: Reel = serde_json::from_str(&movie.stream).map_err(|e| Error::BadResponse(e.to_string()))?;
         let tracks = reel.audio.into_iter().map(|url| Track { url, language: None, title: None }).collect();
         let chapters = reel.chapters.into_iter().map(|c| Chapter { start: c.start, title: c.title }).collect();
-        Ok(Playback { url: reel.url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters, drm: None })
+        let drm = movie.protected.then(|| widevine(&reel.url));
+        Ok(Playback { url: reel.url, headers: Vec::new(), relay: relay(&config)?, tracks, chapters, drm })
     }
 
     fn episode_url(config: Config, _series: Series, episode: Episode) -> Result<Playback, Error> {
@@ -198,8 +208,18 @@ impl Guest for JsonList {
         Ok(media)
     }
 
-    fn license(_config: Config, _request: LicenseRequest) -> Result<Vec<u8>, Error> {
-        Err(Error::BadResponse("no protected streams in a JSON list".into()))
+    fn license(config: Config, request: LicenseRequest) -> Result<Vec<u8>, Error> {
+        let list = list(&config)?;
+        let channels = list.channels.into_iter().filter(|e| e.protected).map(|e| (e.url, e.license));
+        let movies = list.movies.into_iter().filter(|m| m.protected).map(|m| (m.url, m.license));
+        let server = channels.chain(movies).find(|(url, _)| *url == request.context).and_then(|(_, license)| license);
+        let server = server.ok_or_else(|| Error::BadResponse(format!("no license server for {}", request.context)))?;
+        let headers = vec![("content-type".to_string(), "application/octet-stream".to_string())];
+        let response = send(&Request { method: "POST".into(), url: server, headers, body: Some(request.challenge), browser: browser(&config)? })?;
+        match response.status {
+            200..=299 => Ok(response.body),
+            status => Err(Error::Http(status)),
+        }
     }
 
     fn episodes(config: Config, series: Series) -> Result<Vec<Episode>, Error> {
@@ -210,6 +230,12 @@ impl Guest for JsonList {
             .map(|p| Episode { id: p.url.clone(), title: p.title, season: p.season, number: p.number, stream: p.url, plot: None, aired: p.aired, duration: None, thumbnail: None, available_until: None, protected: false })
             .collect())
     }
+}
+
+/// The stream's address is its context: `license` finds the entry, and its license server, by it.
+fn widevine(url: &str) -> Drm {
+    let manifest = if url.split(['?', '#']).next().is_some_and(|path| path.ends_with(".mpd")) { Manifest::Dash } else { Manifest::Hls };
+    Drm { key_system: KeySystem::Widevine, manifest, certificate: None, pssh: None, context: url.into() }
 }
 
 fn relay(config: &Config) -> Result<Option<Relay>, Error> {
